@@ -1,0 +1,23 @@
+{
+  "name": "call",
+  "version": "1.0.0",
+  "description": "Chat P2P simples com Socket.IO",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["chat", "socket.io", "p2p"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.4"
+  }
+}
