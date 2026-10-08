@@ -4,7 +4,7 @@
   "description": "Chat P2P simples com Socket.IO",
   "main": "server/index.js",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.22.2"
   },
   "scripts": {
     "start": "node server/index.js",
