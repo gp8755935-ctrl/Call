@@ -11,12 +11,16 @@
     "dev": "node --watch server/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["chat", "socket.io", "p2p"],
+  "keywords": [
+    "chat",
+    "socket.io",
+    "p2p"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "better-sqlite3": "^11.5.0",
+    "better-sqlite3": "^13.0.3",
     "express": "^5.2.1",
     "socket.io": "^4.8.4"
   }
