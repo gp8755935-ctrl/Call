@@ -264,7 +264,7 @@ let timerChamada = null;
 let segundosChamada = 0;
 let offerPendente = null;
 
-// 🔥 CONFIGURAÇÃO COM TURN DO METERED
+// 🔥 TURN do Metered
 const rtcConfig = {
   iceServers: [
     {
@@ -393,15 +393,29 @@ function criarPeerConnection() {
     }
   };
 
+  // 🎧 CORRIGIDO: não sobrescreve o srcObject se já existe
   peerConnection.ontrack = (event) => {
-    console.log('ontrack disparou:', event.streams);
+    console.log('ontrack disparou:', event.streams, 'track:', event.track.kind);
+
     const audioRemoto = document.getElementById('audio-remoto');
-    if (event.streams && event.streams[0]) {
+
+    // Só seta se ainda não tem um stream
+    if (!audioRemoto.srcObject && event.streams && event.streams[0]) {
       audioRemoto.srcObject = event.streams[0];
+    }
+
+    // Quando a track ficar ativa, força o play
+    event.track.onunmute = () => {
+      console.log('🔊 Track desmutou, dando play');
       audioRemoto.muted = false;
       audioRemoto.volume = 1.0;
       audioRemoto.play().catch((e) => console.warn('Autoplay bloqueado:', e));
-    }
+    };
+
+    // Tenta dar play direto também
+    audioRemoto.play().catch((e) => {
+      console.warn('Play falhou, precisa de clique:', e);
+    });
   };
 
   peerConnection.oniceconnectionstatechange = () => {
@@ -419,6 +433,14 @@ function criarPeerConnection() {
   };
 
   chamadaAtiva = true;
+
+  // Garante o play 1s depois
+  setTimeout(() => {
+    const audioRemoto = document.getElementById('audio-remoto');
+    if (audioRemoto && audioRemoto.srcObject) {
+      audioRemoto.play().catch((e) => console.warn(e));
+    }
+  }, 1000);
 }
 
 // ---------- DESLIGAR ----------
@@ -449,6 +471,19 @@ socket.on('webrtc-encerrada', () => {
   desligar(true);
   adicionarMsg('--- chamada encerrada pelo outro lado ---', 'sistema');
 });
+
+// ---------- DESTRAVAR ÁUDIO (fallback de autoplay) ----------
+
+function destravarAudio() {
+  const audioRemoto = document.getElementById('audio-remoto');
+  if (audioRemoto && audioRemoto.srcObject) {
+    audioRemoto.muted = false;
+    audioRemoto.volume = 1.0;
+    audioRemoto.play()
+      .then(() => console.log('🔊 Áudio destravado'))
+      .catch((e) => console.warn('Falha ao destravar:', e));
+  }
+}
 
 // ---------- UI DA CHAMADA ----------
 
