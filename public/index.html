@@ -471,6 +471,7 @@
     #tela-canal.ativa,
     #tela-conversa.ativa {
       display: flex; flex-direction: column; padding: 0;
+      position: relative;
     }
     #tela-dm.ativa,
     #tela-amigos.ativa,
@@ -503,6 +504,7 @@
       display: flex; gap: 12px;
       box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.9);
       flex-shrink: 0;
+      align-items: center;
     }
     .barra-msg input { background: rgba(255, 255, 255, 0.95); }
     .barra-msg button { padding: 12px 26px; flex-shrink: 0; }
@@ -575,6 +577,7 @@
       box-shadow: inset 0 2px 0 rgba(255,255,255,0.9),
                   0 4px 12px rgba(2,132,199,0.15);
       word-wrap: break-word;
+      max-width: fit-content;
     }
 
     /* ============ MENSAGEM — BOTÕES DE AÇÃO ============ */
@@ -591,7 +594,7 @@
       box-shadow: 0 4px 12px rgba(2,132,199,0.3);
       z-index: 5;
     }
-    .msg-com-avatar.minha:hover .msg-acoes {
+    .msg-com-avatar:hover .msg-acoes {
       display: flex;
     }
     .msg-acoes button {
@@ -642,6 +645,247 @@
       font-style: italic;
       margin-left: 6px;
       font-weight: 600;
+    }
+
+    /* ============ EMOJI PICKER ============ */
+    .emoji-btn {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      font-size: 22px;
+      padding: 4px 8px;
+      cursor: pointer;
+      color: var(--texto-medio);
+      border-radius: 999px;
+      transition: transform 0.15s;
+      min-width: auto;
+      flex-shrink: 0;
+      width: auto;
+      height: auto;
+      line-height: 1;
+    }
+    .emoji-btn::before { display: none; }
+    .emoji-btn:hover {
+      transform: scale(1.15);
+      background: rgba(255, 255, 255, 0.6);
+      box-shadow: none;
+    }
+
+    .emoji-picker {
+      position: fixed;
+      width: 340px;
+      max-height: 320px;
+      overflow-y: auto;
+      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(224,242,254,0.95));
+      border: 2px solid rgba(255,255,255,0.95);
+      border-radius: 20px;
+      padding: 12px;
+      box-shadow: 0 8px 40px rgba(2,132,199,0.5);
+      z-index: 2500;
+      display: none;
+      backdrop-filter: blur(20px);
+    }
+    .emoji-picker.ativo { display: block !important; animation: modalIn 0.25s; }
+
+    .emoji-picker .emoji-categoria {
+      font-size: 10px;
+      color: var(--texto-medio);
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin: 10px 0 6px 4px;
+    }
+    .emoji-picker .emoji-categoria:first-child { margin-top: 0; }
+
+    .emoji-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 2px;
+    }
+    .emoji-grid span {
+      font-size: 22px;
+      text-align: center;
+      padding: 4px 2px;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .emoji-grid span:hover {
+      background: rgba(56, 189, 248, 0.25);
+      transform: scale(1.2);
+    }
+
+    /* ============ REAÇÕES ============ */
+    .msg-reacoes {
+      display: flex !important;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 4px;
+      width: 100%;
+    }
+    .reacao-pill {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      background: rgba(255, 255, 255, 0.75);
+      border: 1.5px solid rgba(255, 255, 255, 0.95);
+      border-radius: 999px !important;
+      padding: 2px 8px !important;
+      font-size: 13px !important;
+      line-height: 1 !important;
+      width: auto !important;
+      height: auto !important;
+      min-width: 0 !important;
+      max-width: fit-content;
+      cursor: pointer;
+      transition: all 0.15s;
+      box-shadow: 0 2px 6px rgba(2,132,199,0.15);
+      user-select: none;
+      box-sizing: border-box;
+    }
+    .reacao-pill::before { display: none !important; }
+    .reacao-pill:hover {
+      transform: scale(1.08);
+      background: rgba(255, 255, 255, 0.95);
+    }
+    .reacao-pill.minha {
+      background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(125,211,252,0.8));
+      border-color: var(--agua-1);
+      box-shadow: 0 2px 8px rgba(2,132,199,0.3);
+    }
+    .reacao-pill span {
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+    }
+    .reacao-pill .reacao-count {
+      font-size: 11px !important;
+      font-weight: 900;
+      color: var(--texto-medio);
+      padding: 0;
+    }
+
+    /* Mini picker de reações */
+    .reacao-picker {
+      position: fixed;
+      display: none;
+      gap: 2px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(224,242,254,0.95));
+      border: 1.5px solid rgba(255,255,255,0.95);
+      border-radius: 999px;
+      padding: 4px 8px;
+      box-shadow: 0 6px 20px rgba(2,132,199,0.5);
+      z-index: 2600;
+      backdrop-filter: blur(20px);
+    }
+    .reacao-picker.ativo { display: flex !important; }
+    .reacao-picker span {
+      font-size: 18px;
+      padding: 4px 6px;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .reacao-picker span:hover {
+      background: rgba(56, 189, 248, 0.25);
+      transform: scale(1.25);
+    }
+
+    /* ============ REPLY ============ */
+    .msg-com-avatar {
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      will-change: transform;
+    }
+    .msg-com-avatar.arrastando {
+      transition: none;
+      cursor: grabbing;
+    }
+
+    .msg-reply-hint {
+      position: absolute;
+      left: -50px;
+      top: 50%;
+      transform: translateY(-50%) scale(0.6);
+      font-size: 24px;
+      opacity: 0;
+      transition: all 0.15s;
+      pointer-events: none;
+    }
+    .msg-com-avatar.arrastando .msg-reply-hint,
+    .msg-com-avatar.arrastando-ativo .msg-reply-hint {
+      opacity: 1;
+      transform: translateY(-50%) scale(1);
+    }
+    .msg-com-avatar.arrastando-ativo .msg-reply-hint {
+      color: var(--agua-2);
+      text-shadow: 0 0 10px rgba(2,132,199,0.5);
+    }
+
+    .msg-reply-citacao {
+      border-left: 3px solid var(--agua-1);
+      padding: 4px 10px;
+      margin-bottom: 4px;
+      background: rgba(255, 255, 255, 0.4);
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--texto-medio);
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .msg-reply-citacao .reply-autor {
+      font-weight: 900;
+      color: var(--agua-2);
+      margin-right: 4px;
+    }
+
+    .barra-reply {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(186,230,253,0.7));
+      border-top: 2px solid rgba(255,255,255,0.7);
+      border-left: 4px solid var(--agua-1);
+      font-size: 13px;
+      color: var(--texto-medio);
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .barra-reply.ativo { display: flex; }
+    .barra-reply .reply-info {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .barra-reply .reply-info strong {
+      color: var(--agua-2);
+      font-weight: 900;
+      margin-right: 6px;
+    }
+    .barra-reply .btn-cancelar-reply {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      color: var(--texto-medio);
+      font-size: 18px;
+      padding: 4px 8px;
+      cursor: pointer;
+      border-radius: 999px;
+      min-width: auto;
+      line-height: 1;
+    }
+    .barra-reply .btn-cancelar-reply::before { display: none; }
+    .barra-reply .btn-cancelar-reply:hover {
+      background: rgba(2,132,199,0.15);
+      transform: none;
+      box-shadow: none;
     }
 
     /* TELAS INTERNAS */
@@ -775,7 +1019,7 @@
       position: fixed; inset: 0;
       background: rgba(2, 132, 199, 0.4);
       backdrop-filter: blur(12px);
-      z-index: 2000;
+      z-index: 3000;
       align-items: center; justify-content: center;
       padding: 20px;
     }
@@ -1109,6 +1353,12 @@
       .modal-editor { max-width: 100% !important; margin: 10px; }
 
       .msg-acoes { top: -12px; right: 4px; }
+
+      .emoji-picker {
+        width: calc(100% - 32px);
+        max-height: 240px;
+      }
+      .emoji-grid { grid-template-columns: repeat(7, 1fr); }
     }
 
     .overlay-mobile {
@@ -1209,7 +1459,14 @@
 
       <div id="tela-canal" class="tela-main">
         <div class="chat-area" id="chat-canal"></div>
+
+        <div class="barra-reply" id="barra-reply-canal">
+          <div class="reply-info" id="reply-info-canal"></div>
+          <button class="btn-cancelar-reply" onclick="cancelarReply('canal')" title="Cancelar">✖️</button>
+        </div>
+
         <div class="barra-msg">
+          <button class="emoji-btn" onclick="toggleEmojiPicker('canal')" title="Emoji">😀</button>
           <input id="input-canal" placeholder="Digite sua mensagem...">
           <button onclick="enviarMsgCanal()">Enviar</button>
         </div>
@@ -1232,7 +1489,14 @@
           </div>
         </div>
         <div class="chat-area" id="chat-dm"></div>
+
+        <div class="barra-reply" id="barra-reply-dm">
+          <div class="reply-info" id="reply-info-dm"></div>
+          <button class="btn-cancelar-reply" onclick="cancelarReply('dm')" title="Cancelar">✖️</button>
+        </div>
+
         <div class="barra-msg">
+          <button class="emoji-btn" onclick="toggleEmojiPicker('dm')" title="Emoji">😀</button>
           <input id="input-dm" placeholder="Digite sua mensagem...">
           <button onclick="enviarMsgDM()">Enviar</button>
         </div>
@@ -1372,6 +1636,10 @@
       </div>
     </div>
   </div>
+
+  <!-- Emoji pickers — fora dos containers pra position: fixed funcionar -->
+  <div class="emoji-picker" id="emoji-picker-canal"></div>
+  <div class="emoji-picker" id="emoji-picker-dm"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/app.js"></script>

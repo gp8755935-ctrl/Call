@@ -42,7 +42,10 @@ db.exec(`
     texto TEXT NOT NULL,
     hora INTEGER NOT NULL,
     lida INTEGER NOT NULL DEFAULT 0,
-    editado INTEGER NOT NULL DEFAULT 0
+    editado INTEGER NOT NULL DEFAULT 0,
+    reply_id INTEGER DEFAULT NULL,
+    reply_autor TEXT DEFAULT NULL,
+    reply_texto TEXT DEFAULT NULL
   );
 
   CREATE TABLE IF NOT EXISTS servidores (
@@ -75,7 +78,21 @@ db.exec(`
     de_id INTEGER NOT NULL,
     texto TEXT NOT NULL,
     hora INTEGER NOT NULL,
-    editado INTEGER NOT NULL DEFAULT 0
+    editado INTEGER NOT NULL DEFAULT 0,
+    reply_id INTEGER DEFAULT NULL,
+    reply_autor TEXT DEFAULT NULL,
+    reply_texto TEXT DEFAULT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS reacoes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL,
+    tipo_id TEXT NOT NULL,
+    alvo_id INTEGER NOT NULL,
+    usuario_id INTEGER NOT NULL,
+    emoji TEXT NOT NULL,
+    criado_em INTEGER NOT NULL,
+    UNIQUE(tipo, alvo_id, usuario_id, emoji)
   );
 
   CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios (email);
@@ -88,6 +105,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_membros_servidor ON membros_servidor (servidor_id);
   CREATE INDEX IF NOT EXISTS idx_canais_servidor ON canais (servidor_id);
   CREATE INDEX IF NOT EXISTS idx_msg_canal ON mensagens_canal (canal_id, hora);
+  CREATE INDEX IF NOT EXISTS idx_reacoes_alvo ON reacoes (tipo, alvo_id);
 `);
 
 // ========== MIGRAÇÕES ==========
@@ -99,9 +117,15 @@ function migrar() {
 
   const colsM = db.prepare('PRAGMA table_info(mensagens)').all().map(c => c.name);
   if (!colsM.includes('editado')) db.exec("ALTER TABLE mensagens ADD COLUMN editado INTEGER NOT NULL DEFAULT 0");
+  if (!colsM.includes('reply_id')) db.exec("ALTER TABLE mensagens ADD COLUMN reply_id INTEGER DEFAULT NULL");
+  if (!colsM.includes('reply_autor')) db.exec("ALTER TABLE mensagens ADD COLUMN reply_autor TEXT DEFAULT NULL");
+  if (!colsM.includes('reply_texto')) db.exec("ALTER TABLE mensagens ADD COLUMN reply_texto TEXT DEFAULT NULL");
 
   const colsMC = db.prepare('PRAGMA table_info(mensagens_canal)').all().map(c => c.name);
   if (!colsMC.includes('editado')) db.exec("ALTER TABLE mensagens_canal ADD COLUMN editado INTEGER NOT NULL DEFAULT 0");
+  if (!colsMC.includes('reply_id')) db.exec("ALTER TABLE mensagens_canal ADD COLUMN reply_id INTEGER DEFAULT NULL");
+  if (!colsMC.includes('reply_autor')) db.exec("ALTER TABLE mensagens_canal ADD COLUMN reply_autor TEXT DEFAULT NULL");
+  if (!colsMC.includes('reply_texto')) db.exec("ALTER TABLE mensagens_canal ADD COLUMN reply_texto TEXT DEFAULT NULL");
 }
 migrar();
 
@@ -260,18 +284,23 @@ function listarConversas(usuarioId) {
   return resultado;
 }
 
-function salvarMensagem({ conversaId, deId, texto }) {
+function salvarMensagem({ conversaId, deId, texto, replyId, replyAutor, replyTexto }) {
   const stmt = db.prepare(
-    'INSERT INTO mensagens (conversa_id, de_id, texto, hora, lida, editado) VALUES (?, ?, ?, ?, 0, 0)'
+    `INSERT INTO mensagens (conversa_id, de_id, texto, hora, lida, editado, reply_id, reply_autor, reply_texto)
+     VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)`
   );
   const hora = Date.now();
-  const info = stmt.run(conversaId, deId, texto, hora);
-  return { id: info.lastInsertRowid, conversa_id: conversaId, de_id: deId, texto, hora, lida: 0, editado: 0 };
+  const info = stmt.run(conversaId, deId, texto, hora, replyId || null, replyAutor || null, replyTexto || null);
+  return {
+    id: info.lastInsertRowid, conversa_id: conversaId, de_id: deId, texto, hora, lida: 0, editado: 0,
+    reply_id: replyId || null, reply_autor: replyAutor || null, reply_texto: replyTexto || null
+  };
 }
 
 function listarMensagens(conversaId, limite = 100) {
   return db.prepare(
-    `SELECT m.id, m.de_id, u.nome AS de_nome, u.avatar AS de_avatar, m.texto, m.hora, m.lida, m.editado
+    `SELECT m.id, m.de_id, u.nome AS de_nome, u.avatar AS de_avatar, m.texto, m.hora, m.lida, m.editado,
+            m.reply_id, m.reply_autor, m.reply_texto
      FROM mensagens m JOIN usuarios u ON u.id = m.de_id
      WHERE m.conversa_id = ? ORDER BY m.hora DESC LIMIT ?`
   ).all(conversaId, limite).reverse();
@@ -439,18 +468,23 @@ function deletarCanal(id, usuarioId) {
 
 // ========== MENSAGENS DE CANAL ==========
 
-function salvarMensagemCanal({ canalId, deId, texto }) {
+function salvarMensagemCanal({ canalId, deId, texto, replyId, replyAutor, replyTexto }) {
   const stmt = db.prepare(
-    'INSERT INTO mensagens_canal (canal_id, de_id, texto, hora, editado) VALUES (?, ?, ?, ?, 0)'
+    `INSERT INTO mensagens_canal (canal_id, de_id, texto, hora, editado, reply_id, reply_autor, reply_texto)
+     VALUES (?, ?, ?, ?, 0, ?, ?, ?)`
   );
   const hora = Date.now();
-  const info = stmt.run(canalId, deId, texto, hora);
-  return { id: info.lastInsertRowid, canal_id: canalId, de_id: deId, texto, hora, editado: 0 };
+  const info = stmt.run(canalId, deId, texto, hora, replyId || null, replyAutor || null, replyTexto || null);
+  return {
+    id: info.lastInsertRowid, canal_id: canalId, de_id: deId, texto, hora, editado: 0,
+    reply_id: replyId || null, reply_autor: replyAutor || null, reply_texto: replyTexto || null
+  };
 }
 
 function listarMensagensCanal(canalId, limite = 100) {
   return db.prepare(
-    `SELECT m.id, m.de_id, u.nome AS de_nome, u.avatar AS de_avatar, m.texto, m.hora, m.editado
+    `SELECT m.id, m.de_id, u.nome AS de_nome, u.avatar AS de_avatar, m.texto, m.hora, m.editado,
+            m.reply_id, m.reply_autor, m.reply_texto
      FROM mensagens_canal m JOIN usuarios u ON u.id = m.de_id
      WHERE m.canal_id = ? ORDER BY m.hora DESC LIMIT ?`
   ).all(canalId, limite).reverse();
@@ -472,6 +506,43 @@ function limparMensagensCanal(canalId) {
   return db.prepare('DELETE FROM mensagens_canal WHERE canal_id = ?').run(canalId);
 }
 
+// ========== REAÇÕES ==========
+
+function adicionarReacao({ tipo, alvoId, usuarioId, emoji }) {
+  const tipoId = tipo + ':' + alvoId;
+  const existente = db.prepare(
+    'SELECT id FROM reacoes WHERE tipo = ? AND alvo_id = ? AND usuario_id = ? AND emoji = ?'
+  ).get(tipo, alvoId, usuarioId, emoji);
+  if (existente) return null;
+  const info = db.prepare(
+    'INSERT INTO reacoes (tipo, tipo_id, alvo_id, usuario_id, emoji, criado_em) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(tipo, tipoId, alvoId, usuarioId, emoji, Date.now());
+  return { id: info.lastInsertRowid };
+}
+
+function removerReacao({ tipo, alvoId, usuarioId, emoji }) {
+  return db.prepare(
+    'DELETE FROM reacoes WHERE tipo = ? AND alvo_id = ? AND usuario_id = ? AND emoji = ?'
+  ).run(tipo, alvoId, usuarioId, emoji);
+}
+
+function listarReacoesDeMensagens(tipo, alvoIds) {
+  if (!alvoIds || alvoIds.length === 0) return {};
+  const placeholders = alvoIds.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT alvo_id, emoji, usuario_id FROM reacoes
+     WHERE tipo = ? AND alvo_id IN (${placeholders})`
+  ).all(tipo, ...alvoIds);
+
+  const porMsg = {};
+  for (const r of rows) {
+    if (!porMsg[r.alvo_id]) porMsg[r.alvo_id] = {};
+    if (!porMsg[r.alvo_id][r.emoji]) porMsg[r.alvo_id][r.emoji] = [];
+    porMsg[r.alvo_id][r.emoji].push(r.usuario_id);
+  }
+  return porMsg;
+}
+
 module.exports = {
   criarUsuario, buscarUsuarioPorEmail, buscarUsuarioPorId, listarUsuarios,
   buscarUsuariosPorNome, atualizarAvatar, atualizarBanner, atualizarBio,
@@ -487,4 +558,5 @@ module.exports = {
   salvarMensagemCanal, listarMensagensCanal,
   buscarMensagemCanalPorId, editarMensagemCanal, deletarMensagemCanal,
   limparMensagensCanal,
+  adicionarReacao, removerReacao, listarReacoesDeMensagens,
 };

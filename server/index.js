@@ -212,24 +212,38 @@ app.get('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const ehParticipante = conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id;
   if (!ehParticipante) return res.status(403).json({ erro: 'Sem permissão' });
   db.marcarComoLidas(id, req.usuario.id);
-  res.json({ mensagens: db.listarMensagens(id) });
+
+  const mensagens = db.listarMensagens(id);
+  const reacoes = db.listarReacoesDeMensagens('dm', mensagens.map((m) => m.id));
+
+  res.json({
+    mensagens: mensagens.map((m) => ({ ...m, reacoes: reacoes[m.id] || {} })),
+  });
 });
 
 app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
-  const { texto } = req.body;
+  const { texto, replyId, replyAutor, replyTexto } = req.body;
   if (!texto || !texto.trim()) return res.status(400).json({ erro: 'Texto vazio' });
   const conv = db.buscarConversaPorId(id);
   if (!conv) return res.status(404).json({ erro: 'Conversa não existe' });
   const ehParticipante = conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id;
   if (!ehParticipante) return res.status(403).json({ erro: 'Sem permissão' });
 
-  const msg = db.salvarMensagem({ conversaId: id, deId: req.usuario.id, texto: texto.trim() });
+  const msg = db.salvarMensagem({
+    conversaId: id,
+    deId: req.usuario.id,
+    texto: texto.trim(),
+    replyId: replyId || null,
+    replyAutor: replyAutor || null,
+    replyTexto: replyTexto || null,
+  });
+
   const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
   const socketOutro = [...online.values()].find((u) => u.id === outroId);
 
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
-  const payload = { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '' };
+  const payload = { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '', reacoes: {} };
 
   if (socketOutro) {
     io.to(socketOutro.socketId).emit('dm-nova', { conversa_id: id, mensagem: payload });
@@ -237,7 +251,6 @@ app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   res.json({ ok: true, mensagem: payload });
 });
 
-// 🆕 Editar mensagem de DM
 app.patch('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req, res) => {
   const idConversa = Number(req.params.idConversa);
   const idMensagem = Number(req.params.idMensagem);
@@ -264,7 +277,6 @@ app.patch('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req, 
   res.json({ ok: true, mensagem: payload });
 });
 
-// 🆕 Deletar mensagem de DM
 app.delete('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req, res) => {
   const idConversa = Number(req.params.idConversa);
   const idMensagem = Number(req.params.idMensagem);
@@ -298,6 +310,55 @@ app.delete('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ========== REAÇÕES ==========
+
+app.post('/api/reacoes/toggle', exigirAuth, (req, res) => {
+  const { tipo, alvoId, emoji } = req.body;
+  if (!tipo || !alvoId || !emoji) return res.status(400).json({ erro: 'Dados incompletos' });
+  if (!['canal', 'dm'].includes(tipo)) return res.status(400).json({ erro: 'Tipo inválido' });
+  if (emoji.length > 8) return res.status(400).json({ erro: 'Emoji inválido' });
+
+  if (tipo === 'canal') {
+    const msg = db.buscarMensagemCanalPorId(alvoId);
+    if (!msg) return res.status(404).json({ erro: 'Mensagem não existe' });
+    const c = db.buscarCanalPorId(msg.canal_id);
+    if (!c || !db.ehMembro(c.servidor_id, req.usuario.id)) {
+      return res.status(403).json({ erro: 'Sem permissão' });
+    }
+  } else {
+    const msg = db.buscarMensagemPorId(alvoId);
+    if (!msg) return res.status(404).json({ erro: 'Mensagem não existe' });
+    const conv = db.buscarConversaPorId(msg.conversa_id);
+    const ok = conv && (conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id);
+    if (!ok) return res.status(403).json({ erro: 'Sem permissão' });
+  }
+
+  const removida = db.removerReacao({ tipo, alvoId, usuarioId: req.usuario.id, emoji });
+  let acao;
+  if (removida.changes === 0) {
+    db.adicionarReacao({ tipo, alvoId, usuarioId: req.usuario.id, emoji });
+    acao = 'adicionada';
+  } else {
+    acao = 'removida';
+  }
+
+  const reacoes = db.listarReacoesDeMensagens(tipo, [alvoId]);
+  const payload = { tipo, alvoId, emoji, reacoes: reacoes[alvoId] || {} };
+
+  if (tipo === 'canal') {
+    const msg = db.buscarMensagemCanalPorId(alvoId);
+    io.to('canal-' + msg.canal_id).emit('reacao-atualizada', payload);
+  } else {
+    const msg = db.buscarMensagemPorId(alvoId);
+    const conv = db.buscarConversaPorId(msg.conversa_id);
+    const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
+    const socketOutro = [...online.values()].find((u) => u.id === outroId);
+    if (socketOutro) io.to(socketOutro.socketId).emit('reacao-atualizada', payload);
+  }
+
+  res.json({ ok: true, acao, reacoes: reacoes[alvoId] || {} });
+});
+
 // ========== SERVIDORES ==========
 
 app.get('/api/servidores', exigirAuth, (req, res) => {
@@ -324,7 +385,6 @@ app.get('/api/servidores/:id', exigirAuth, (req, res) => {
   });
 });
 
-// 🆕 Editar servidor (só dono)
 app.patch('/api/servidores/:id', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const s = db.buscarServidorPorId(id);
@@ -399,29 +459,41 @@ app.get('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   const c = db.buscarCanalPorId(id);
   if (!c) return res.status(404).json({ erro: 'Canal não existe' });
   if (!db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
-  res.json({ mensagens: db.listarMensagensCanal(id) });
+
+  const mensagens = db.listarMensagensCanal(id);
+  const reacoes = db.listarReacoesDeMensagens('canal', mensagens.map((m) => m.id));
+
+  res.json({
+    mensagens: mensagens.map((m) => ({ ...m, reacoes: reacoes[m.id] || {} })),
+  });
 });
 
 app.post('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
-  const { texto } = req.body;
+  const { texto, replyId, replyAutor, replyTexto } = req.body;
   if (!texto || !texto.trim()) return res.status(400).json({ erro: 'Texto vazio' });
   const c = db.buscarCanalPorId(id);
   if (!c) return res.status(404).json({ erro: 'Canal não existe' });
   if (!db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
 
-  const msg = db.salvarMensagemCanal({ canalId: id, deId: req.usuario.id, texto: texto.trim() });
+  const msg = db.salvarMensagemCanal({
+    canalId: id,
+    deId: req.usuario.id,
+    texto: texto.trim(),
+    replyId: replyId || null,
+    replyAutor: replyAutor || null,
+    replyTexto: replyTexto || null,
+  });
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
 
   io.to('canal-' + id).emit('canal-nova-msg', {
     canal_id: id,
-    mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '' },
+    mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '', reacoes: {} },
   });
 
-  res.json({ ok: true, mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '' } });
+  res.json({ ok: true, mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '', reacoes: {} } });
 });
 
-// 🆕 Editar mensagem de canal
 app.patch('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) => {
   const idCanal = Number(req.params.idCanal);
   const idMensagem = Number(req.params.idMensagem);
@@ -445,7 +517,6 @@ app.patch('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) =
   res.json({ ok: true });
 });
 
-// 🆕 Deletar mensagem de canal
 app.delete('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) => {
   const idCanal = Number(req.params.idCanal);
   const idMensagem = Number(req.params.idMensagem);

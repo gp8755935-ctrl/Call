@@ -11,6 +11,15 @@ function avatarHTML(usuario, classe = '') {
   return `<div class="${cls}" style="background: linear-gradient(180deg, ${cor}99, ${cor})">${inicial}</div>`;
 }
 
+// Lista de emojis
+const EMOJIS = {
+  'Carinhas': ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕'],
+  'Gestos': ['👍','👎','👌','🤌','✌️','🤞','🤟','🤘','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦵','🦶','👂','👃','🧠','🦷','👀','👁️','👅','👄'],
+  'Corações': ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','💕','💞','💓','💗','💖','💘','💝','💟','♥️','💌','💋'],
+  'Objetos': ['🔥','✨','⭐','🌟','💫','💥','💢','💤','💨','🕳️','💣','💬','🗨️','🗯️','💭','🎉','🎊','🎈','🎁','🎂','🍕','🍔','🍟','🍿','☕','🍺','🍻','🥂','🍷','🍸','🍹','🍾','🎮','🎯','🎲','🎰','🎸','🎺','🎻','🥁','🎤','🎧','🎬','📷','📸','📹','📺','📻'],
+  'Símbolos': ['✅','❌','❗','❓','⚠️','🚫','💯','🔞','📛','♻️','🆗','🆕','🆒','🆓','🔝','🔙','🔚','🔛','🔜','🔎','🔍','➕','➖','➗','✖️','💲','💱','©️','®️','™️','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','🔶','🔷','🔸','🔹','🔺','🔻'],
+};
+
 let socket = null;
 let meuUsuario = null;
 let onlineIds = new Set();
@@ -24,6 +33,12 @@ let naoLidasTotal = 0;
 let tituloOriginal = 'Void — Conecte-se';
 
 let telaAtual = 'home';
+
+// Reply (responder mensagem)
+let replyAtual = {
+  canal: null, // { msgId, autor, texto }
+  dm: null,
+};
 
 // ============================================================
 // AUTH
@@ -156,14 +171,12 @@ function conectarSocket() {
     }
   });
 
-  // 🆕 Mensagem de DM editada
   socket.on('dm-editada', ({ conversa_id, mensagem }) => {
     if (conversaAtual && conversaAtual.conversa_id === conversa_id) {
       atualizarMsgNaTela('chat-dm', mensagem.id, mensagem.texto, true);
     }
   });
 
-  // 🆕 Mensagem de DM deletada
   socket.on('dm-deletada', ({ conversa_id, mensagem_id }) => {
     if (conversaAtual && conversaAtual.conversa_id === conversa_id) {
       removerMsgDaTela('chat-dm', mensagem_id);
@@ -182,18 +195,21 @@ function conectarSocket() {
     }
   });
 
-  // 🆕 Mensagem de canal editada
   socket.on('canal-msg-editada', ({ canal_id, mensagem }) => {
     if (canalAtivo && canalAtivo.id === canal_id) {
       atualizarMsgNaTela('chat-canal', mensagem.id, mensagem.texto, true);
     }
   });
 
-  // 🆕 Mensagem de canal deletada
   socket.on('canal-msg-deletada', ({ canal_id, mensagem_id }) => {
     if (canalAtivo && canalAtivo.id === canal_id) {
       removerMsgDaTela('chat-canal', mensagem_id);
     }
+  });
+
+  socket.on('reacao-atualizada', ({ tipo, alvoId, reacoes }) => {
+    const chatId = tipo === 'canal' ? 'chat-canal' : 'chat-dm';
+    atualizarReacoesNaTela(chatId, alvoId, reacoes);
   });
 
   socket.on('canal-criado', ({ canal }) => {
@@ -214,7 +230,6 @@ function conectarSocket() {
     }
   });
 
-  // 🆕 Servidor atualizado
   socket.on('servidor-atualizado', ({ servidor }) => {
     if (servidorAtivo && servidorAtivo.servidor.id === servidor.id) {
       servidorAtivo.servidor = servidor;
@@ -234,6 +249,245 @@ function conectarSocket() {
     renderizarServidores();
   });
 }
+
+// ============================================================
+// EMOJI PICKER
+// ============================================================
+
+function montarEmojiPicker() {
+  ['emoji-picker-canal', 'emoji-picker-dm'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    let html = '';
+    for (const [categoria, emojis] of Object.entries(EMOJIS)) {
+      html += `<div class="emoji-categoria">${categoria}</div>`;
+      html += `<div class="emoji-grid">`;
+      emojis.forEach((e) => {
+        html += `<span onclick="inserirEmoji('${id}', '${e}')">${e}</span>`;
+      });
+      html += `</div>`;
+    }
+    el.innerHTML = html;
+  });
+}
+
+function toggleEmojiPicker(contexto) {
+  const id = contexto === 'canal' ? 'emoji-picker-canal' : 'emoji-picker-dm';
+  const inputId = contexto === 'canal' ? 'input-canal' : 'input-dm';
+  const el = document.getElementById(id);
+  const input = document.getElementById(inputId);
+  if (!el || !input) return;
+
+  const outros = ['emoji-picker-canal', 'emoji-picker-dm'].filter((x) => x !== id);
+  outros.forEach((x) => document.getElementById(x)?.classList.remove('ativo'));
+
+  if (el.classList.contains('ativo')) {
+    el.classList.remove('ativo');
+    return;
+  }
+
+  el.classList.add('ativo');
+
+  const rect = input.getBoundingClientRect();
+  const altura = Math.min(320, el.scrollHeight || 320);
+  const espacoAcima = rect.top;
+  const espacoAbaixo = window.innerHeight - rect.bottom;
+
+  let top;
+  if (espacoAcima >= altura + 20) {
+    top = rect.top - altura - 8;
+  } else if (espacoAbaixo >= altura + 20) {
+    top = rect.bottom + 8;
+  } else {
+    if (espacoAcima > espacoAbaixo) {
+      top = 10;
+    } else {
+      top = window.innerHeight - altura - 10;
+    }
+  }
+
+  el.style.top = top + 'px';
+  el.style.left = rect.left + 'px';
+  el.style.bottom = 'auto';
+}
+
+function inserirEmoji(pickerId, emoji) {
+  const inputId = pickerId === 'emoji-picker-canal' ? 'input-canal' : 'input-dm';
+  const input = document.getElementById(inputId);
+  input.value += emoji;
+  input.focus();
+  document.getElementById(pickerId).classList.remove('ativo');
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.emoji-picker') || e.target.closest('.emoji-btn')) return;
+  document.querySelectorAll('.emoji-picker').forEach((el) => el.classList.remove('ativo'));
+});
+
+// ============================================================
+// REPLY (responder mensagem)
+// ============================================================
+
+function ativarReply(contexto, msgId, autor, texto) {
+  replyAtual[contexto] = { msgId, autor, texto };
+
+  const barraId = contexto === 'canal' ? 'barra-reply-canal' : 'barra-reply-dm';
+  const infoId = contexto === 'canal' ? 'reply-info-canal' : 'reply-info-dm';
+  const inputId = contexto === 'canal' ? 'input-canal' : 'input-dm';
+
+  const barra = document.getElementById(barraId);
+  const info = document.getElementById(infoId);
+
+  const trecho = texto.length > 50 ? texto.slice(0, 50) + '...' : texto;
+  info.innerHTML = `Respondendo a <strong>${escapeHtml(autor)}</strong>: ${escapeHtml(trecho)}`;
+  barra.classList.add('ativo');
+
+  document.getElementById(inputId).focus();
+}
+
+function cancelarReply(contexto) {
+  replyAtual[contexto] = null;
+  const barraId = contexto === 'canal' ? 'barra-reply-canal' : 'barra-reply-dm';
+  document.getElementById(barraId).classList.remove('ativo');
+}
+
+// ============================================================
+// SWIPE TO REPLY
+// ============================================================
+
+let swipeEstado = {
+  ativo: false,
+  x: 0,
+  y: 0,
+  msgEl: null,
+  startX: 0,
+  startY: 0,
+  tipo: null, // 'touch' | 'mouse'
+};
+
+function ativarSwipe(msgEl) {
+  const chatId = msgEl.parentElement.id; // chat-canal ou chat-dm
+  const contexto = chatId === 'chat-canal' ? 'canal' : 'dm';
+  const msgId = Number(msgEl.dataset.msgId);
+  const autor = msgEl.querySelector('.msg-autor')?.textContent || '?';
+  const texto = msgEl.querySelector('.msg-texto')?.textContent || '';
+
+  ativarReply(contexto, msgId, autor, texto);
+}
+
+function iniciarSwipe(e, msgEl) {
+  // Se já tá em outro swipe, cancela
+  if (swipeEstado.ativo) return;
+
+  // Ignora se for clique em botão
+  if (e.target.closest('button')) return;
+
+  const isTouch = e.type.startsWith('touch');
+  const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+  const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+
+  swipeEstado = {
+    ativo: true,
+    x: clientX,
+    y: clientY,
+    msgEl,
+    startX: clientX,
+    startY: clientY,
+    tipo: isTouch ? 'touch' : 'mouse',
+  };
+
+  msgEl.classList.add('arrastando');
+}
+
+function moverSwipe(e) {
+  if (!swipeEstado.ativo || !swipeEstado.msgEl) return;
+
+  const isTouch = e.type.startsWith('touch');
+  const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+  const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+
+  const dx = clientX - swipeEstado.startX;
+  const dy = clientY - swipeEstado.startY;
+
+  // Se o movimento vertical for maior que o horizontal, cancela (é scroll)
+  if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) {
+    cancelarSwipe();
+    return;
+  }
+
+  // Só permite mover pra direita
+  if (dx < 0) {
+    swipeEstado.msgEl.style.transform = '';
+    swipeEstado.msgEl.classList.remove('arrastando-ativo');
+    return;
+  }
+
+  // Limita a 100px
+  const deslocamento = Math.min(dx, 100);
+  swipeEstado.msgEl.style.transform = `translateX(${deslocamento}px)`;
+
+  // Ativa visual "pronto pra responder" se passou de 60px
+  if (deslocamento >= 60) {
+    swipeEstado.msgEl.classList.add('arrastando-ativo');
+  } else {
+    swipeEstado.msgEl.classList.remove('arrastando-ativo');
+  }
+
+  // Previne scroll horizontal
+  if (isTouch && Math.abs(dx) > 10 && e.cancelable) {
+    e.preventDefault();
+  }
+}
+
+function terminarSwipe(e) {
+  if (!swipeEstado.ativo || !swipeEstado.msgEl) return;
+
+  const msgEl = swipeEstado.msgEl;
+  const transform = msgEl.style.transform;
+  const match = transform.match(/translateX\((-?\d+(?:\.\d+)?)px\)/);
+  const deslocamento = match ? parseFloat(match[1]) : 0;
+
+  msgEl.classList.remove('arrastando');
+
+  if (deslocamento >= 60) {
+    // Ativa reply
+    ativarSwipe(msgEl);
+    msgEl.classList.remove('arrastando-ativo');
+  }
+
+  // Volta pra posição original
+  msgEl.style.transform = '';
+  setTimeout(() => {
+    msgEl.classList.remove('arrastando-ativo');
+  }, 200);
+
+  swipeEstado = { ativo: false, x: 0, y: 0, msgEl: null, startX: 0, startY: 0, tipo: null };
+}
+
+function cancelarSwipe() {
+  if (swipeEstado.msgEl) {
+    swipeEstado.msgEl.style.transform = '';
+    swipeEstado.msgEl.classList.remove('arrastando', 'arrastando-ativo');
+  }
+  swipeEstado = { ativo: false, x: 0, y: 0, msgEl: null, startX: 0, startY: 0, tipo: null };
+}
+
+// Event listeners globais (delegação)
+document.addEventListener('mousedown', (e) => {
+  const msgEl = e.target.closest('.msg-com-avatar');
+  if (!msgEl) return;
+  iniciarSwipe(e, msgEl);
+});
+document.addEventListener('mousemove', (e) => moverSwipe(e));
+document.addEventListener('mouseup', (e) => terminarSwipe(e));
+
+document.addEventListener('touchstart', (e) => {
+  const msgEl = e.target.closest('.msg-com-avatar');
+  if (!msgEl) return;
+  iniciarSwipe(e, msgEl);
+}, { passive: true });
+document.addEventListener('touchmove', (e) => moverSwipe(e), { passive: false });
+document.addEventListener('touchend', (e) => terminarSwipe(e));
 
 // ============================================================
 // SERVIDORES
@@ -365,6 +619,9 @@ async function abrirCanal(canal) {
   socket.emit('entrar-canal', { canalId: canal.id });
   renderizarCanais();
 
+  // Cancela reply se houver
+  cancelarReply('canal');
+
   const r = await fetch(`/api/canais/${canal.id}/mensagens`);
   const data = await r.json();
 
@@ -409,31 +666,69 @@ function enviarMsgCanal() {
   const texto = input.value.trim();
   if (!texto || !canalAtivo) return;
 
+  const reply = replyAtual.canal;
+  const body = { texto };
+  if (reply) {
+    body.replyId = reply.msgId;
+    body.replyAutor = reply.autor;
+    body.replyTexto = reply.texto;
+  }
+
   input.value = '';
+  cancelarReply('canal');
 
   fetch(`/api/canais/${canalAtivo.id}/mensagens`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ texto }),
+    body: JSON.stringify(body),
   }).then(async (r) => {
     if (!r.ok) { alert('Erro ao enviar'); return; }
   });
 }
 
 // ============================================================
-// RENDER DE MENSAGENS (canal e DM) — com botões editar/deletar
+// RENDER DE MENSAGENS
 // ============================================================
 
+function reacoesHTML(msgId, reacoes, contexto) {
+  if (!reacoes || Object.keys(reacoes).length === 0) return '';
+  let html = '<div class="msg-reacoes">';
+  for (const [emoji, usuarios] of Object.entries(reacoes)) {
+    const ehMinha = usuarios.includes(meuUsuario.id);
+    html += `<div class="reacao-pill ${ehMinha ? 'minha' : ''}"
+      onclick="toggleReacao('${contexto}', ${msgId}, '${emoji}')"
+      title="${usuarios.length} pessoa(s)">
+      <span>${emoji}</span>
+      <span class="reacao-count">${usuarios.length}</span>
+    </div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function replyHTML(msg) {
+  if (!msg.reply_id || !msg.reply_autor) return '';
+  const trecho = (msg.reply_texto || '').length > 80
+    ? msg.reply_texto.slice(0, 80) + '...'
+    : (msg.reply_texto || '');
+  return `<div class="msg-reply-citacao">
+    <span class="reply-autor">${escapeHtml(msg.reply_autor)}</span>
+    ${escapeHtml(trecho)}
+  </div>`;
+}
+
 function criarElMsg(m, chatId, contexto) {
-  // contexto: 'canal' ou 'dm'
   const ehMinha = m.de_id === meuUsuario.id;
   const div = document.createElement('div');
   div.className = 'msg-com-avatar' + (ehMinha ? ' minha' : '');
   div.dataset.msgId = m.id;
 
   const editadoTag = m.editado ? '<span class="msg-editada">(editado)</span>' : '';
+  const reacoes = m.reacoes || {};
+  const reply = replyHTML(m);
 
   div.innerHTML = `
+    <div class="msg-reply-hint">↩️</div>
     ${avatarHTML({ nome: m.de_nome, avatar: m.de_avatar })}
     <div class="msg-conteudo">
       <div class="msg-linha">
@@ -441,14 +736,25 @@ function criarElMsg(m, chatId, contexto) {
         <span class="msg-hora">${formatarHora(m.hora)}</span>
         ${editadoTag}
       </div>
+      ${reply}
       <div class="msg-texto">${escapeHtml(m.texto)}</div>
+      ${reacoesHTML(m.id, reacoes, contexto)}
     </div>
-    ${ehMinha ? `
-      <div class="msg-acoes">
+    <div class="msg-acoes">
+      <button class="btn-reagir" onclick="toggleReacaoPicker(event, this)" title="Reagir">😀</button>
+      ${ehMinha ? `
         <button onclick="iniciarEdicao('${chatId}', ${m.id}, '${contexto}')" title="Editar">✏️</button>
         <button class="perigo" onclick="deletarMsg('${chatId}', ${m.id}, '${contexto}')" title="Deletar">🗑️</button>
-      </div>
-    ` : ''}
+      ` : ''}
+    </div>
+    <div class="reacao-picker" onclick="event.stopPropagation()">
+      <span onclick="toggleReacao('${contexto}', ${m.id}, '👍')">👍</span>
+      <span onclick="toggleReacao('${contexto}', ${m.id}, '❤️')">❤️</span>
+      <span onclick="toggleReacao('${contexto}', ${m.id}, '😂')">😂</span>
+      <span onclick="toggleReacao('${contexto}', ${m.id}, '😮')">😮</span>
+      <span onclick="toggleReacao('${contexto}', ${m.id}, '😢')">😢</span>
+      <span onclick="toggleReacao('${contexto}', ${m.id}, '🔥')">🔥</span>
+    </div>
   `;
 
   return div;
@@ -498,6 +804,96 @@ function removerMsgDaTela(chatId, msgId) {
 }
 
 // ============================================================
+// REAÇÕES
+// ============================================================
+
+function toggleReacaoPicker(event, btn) {
+  event.stopPropagation();
+
+  const msgEl = btn.closest('.msg-com-avatar');
+  const picker = msgEl.querySelector('.reacao-picker');
+  const btnRect = btn.getBoundingClientRect();
+
+  document.querySelectorAll('.reacao-picker.ativo').forEach((p) => {
+    if (p !== picker) p.classList.remove('ativo');
+  });
+
+  if (picker.classList.contains('ativo')) {
+    picker.classList.remove('ativo');
+    return;
+  }
+
+  picker.classList.add('ativo');
+
+  requestAnimationFrame(() => {
+    const pRect = picker.getBoundingClientRect();
+    const pWidth = pRect.width || 220;
+    const pHeight = pRect.height || 40;
+
+    let top = btnRect.top - pHeight - 8;
+    let left = btnRect.right - pWidth;
+
+    if (left < 10) left = 10;
+    if (left + pWidth > window.innerWidth - 10) {
+      left = window.innerWidth - pWidth - 10;
+    }
+
+    if (top < 10) {
+      top = btnRect.bottom + 8;
+    }
+
+    if (top + pHeight > window.innerHeight - 10) {
+      top = Math.max(10, window.innerHeight - pHeight - 10);
+    }
+
+    picker.style.top = top + 'px';
+    picker.style.left = left + 'px';
+  });
+}
+
+async function toggleReacao(contexto, msgId, emoji) {
+  document.querySelectorAll('.reacao-picker').forEach((p) => p.classList.remove('ativo'));
+
+  const r = await fetch('/api/reacoes/toggle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tipo: contexto, alvoId: msgId, emoji }),
+  });
+
+  if (!r.ok) {
+    const data = await r.json();
+    alert(data.erro || 'Erro ao reagir');
+    return;
+  }
+
+  const data = await r.json();
+  const chatId = contexto === 'canal' ? 'chat-canal' : 'chat-dm';
+  atualizarReacoesNaTela(chatId, msgId, data.reacoes);
+  tocarSom();
+}
+
+function atualizarReacoesNaTela(chatId, msgId, reacoes) {
+  const el = document.getElementById(chatId);
+  const msgEl = el.querySelector(`[data-msg-id="${msgId}"]`);
+  if (!msgEl) return;
+
+  const antigo = msgEl.querySelector('.msg-reacoes');
+  if (antigo) antigo.remove();
+
+  const contexto = chatId === 'chat-canal' ? 'canal' : 'dm';
+  const html = reacoesHTML(msgId, reacoes, contexto);
+  if (html) {
+    const conteudo = msgEl.querySelector('.msg-conteudo');
+    conteudo.insertAdjacentHTML('beforeend', html);
+  }
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.reacao-picker') || e.target.closest('.btn-reagir')) return;
+  document.querySelectorAll('.reacao-picker').forEach((p) => p.classList.remove('ativo'));
+});
+
+// ============================================================
 // EDITAR / DELETAR MENSAGEM
 // ============================================================
 
@@ -509,7 +905,6 @@ function iniciarEdicao(chatId, msgId, contexto) {
   const textoEl = msgEl.querySelector('.msg-texto');
   const textoAtual = textoEl.textContent;
 
-  // Substitui o texto por um input
   textoEl.style.display = 'none';
   const wrap = document.createElement('div');
   wrap.className = 'msg-editando';
@@ -751,6 +1146,7 @@ function voltarParaServidor() {
 function voltarDMs() {
   conversaAtual = null;
   document.getElementById('chat-dm').innerHTML = '';
+  cancelarReply('dm');
   abrirDM();
 }
 
@@ -1003,6 +1399,8 @@ async function abrirConversa(amigo) {
 
   conversaAtual = { conversa_id: data.conversa_id, amigo: data.amigo };
 
+  cancelarReply('dm');
+
   telaAtual = 'conversa';
   document.getElementById('app').classList.remove('canal-ativo');
   esconderTelasMain();
@@ -1023,11 +1421,22 @@ async function enviarMsgDM() {
   const input = document.getElementById('input-dm');
   const texto = input.value.trim();
   if (!texto || !conversaAtual) return;
+
+  const reply = replyAtual.dm;
+  const body = { texto };
+  if (reply) {
+    body.replyId = reply.msgId;
+    body.replyAutor = reply.autor;
+    body.replyTexto = reply.texto;
+  }
+
   input.value = '';
+  cancelarReply('dm');
+
   const r = await fetch(`/api/conversas/${conversaAtual.conversa_id}/mensagens`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ texto }),
+    body: JSON.stringify(body),
   });
   const data = await r.json();
   if (!r.ok) { alert(data.erro || 'Erro'); return; }
@@ -1406,9 +1815,10 @@ window.addEventListener('load', async () => {
     if (e.key === 'Enter') fazerCadastro();
   });
 
-  // 🆕 Nome do servidor clicável (abre edição)
   const nomeServidorEl = document.getElementById('nome-servidor');
   if (nomeServidorEl) {
     nomeServidorEl.onclick = abrirModalEditarServidor;
   }
+
+  montarEmojiPicker();
 });
