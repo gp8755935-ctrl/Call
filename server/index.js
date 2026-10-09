@@ -1,6 +1,6 @@
 const express = require('express');
 const http = require('http');
-const path = require('path');           // 👈 adiciona isso
+const path = require('path');
 const { Server } = require('socket.io');
 const db = require('./db');
 
@@ -8,9 +8,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(path.join(__dirname, '..', 'public')));   // 👈 muda isso
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
-const online = new Map();
+const online = new Map(); // socketId -> { nome, socketId }
 
 io.on('connection', (socket) => {
   console.log('conectado:', socket.id);
@@ -66,6 +66,24 @@ io.on('connection', (socket) => {
   socket.on('digitando', ({ sala, nome }) => {
     if (!sala) return;
     socket.to(sala).emit('digitando', { nome });
+  });
+
+  // ========== WEBRTC (SINALIZAÇÃO) ==========
+
+  socket.on('webrtc-offer', ({ sala, offer }) => {
+    socket.to(sala).emit('webrtc-offer', { offer, de: socket.id });
+  });
+
+  socket.on('webrtc-answer', ({ sala, answer }) => {
+    socket.to(sala).emit('webrtc-answer', { answer });
+  });
+
+  socket.on('webrtc-ice', ({ sala, candidate }) => {
+    socket.to(sala).emit('webrtc-ice', { candidate });
+  });
+
+  socket.on('webrtc-encerrar', ({ sala }) => {
+    socket.to(sala).emit('webrtc-encerrada');
   });
 
   socket.on('disconnect', () => {

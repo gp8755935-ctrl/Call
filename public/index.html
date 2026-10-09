@@ -77,6 +77,8 @@
     <div id="barra">
       <input id="msg" placeholder="Digite..." disabled>
       <button id="enviar" disabled>Enviar</button>
+      <button id="btnLigar" onclick="ligar()" style="display:none">📞 Ligar</button>
+      <button id="btnDesligar" onclick="desligar()" style="display:none">📞 Desligar</button>
     </div>
 
     <div id="pedido">
@@ -86,7 +88,33 @@
     </div>
   </div>
 
+  <!-- Áudio do outro lado toca por aqui -->
+  <audio id="audio-remoto" autoplay></audio>
+
+  <!-- Painel da chamada (canto inferior direito) -->
+  <div id="chamada" style="display:none; position:fixed; bottom:20px; right:20px;
+       background:#1976d2; color:white; padding:15px 20px; border-radius:8px;
+       box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-family:sans-serif; z-index:1000">
+    <div style="font-size:16px; margin-bottom:8px" id="chamada-status">📞 Chamando...</div>
+    <div style="font-size:12px; opacity:0.8" id="chamada-tempo">00:00</div>
+  </div>
+
+  <!-- Pedido de chamada recebida -->
+  <div id="chamada-recebida" style="display:none; position:fixed; bottom:20px; right:20px;
+       background:#2e7d32; color:white; padding:15px 20px; border-radius:8px;
+       box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-family:sans-serif; z-index:1000">
+    <div style="margin-bottom:8px"><strong>Alguém</strong> está te ligando...</div>
+    <button onclick="aceitarChamada()" style="background:#fff; color:#2e7d32; border:none;
+            padding:8px 16px; border-radius:4px; cursor:pointer; margin-right:6px">
+      ✅ Aceitar
+    </button>
+    <button onclick="recusarChamada()" style="background:transparent; color:#fff;
+            border:1px solid #fff; padding:8px 16px; border-radius:4px; cursor:pointer">
+      ❌ Recusar
+    </button>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
 </body>
-</html> 
+</html>
