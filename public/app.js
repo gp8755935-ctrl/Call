@@ -264,11 +264,18 @@ let timerChamada = null;
 let segundosChamada = 0;
 let offerPendente = null;
 
-// 🔥 TURN do Metered
+// 🔥 TURN primeiro — mais confiável em redes restritivas
 const rtcConfig = {
   iceServers: [
     {
-      urls: 'stun:stun.relay.metered.ca:80',
+      urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+      username: '161d0f2efb2c3ef542a1c0e3',
+      credential: 'CWydqcwhGQ9x8aS7',
+    },
+    {
+      urls: 'turn:global.relay.metered.ca:443',
+      username: '161d0f2efb2c3ef542a1c0e3',
+      credential: 'CWydqcwhGQ9x8aS7',
     },
     {
       urls: 'turn:global.relay.metered.ca:80',
@@ -281,17 +288,14 @@ const rtcConfig = {
       credential: 'CWydqcwhGQ9x8aS7',
     },
     {
-      urls: 'turn:global.relay.metered.ca:443',
-      username: '161d0f2efb2c3ef542a1c0e3',
-      credential: 'CWydqcwhGQ9x8aS7',
+      urls: 'stun:stun.relay.metered.ca:80',
     },
     {
-      urls: 'turns:global.relay.metered.ca:443?transport=tcp',
-      username: '161d0f2efb2c3ef542a1c0e3',
-      credential: 'CWydqcwhGQ9x8aS7',
+      urls: 'stun:stun.l.google.com:19302',
     },
   ],
   iceCandidatePoolSize: 10,
+  iceTransportPolicy: 'all',
 };
 
 // ---------- INICIAR CHAMADA ----------
@@ -320,11 +324,26 @@ async function ligar() {
   mostrarChamada('📞 Chamando...');
 }
 
-// ---------- RECEBER OFERTA ----------
+// ---------- RECEBER OFERTA (novo ou ICE restart) ----------
 
-socket.on('webrtc-offer', ({ offer }) => {
-  if (!salaAtual || chamadaAtiva) return;
+socket.on('webrtc-offer', async ({ offer }) => {
+  if (!salaAtual) return;
 
+  // Se já tá em chamada e peerConnection existe, é um ICE restart
+  if (chamadaAtiva && peerConnection) {
+    console.log('🔄 Recebendo ICE restart...');
+    try {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      socket.emit('webrtc-answer', { sala: salaAtual, answer });
+    } catch (e) {
+      console.warn('Erro no ICE restart:', e);
+    }
+    return;
+  }
+
+  // Senão, é uma nova chamada
   offerPendente = offer;
   document.getElementById('chamada-recebida').style.display = 'block';
 });
@@ -366,9 +385,13 @@ function recusarChamada() {
 
 socket.on('webrtc-answer', async ({ answer }) => {
   if (!peerConnection) return;
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-  iniciarTimer();
-  mostrarChamada('🎙️ Em chamada');
+  try {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    iniciarTimer();
+    mostrarChamada('🎙️ Em chamada');
+  } catch (e) {
+    console.warn('Erro ao setar answer:', e);
+  }
 });
 
 // ---------- ICE CANDIDATES ----------
@@ -393,54 +416,71 @@ function criarPeerConnection() {
     }
   };
 
-  // 🎧 CORRIGIDO: não sobrescreve o srcObject se já existe
   peerConnection.ontrack = (event) => {
     console.log('ontrack disparou:', event.streams, 'track:', event.track.kind);
 
     const audioRemoto = document.getElementById('audio-remoto');
 
-    // Só seta se ainda não tem um stream
     if (!audioRemoto.srcObject && event.streams && event.streams[0]) {
       audioRemoto.srcObject = event.streams[0];
     }
 
-    // Quando a track ficar ativa, força o play
     event.track.onunmute = () => {
-      console.log('🔊 Track desmutou, dando play');
+      console.log('🔊 Track desmutou');
       audioRemoto.muted = false;
       audioRemoto.volume = 1.0;
       audioRemoto.play().catch((e) => console.warn('Autoplay bloqueado:', e));
     };
 
-    // Tenta dar play direto também
-    audioRemoto.play().catch((e) => {
-      console.warn('Play falhou, precisa de clique:', e);
-    });
+    event.track.onended = () => {
+      console.warn('⚠️ Track terminou — a conexão caiu');
+    };
+
+    audioRemoto.play().catch((e) => console.warn('Play falhou:', e));
   };
 
   peerConnection.oniceconnectionstatechange = () => {
-    console.log('ICE state:', peerConnection.iceConnectionState);
+    const state = peerConnection ? peerConnection.iceConnectionState : 'null';
+    console.log('ICE state:', state);
+
+    if (state === 'failed') {
+      console.log('🔄 ICE falhou, tentando reconectar...');
+      tentarReconectar();
+    }
   };
 
   peerConnection.onconnectionstatechange = () => {
     console.log('Connection state:', peerConnection.connectionState);
-    if (
-      peerConnection.connectionState === 'disconnected' ||
-      peerConnection.connectionState === 'failed'
-    ) {
-      desligar(true);
+
+    if (peerConnection.connectionState === 'failed') {
+      console.log('❌ Connection falhou');
     }
   };
 
   chamadaAtiva = true;
 
-  // Garante o play 1s depois
   setTimeout(() => {
     const audioRemoto = document.getElementById('audio-remoto');
     if (audioRemoto && audioRemoto.srcObject) {
       audioRemoto.play().catch((e) => console.warn(e));
     }
   }, 1000);
+}
+
+// ---------- RECONEXÃO AUTOMÁTICA ----------
+
+async function tentarReconectar() {
+  if (!peerConnection || !salaAtual) return;
+  if (peerConnection.iceConnectionState !== 'failed') return;
+
+  try {
+    console.log('🔄 ICE restart...');
+    const offer = await peerConnection.createOffer({ iceRestart: true });
+    await peerConnection.setLocalDescription(offer);
+    socket.emit('webrtc-offer', { sala: salaAtual, offer });
+  } catch (e) {
+    console.warn('Falha no ICE restart:', e);
+  }
 }
 
 // ---------- DESLIGAR ----------
@@ -472,7 +512,7 @@ socket.on('webrtc-encerrada', () => {
   adicionarMsg('--- chamada encerrada pelo outro lado ---', 'sistema');
 });
 
-// ---------- DESTRAVAR ÁUDIO (fallback de autoplay) ----------
+// ---------- DESTRAVAR ÁUDIO ----------
 
 function destravarAudio() {
   const audioRemoto = document.getElementById('audio-remoto');
