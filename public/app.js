@@ -285,8 +285,20 @@ function toggleEmojiPicker(contexto) {
 
   el.classList.add('ativo');
 
-  const rect = input.getBoundingClientRect();
+  // 🔥 Pega a largura real da janela
+  const windowWidth = window.innerWidth;
+  const isMobile = windowWidth <= 768;
+
+  // 🔥 No mobile, o picker ocupa quase toda a largura
+  const margem = 12;
+  const larguraMax = isMobile ? (windowWidth - margem * 2) : 340;
+
+  el.style.width = larguraMax + 'px';
+  el.style.maxWidth = larguraMax + 'px';
+
+  // 🔥 Calcula altura depois de setar a largura (emoji grid muda)
   const altura = Math.min(320, el.scrollHeight || 320);
+  const rect = input.getBoundingClientRect();
   const espacoAcima = rect.top;
   const espacoAbaixo = window.innerHeight - rect.bottom;
 
@@ -296,38 +308,27 @@ function toggleEmojiPicker(contexto) {
   } else if (espacoAbaixo >= altura + 20) {
     top = rect.bottom + 8;
   } else {
-    if (espacoAcima > espacoAbaixo) {
-      top = 10;
-    } else {
-      top = window.innerHeight - altura - 10;
+    top = espacoAcima > espacoAbaixo
+      ? 10
+      : window.innerHeight - altura - 10;
+  }
+
+  // 🔥 Calcula left pra centralizar e nunca sair da tela
+  let left;
+  if (isMobile) {
+    left = margem;
+  } else {
+    left = rect.left;
+    if (left + larguraMax > windowWidth - 10) {
+      left = windowWidth - larguraMax - 10;
     }
+    if (left < 10) left = 10;
   }
 
   el.style.top = top + 'px';
-  el.style.left = rect.left + 'px';
+  el.style.left = left + 'px';
   el.style.bottom = 'auto';
 }
-
-function inserirEmoji(pickerId, emoji) {
-  const inputId = pickerId === 'emoji-picker-canal' ? 'input-canal' : 'input-dm';
-  const input = document.getElementById(inputId);
-  input.value += emoji;
-  input.focus();
-  document.getElementById(pickerId).classList.remove('ativo');
-}
-
-document.addEventListener('click', (e) => {
-  if (e.target.closest('.emoji-picker') || e.target.closest('.emoji-btn')) return;
-  document.querySelectorAll('.emoji-picker').forEach((el) => el.classList.remove('ativo'));
-});
-
-// 🔥 Fecha picker ao redimensionar (teclado abrir/fechar) e ao rolar o chat
-window.addEventListener('resize', () => {
-  document.querySelectorAll('.emoji-picker.ativo').forEach((el) => {
-    el.classList.remove('ativo');
-  });
-});
-
 document.addEventListener('scroll', (e) => {
   if (e.target && e.target.closest && e.target.closest('.chat-area')) {
     document.querySelectorAll('.emoji-picker.ativo').forEach((el) => {
