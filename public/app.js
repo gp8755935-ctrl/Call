@@ -23,7 +23,6 @@ let timeoutBusca = null;
 let naoLidasTotal = 0;
 let tituloOriginal = 'Void — Conecte-se';
 
-// Controla qual tela do main tá ativa
 let telaAtual = 'home';
 
 // ============================================================
@@ -252,7 +251,6 @@ async function abrirServidor(id) {
     renderizarCanais();
     renderizarMembros();
 
-    // Só abre canal automaticamente se estiver na tela de canal
     if (data.canais.length > 0) {
       if (telaAtual === 'canal') {
         abrirCanal(data.canais[0]);
@@ -337,7 +335,8 @@ async function abrirCanal(canal) {
 
   telaAtual = 'canal';
   const telaCanal = document.getElementById('tela-canal');
-  telaCanal.classList.add('tem-canal');  // 🔥 mostra a barra
+  telaCanal.classList.add('tem-canal');
+  document.getElementById('app').classList.add('canal-ativo');  // 🔥 mostra ☰
   document.getElementById('titulo-main').textContent = '# ' + canal.nome;
   document.getElementById('input-canal').focus();
 
@@ -475,12 +474,12 @@ function mostrarTelaCanal() {
   const telaCanal = document.getElementById('tela-canal');
   telaCanal.classList.add('ativa');
   telaCanal.classList.add('tem-canal');
+  document.getElementById('app').classList.add('canal-ativo');
   if (canalAtivo) {
     document.getElementById('titulo-main').textContent = '# ' + canalAtivo.nome;
   }
 }
 
-// 🆕 TELA HOME — vazia, sem canal selecionado, SEM barra
 function mostrarTelaHome() {
   telaAtual = 'home';
   canalAtivo = null;
@@ -488,10 +487,10 @@ function mostrarTelaHome() {
   esconderTelasMain();
   const telaCanal = document.getElementById('tela-canal');
   telaCanal.classList.add('ativa');
-  telaCanal.classList.remove('tem-canal');  // 🔥 esconde a barra
+  telaCanal.classList.remove('tem-canal');
+  document.getElementById('app').classList.remove('canal-ativo');  // 🔥 esconde ☰
 
   document.getElementById('titulo-main').textContent = 'Selecione um canal';
-  document.getElementById('chat-canal').innerHTML = '';
   document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
 
   renderizarCanais();
@@ -499,6 +498,7 @@ function mostrarTelaHome() {
 
 function abrirDM() {
   telaAtual = 'dm';
+  document.getElementById('app').classList.remove('canal-ativo');  // 🔥
   esconderTelasMain();
   document.getElementById('tela-dm').classList.add('ativa');
   document.getElementById('titulo-main').textContent = '💬 Mensagens diretas';
@@ -507,6 +507,7 @@ function abrirDM() {
 
 function abrirAmigos() {
   telaAtual = 'amigos';
+  document.getElementById('app').classList.remove('canal-ativo');  // 🔥
   esconderTelasMain();
   document.getElementById('tela-amigos').classList.add('ativa');
   document.getElementById('titulo-main').textContent = '👥 Amigos';
@@ -515,13 +516,13 @@ function abrirAmigos() {
 
 function abrirBuscar() {
   telaAtual = 'buscar';
+  document.getElementById('app').classList.remove('canal-ativo');  // 🔥
   esconderTelasMain();
   document.getElementById('tela-buscar').classList.add('ativa');
   document.getElementById('titulo-main').textContent = '🔍 Buscar usuários';
   setTimeout(() => document.getElementById('busca-input').focus(), 50);
 }
 
-// 🆕 "← Voltar" agora vai pra home
 function voltarParaServidor() {
   mostrarTelaHome();
 }
@@ -782,6 +783,7 @@ async function abrirConversa(amigo) {
   conversaAtual = { conversa_id: data.conversa_id, amigo: data.amigo };
 
   telaAtual = 'conversa';
+  document.getElementById('app').classList.remove('canal-ativo');  // 🔥
   esconderTelasMain();
   document.getElementById('tela-conversa').classList.add('ativa');
   document.getElementById('titulo-main').textContent = '💬 Conversa';
@@ -832,7 +834,7 @@ async function enviarMsgDM() {
 }
 
 // ============================================================
-// PERFIL / AVATAR / BANNER / BIO
+// PERFIL
 // ============================================================
 
 function abrirModalPerfil() {
@@ -893,16 +895,13 @@ function atualizarAvataresNaUI() {
 }
 
 // ============================================================
-// UPLOAD — ABRE O EDITOR
+// UPLOAD
 // ============================================================
 
 function uploadAvatar(event) {
   const file = event.target.files[0];
   if (!file) return;
-  if (!file.type.startsWith('image/')) {
-    alert('Escolha uma imagem');
-    return;
-  }
+  if (!file.type.startsWith('image/')) { alert('Escolha uma imagem'); return; }
   abrirEditor(file, 'avatar');
   event.target.value = '';
 }
@@ -910,10 +909,7 @@ function uploadAvatar(event) {
 function uploadBanner(event) {
   const file = event.target.files[0];
   if (!file) return;
-  if (!file.type.startsWith('image/')) {
-    alert('Escolha uma imagem');
-    return;
-  }
+  if (!file.type.startsWith('image/')) { alert('Escolha uma imagem'); return; }
   abrirEditor(file, 'banner');
   event.target.value = '';
 }
