@@ -264,21 +264,34 @@ let timerChamada = null;
 let segundosChamada = 0;
 let offerPendente = null;
 
+// 🔥 CONFIGURAÇÃO COM TURN DO METERED
 const rtcConfig = {
   iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
     {
-      urls: 'turn:SEU-URL-AQUI.metered.live:443',
-      username: 'SEU-USERNAME',
-      credential: 'SUA-CREDENTIAL',
+      urls: 'stun:stun.relay.metered.ca:80',
     },
     {
-      urls: 'turn:SEU-URL-AQUI.metered.live:80',
-      username: 'SEU-USERNAME',
-      credential: 'SUA-CREDENTIAL',
+      urls: 'turn:global.relay.metered.ca:80',
+      username: '161d0f2efb2c3ef542a1c0e3',
+      credential: 'CWydqcwhGQ9x8aS7',
+    },
+    {
+      urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+      username: '161d0f2efb2c3ef542a1c0e3',
+      credential: 'CWydqcwhGQ9x8aS7',
+    },
+    {
+      urls: 'turn:global.relay.metered.ca:443',
+      username: '161d0f2efb2c3ef542a1c0e3',
+      credential: 'CWydqcwhGQ9x8aS7',
+    },
+    {
+      urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+      username: '161d0f2efb2c3ef542a1c0e3',
+      credential: 'CWydqcwhGQ9x8aS7',
     },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 // ---------- INICIAR CHAMADA ----------
@@ -381,17 +394,22 @@ function criarPeerConnection() {
   };
 
   peerConnection.ontrack = (event) => {
-  const audioRemoto = document.getElementById('audio-remoto');
-  audioRemoto.srcObject = event.streams[0];
-  audioRemoto.muted = false;         // 👈 garante que não tá mudo
-  audioRemoto.volume = 1.0;          // 👈 volume máximo
-  audioRemoto.play().catch((e) => {
-    console.warn('Autoplay bloqueado:', e);
-    alert('Clique em qualquer lugar da página para liberar o áudio');
-  });
-};
+    console.log('ontrack disparou:', event.streams);
+    const audioRemoto = document.getElementById('audio-remoto');
+    if (event.streams && event.streams[0]) {
+      audioRemoto.srcObject = event.streams[0];
+      audioRemoto.muted = false;
+      audioRemoto.volume = 1.0;
+      audioRemoto.play().catch((e) => console.warn('Autoplay bloqueado:', e));
+    }
+  };
+
+  peerConnection.oniceconnectionstatechange = () => {
+    console.log('ICE state:', peerConnection.iceConnectionState);
+  };
 
   peerConnection.onconnectionstatechange = () => {
+    console.log('Connection state:', peerConnection.connectionState);
     if (
       peerConnection.connectionState === 'disconnected' ||
       peerConnection.connectionState === 'failed'
