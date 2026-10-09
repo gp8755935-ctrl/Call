@@ -1,4 +1,4 @@
-// Helper: gera HTML do avatar (imagem se tiver, inicial colorida se não)
+// Helper: gera HTML do avatar
 function avatarHTML(usuario, classe = '') {
   if (!usuario) return '';
   const cls = 'avatar ' + classe;
@@ -22,6 +22,9 @@ let conversaAtual = null;
 let timeoutBusca = null;
 let naoLidasTotal = 0;
 let tituloOriginal = 'Void — Conecte-se';
+
+// Controla qual tela do main tá ativa
+let telaAtual = 'home';
 
 // ============================================================
 // AUTH
@@ -178,7 +181,7 @@ function conectarSocket() {
       servidorAtivo.canais = servidorAtivo.canais.filter((c) => c.id !== canal_id);
       if (canalAtivo && canalAtivo.id === canal_id) {
         canalAtivo = servidorAtivo.canais[0] || null;
-        if (canalAtivo) abrirCanal(canalAtivo);
+        if (canalAtivo && telaAtual === 'canal') abrirCanal(canalAtivo);
       }
       renderizarCanais();
     }
@@ -249,14 +252,18 @@ async function abrirServidor(id) {
     renderizarCanais();
     renderizarMembros();
 
+    // Só abre canal automaticamente se estiver na tela de canal
     if (data.canais.length > 0) {
-      abrirCanal(data.canais[0]);
+      if (telaAtual === 'canal') {
+        abrirCanal(data.canais[0]);
+      } else {
+        canalAtivo = data.canais[0];
+        renderizarCanais();
+      }
     } else {
       canalAtivo = null;
       document.getElementById('chat-canal').innerHTML = '<div class="vazio">Sem canais neste servidor.</div>';
     }
-
-    mostrarTelaCanal();
   } catch (e) { console.warn(e); }
 }
 
@@ -321,8 +328,6 @@ async function abrirCanal(canal) {
   socket.emit('entrar-canal', { canalId: canal.id });
   renderizarCanais();
 
-  document.getElementById('titulo-main').textContent = '# ' + canal.nome;
-
   const r = await fetch(`/api/canais/${canal.id}/mensagens`);
   const data = await r.json();
 
@@ -330,8 +335,14 @@ async function abrirCanal(canal) {
   el.innerHTML = '';
   (data.mensagens || []).forEach(adicionarMsgCanal);
 
+  telaAtual = 'canal';
+  const telaCanal = document.getElementById('tela-canal');
+  telaCanal.classList.add('tem-canal');  // 🔥 mostra a barra
+  document.getElementById('titulo-main').textContent = '# ' + canal.nome;
   document.getElementById('input-canal').focus();
-  mostrarTelaCanal();
+
+  esconderTelasMain();
+  telaCanal.classList.add('ativa');
 
   if (window.innerWidth <= 768) fecharSidebarMobile();
 }
@@ -424,6 +435,7 @@ async function criarServidor() {
 
   fecharModalServidor();
   await carregarServidores();
+  telaAtual = 'canal';
   abrirServidor(data.servidor.id);
 }
 
@@ -443,6 +455,7 @@ async function entrarServidor() {
 
   fecharModalServidor();
   await carregarServidores();
+  telaAtual = 'canal';
   abrirServidor(data.servidor.id);
 }
 
@@ -451,21 +464,41 @@ async function entrarServidor() {
 // ============================================================
 
 function esconderTelasMain() {
-  ['tela-canal', 'tela-dm', 'tela-conversa', 'tela-amigos', 'tela-buscar'].forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('ativa');
+  document.querySelectorAll('.tela-main').forEach((el) => {
+    el.classList.remove('ativa');
   });
 }
 
 function mostrarTelaCanal() {
+  telaAtual = 'canal';
   esconderTelasMain();
-  document.getElementById('tela-canal').classList.add('ativa');
+  const telaCanal = document.getElementById('tela-canal');
+  telaCanal.classList.add('ativa');
+  telaCanal.classList.add('tem-canal');
   if (canalAtivo) {
     document.getElementById('titulo-main').textContent = '# ' + canalAtivo.nome;
   }
 }
 
+// 🆕 TELA HOME — vazia, sem canal selecionado, SEM barra
+function mostrarTelaHome() {
+  telaAtual = 'home';
+  canalAtivo = null;
+
+  esconderTelasMain();
+  const telaCanal = document.getElementById('tela-canal');
+  telaCanal.classList.add('ativa');
+  telaCanal.classList.remove('tem-canal');  // 🔥 esconde a barra
+
+  document.getElementById('titulo-main').textContent = 'Selecione um canal';
+  document.getElementById('chat-canal').innerHTML = '';
+  document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
+
+  renderizarCanais();
+}
+
 function abrirDM() {
+  telaAtual = 'dm';
   esconderTelasMain();
   document.getElementById('tela-dm').classList.add('ativa');
   document.getElementById('titulo-main').textContent = '💬 Mensagens diretas';
@@ -473,6 +506,7 @@ function abrirDM() {
 }
 
 function abrirAmigos() {
+  telaAtual = 'amigos';
   esconderTelasMain();
   document.getElementById('tela-amigos').classList.add('ativa');
   document.getElementById('titulo-main').textContent = '👥 Amigos';
@@ -480,25 +514,21 @@ function abrirAmigos() {
 }
 
 function abrirBuscar() {
+  telaAtual = 'buscar';
   esconderTelasMain();
   document.getElementById('tela-buscar').classList.add('ativa');
   document.getElementById('titulo-main').textContent = '🔍 Buscar usuários';
   setTimeout(() => document.getElementById('busca-input').focus(), 50);
 }
 
+// 🆕 "← Voltar" agora vai pra home
 function voltarParaServidor() {
-  if (canalAtivo) {
-    mostrarTelaCanal();
-  } else if (servidorAtivo && servidorAtivo.canais.length > 0) {
-    abrirCanal(servidorAtivo.canais[0]);
-  } else {
-    esconderTelasMain();
-    document.getElementById('tela-canal').classList.add('ativa');
-  }
+  mostrarTelaHome();
 }
 
 function voltarDMs() {
   conversaAtual = null;
+  document.getElementById('chat-dm').innerHTML = '';
   abrirDM();
 }
 
@@ -751,6 +781,7 @@ async function abrirConversa(amigo) {
 
   conversaAtual = { conversa_id: data.conversa_id, amigo: data.amigo };
 
+  telaAtual = 'conversa';
   esconderTelasMain();
   document.getElementById('tela-conversa').classList.add('ativa');
   document.getElementById('titulo-main').textContent = '💬 Conversa';
@@ -838,99 +869,6 @@ function atualizarPreviewBanner(usuario) {
   }
 }
 
-async function uploadAvatar(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  if (!file.type.startsWith('image/')) {
-    alert('Escolha uma imagem');
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = async () => {
-      const size = 256;
-      const canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext('2d');
-
-      const min = Math.min(img.width, img.height);
-      const sx = (img.width - min) / 2;
-      const sy = (img.height - min) / 2;
-
-      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
-
-      const base64 = canvas.toDataURL('image/jpeg', 0.85);
-
-      const r = await fetch('/api/avatar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ avatar: base64 }),
-      });
-
-      if (!r.ok) { alert('Erro ao salvar avatar'); return; }
-
-      meuUsuario.avatar = base64;
-      atualizarPreviewAvatar(meuUsuario);
-      atualizarAvataresNaUI();
-      tocarSom();
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-async function uploadBanner(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  if (!file.type.startsWith('image/')) {
-    alert('Escolha uma imagem');
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = async () => {
-      const w = 800, h = 300;
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-
-      const ratio = Math.max(w / img.width, h / img.height);
-      const nw = img.width * ratio;
-      const nh = img.height * ratio;
-      const sx = (nw - w) / 2 / ratio;
-      const sy = (nh - h) / 2 / ratio;
-      const sw = w / ratio;
-      const sh = h / ratio;
-
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
-
-      const base64 = canvas.toDataURL('image/jpeg', 0.85);
-
-      const r = await fetch('/api/banner', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ banner: base64 }),
-      });
-
-      if (!r.ok) { alert('Erro ao salvar banner'); return; }
-
-      meuUsuario.banner = base64;
-      atualizarPreviewBanner(meuUsuario);
-      tocarSom();
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
 async function salvarBio() {
   const bio = document.getElementById('perfil-bio').value.trim();
   if (bio === (meuUsuario.bio || '')) return;
@@ -952,6 +890,240 @@ function atualizarAvataresNaUI() {
   if (el) {
     el.outerHTML = avatarHTML(meuUsuario, '').replace('class="avatar "', 'id="avatar-usuario" class="avatar"');
   }
+}
+
+// ============================================================
+// UPLOAD — ABRE O EDITOR
+// ============================================================
+
+function uploadAvatar(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    alert('Escolha uma imagem');
+    return;
+  }
+  abrirEditor(file, 'avatar');
+  event.target.value = '';
+}
+
+function uploadBanner(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    alert('Escolha uma imagem');
+    return;
+  }
+  abrirEditor(file, 'banner');
+  event.target.value = '';
+}
+
+// ============================================================
+// EDITOR DE IMAGEM
+// ============================================================
+
+let editorEstado = {
+  tipo: null, imagem: null, zoom: 1, offsetX: 0, offsetY: 0,
+  canvasW: 0, canvasH: 0, baseScale: 1,
+  arrastando: false, startX: 0, startY: 0, startOffsetX: 0, startOffsetY: 0,
+};
+
+function abrirEditor(file, tipo) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      editorEstado.tipo = tipo;
+      editorEstado.imagem = img;
+      editorEstado.zoom = 1;
+      editorEstado.offsetX = 0;
+      editorEstado.offsetY = 0;
+
+      const canvas = document.getElementById('editor-canvas');
+
+      if (tipo === 'avatar') {
+        editorEstado.canvasW = 320;
+        editorEstado.canvasH = 320;
+        canvas.width = 320;
+        canvas.height = 320;
+        canvas.classList.add('circular');
+        document.getElementById('editor-titulo').textContent = 'Ajustar avatar';
+      } else {
+        editorEstado.canvasW = 480;
+        editorEstado.canvasH = 180;
+        canvas.width = 480;
+        canvas.height = 180;
+        canvas.classList.remove('circular');
+        document.getElementById('editor-titulo').textContent = 'Ajustar banner';
+      }
+
+      const escalaW = editorEstado.canvasW / img.width;
+      const escalaH = editorEstado.canvasH / img.height;
+      editorEstado.baseScale = Math.max(escalaW, escalaH);
+
+      document.getElementById('editor-zoom').value = 1;
+
+      const escalaTotal = editorEstado.baseScale * editorEstado.zoom;
+      const w = img.width * escalaTotal;
+      const h = img.height * escalaTotal;
+      editorEstado.offsetX = (editorEstado.canvasW - w) / 2;
+      editorEstado.offsetY = (editorEstado.canvasH - h) / 2;
+
+      desenharEditor();
+      document.getElementById('modal-editor').classList.add('ativo');
+      document.getElementById('modal-perfil').classList.remove('ativo');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function desenharEditor() {
+  const canvas = document.getElementById('editor-canvas');
+  const ctx = canvas.getContext('2d');
+  const { imagem, canvasW, canvasH, baseScale, zoom, offsetX, offsetY, tipo } = editorEstado;
+  if (!imagem) return;
+
+  ctx.clearRect(0, 0, canvasW, canvasH);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  const escalaTotal = baseScale * zoom;
+  const w = imagem.width * escalaTotal;
+  const h = imagem.height * escalaTotal;
+
+  ctx.drawImage(imagem, offsetX, offsetY, w, h);
+
+  if (tipo === 'avatar') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.beginPath();
+    ctx.arc(canvasW / 2, canvasH / 2, Math.min(canvasW, canvasH) / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function atualizarZoom(valor) {
+  editorEstado.zoom = parseFloat(valor);
+  const { imagem, baseScale, canvasW, canvasH } = editorEstado;
+  const escalaTotal = baseScale * editorEstado.zoom;
+  const w = imagem.width * escalaTotal;
+  const h = imagem.height * escalaTotal;
+  editorEstado.offsetX = (canvasW - w) / 2;
+  editorEstado.offsetY = (canvasH - h) / 2;
+  desenharEditor();
+}
+
+function iniciarArrasto(x, y) {
+  editorEstado.arrastando = true;
+  editorEstado.startX = x;
+  editorEstado.startY = y;
+  editorEstado.startOffsetX = editorEstado.offsetX;
+  editorEstado.startOffsetY = editorEstado.offsetY;
+}
+
+function moverArrasto(x, y) {
+  if (!editorEstado.arrastando) return;
+  const dx = x - editorEstado.startX;
+  const dy = y - editorEstado.startY;
+  let novoX = editorEstado.startOffsetX + dx;
+  let novoY = editorEstado.startOffsetY + dy;
+
+  const { imagem, baseScale, zoom, canvasW, canvasH } = editorEstado;
+  const escalaTotal = baseScale * zoom;
+  const w = imagem.width * escalaTotal;
+  const h = imagem.height * escalaTotal;
+  const minX = canvasW - w;
+  const minY = canvasH - h;
+
+  novoX = Math.min(0, Math.max(minX, novoX));
+  novoY = Math.min(0, Math.max(minY, novoY));
+
+  editorEstado.offsetX = novoX;
+  editorEstado.offsetY = novoY;
+  desenharEditor();
+}
+
+function terminarArrasto() { editorEstado.arrastando = false; }
+
+window.addEventListener('load', () => {
+  const canvas = document.getElementById('editor-canvas');
+  if (!canvas) return;
+
+  canvas.addEventListener('mousedown', (e) => { e.preventDefault(); iniciarArrasto(e.clientX, e.clientY); });
+  window.addEventListener('mousemove', (e) => moverArrasto(e.clientX, e.clientY));
+  window.addEventListener('mouseup', terminarArrasto);
+
+  canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) { e.preventDefault(); iniciarArrasto(e.touches[0].clientX, e.touches[0].clientY); }
+  }, { passive: false });
+  canvas.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 1) { e.preventDefault(); moverArrasto(e.touches[0].clientX, e.touches[0].clientY); }
+  }, { passive: false });
+  canvas.addEventListener('touchend', terminarArrasto);
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const slider = document.getElementById('editor-zoom');
+    let valor = parseFloat(slider.value);
+    valor += e.deltaY > 0 ? -0.05 : 0.05;
+    valor = Math.min(3, Math.max(0.5, valor));
+    slider.value = valor;
+    atualizarZoom(valor);
+  }, { passive: false });
+});
+
+async function salvarEdicao() {
+  const { tipo, canvasW, canvasH } = editorEstado;
+  const canvas = document.getElementById('editor-canvas');
+  if (!tipo) return;
+
+  let outputW, outputH;
+  if (tipo === 'avatar') { outputW = 256; outputH = 256; }
+  else { outputW = 800; outputH = 300; }
+
+  const outputCanvas = document.createElement('canvas');
+  outputCanvas.width = outputW;
+  outputCanvas.height = outputH;
+  const outCtx = outputCanvas.getContext('2d');
+  outCtx.drawImage(canvas, 0, 0, canvasW, canvasH, 0, 0, outputW, outputH);
+
+  const base64 = outputCanvas.toDataURL('image/jpeg', 0.85);
+  const endpoint = tipo === 'avatar' ? '/api/avatar' : '/api/banner';
+  const chave = tipo === 'avatar' ? 'avatar' : 'banner';
+
+  const r = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ [chave]: base64 }),
+  });
+
+  if (!r.ok) { alert('Erro ao salvar'); return; }
+
+  meuUsuario[chave] = base64;
+
+  if (tipo === 'avatar') {
+    atualizarPreviewAvatar(meuUsuario);
+    atualizarAvataresNaUI();
+  } else {
+    atualizarPreviewBanner(meuUsuario);
+  }
+
+  tocarSom();
+  fecharEditor();
+  document.getElementById('modal-perfil').classList.add('ativo');
+}
+
+function descartarEdicao() {
+  fecharEditor();
+  document.getElementById('modal-perfil').classList.add('ativo');
+}
+
+function fecharEditor() {
+  document.getElementById('modal-editor').classList.remove('ativo');
+  editorEstado.tipo = null;
+  editorEstado.imagem = null;
 }
 
 // ============================================================

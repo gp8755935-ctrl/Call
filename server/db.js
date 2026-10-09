@@ -88,6 +88,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_msg_canal ON mensagens_canal (canal_id, hora);
 `);
 
+// ========== MIGRAÇÕES ==========
+function migrar() {
+  const cols = db.prepare('PRAGMA table_info(usuarios)').all().map(c => c.name);
+  if (!cols.includes('avatar')) db.exec("ALTER TABLE usuarios ADD COLUMN avatar TEXT DEFAULT ''");
+  if (!cols.includes('banner')) db.exec("ALTER TABLE usuarios ADD COLUMN banner TEXT DEFAULT ''");
+  if (!cols.includes('bio'))    db.exec("ALTER TABLE usuarios ADD COLUMN bio TEXT DEFAULT ''");
+}
+migrar();
+
 // ========== USUÁRIOS ==========
 
 function criarUsuario({ nome, email, senhaHash }) {
