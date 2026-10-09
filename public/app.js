@@ -156,6 +156,20 @@ function conectarSocket() {
     }
   });
 
+  // 🆕 Mensagem de DM editada
+  socket.on('dm-editada', ({ conversa_id, mensagem }) => {
+    if (conversaAtual && conversaAtual.conversa_id === conversa_id) {
+      atualizarMsgNaTela('chat-dm', mensagem.id, mensagem.texto, true);
+    }
+  });
+
+  // 🆕 Mensagem de DM deletada
+  socket.on('dm-deletada', ({ conversa_id, mensagem_id }) => {
+    if (conversaAtual && conversaAtual.conversa_id === conversa_id) {
+      removerMsgDaTela('chat-dm', mensagem_id);
+    }
+  });
+
   socket.on('dm-historico-limpo', ({ conversa_id }) => {
     if (conversaAtual && conversaAtual.conversa_id === conversa_id) {
       document.getElementById('chat-dm').innerHTML = '';
@@ -165,6 +179,20 @@ function conectarSocket() {
   socket.on('canal-nova-msg', ({ canal_id, mensagem }) => {
     if (canalAtivo && canalAtivo.id === canal_id) {
       adicionarMsgCanal(mensagem);
+    }
+  });
+
+  // 🆕 Mensagem de canal editada
+  socket.on('canal-msg-editada', ({ canal_id, mensagem }) => {
+    if (canalAtivo && canalAtivo.id === canal_id) {
+      atualizarMsgNaTela('chat-canal', mensagem.id, mensagem.texto, true);
+    }
+  });
+
+  // 🆕 Mensagem de canal deletada
+  socket.on('canal-msg-deletada', ({ canal_id, mensagem_id }) => {
+    if (canalAtivo && canalAtivo.id === canal_id) {
+      removerMsgDaTela('chat-canal', mensagem_id);
     }
   });
 
@@ -184,6 +212,17 @@ function conectarSocket() {
       }
       renderizarCanais();
     }
+  });
+
+  // 🆕 Servidor atualizado
+  socket.on('servidor-atualizado', ({ servidor }) => {
+    if (servidorAtivo && servidorAtivo.servidor.id === servidor.id) {
+      servidorAtivo.servidor = servidor;
+      document.getElementById('nome-servidor').textContent = servidor.nome;
+    }
+    const idx = servidores.findIndex((s) => s.id === servidor.id);
+    if (idx >= 0) servidores[idx] = servidor;
+    renderizarServidores();
   });
 
   socket.on('servidor-deletado', ({ servidor_id }) => {
@@ -336,7 +375,7 @@ async function abrirCanal(canal) {
   telaAtual = 'canal';
   const telaCanal = document.getElementById('tela-canal');
   telaCanal.classList.add('tem-canal');
-  document.getElementById('app').classList.add('canal-ativo');  // 🔥 mostra ☰
+  document.getElementById('app').classList.add('canal-ativo');
   document.getElementById('titulo-main').textContent = '# ' + canal.nome;
   document.getElementById('input-canal').focus();
 
@@ -381,24 +420,168 @@ function enviarMsgCanal() {
   });
 }
 
-function adicionarMsgCanal(m) {
-  const el = document.getElementById('chat-canal');
+// ============================================================
+// RENDER DE MENSAGENS (canal e DM) — com botões editar/deletar
+// ============================================================
+
+function criarElMsg(m, chatId, contexto) {
+  // contexto: 'canal' ou 'dm'
+  const ehMinha = m.de_id === meuUsuario.id;
   const div = document.createElement('div');
-  div.className = 'msg-com-avatar';
+  div.className = 'msg-com-avatar' + (ehMinha ? ' minha' : '');
+  div.dataset.msgId = m.id;
+
+  const editadoTag = m.editado ? '<span class="msg-editada">(editado)</span>' : '';
 
   div.innerHTML = `
     ${avatarHTML({ nome: m.de_nome, avatar: m.de_avatar })}
     <div class="msg-conteudo">
       <div class="msg-linha">
-        <span class="msg-autor">${escapeHtml(m.de_nome)}</span>
+        <span class="msg-autor">${escapeHtml(m.de_nome || (ehMinha ? 'Você' : '?'))}</span>
         <span class="msg-hora">${formatarHora(m.hora)}</span>
+        ${editadoTag}
       </div>
       <div class="msg-texto">${escapeHtml(m.texto)}</div>
     </div>
+    ${ehMinha ? `
+      <div class="msg-acoes">
+        <button onclick="iniciarEdicao('${chatId}', ${m.id}, '${contexto}')" title="Editar">✏️</button>
+        <button class="perigo" onclick="deletarMsg('${chatId}', ${m.id}, '${contexto}')" title="Deletar">🗑️</button>
+      </div>
+    ` : ''}
   `;
 
+  return div;
+}
+
+function adicionarMsgCanal(m) {
+  const el = document.getElementById('chat-canal');
+  const div = criarElMsg(m, 'chat-canal', 'canal');
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
+}
+
+function adicionarMsgDM(m) {
+  const el = document.getElementById('chat-dm');
+  const div = criarElMsg(m, 'chat-dm', 'dm');
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function atualizarMsgNaTela(chatId, msgId, novoTexto, editado) {
+  const el = document.getElementById(chatId);
+  const msgEl = el.querySelector(`[data-msg-id="${msgId}"]`);
+  if (!msgEl) return;
+  const textoEl = msgEl.querySelector('.msg-texto');
+  if (textoEl) textoEl.textContent = novoTexto;
+
+  if (editado) {
+    const linha = msgEl.querySelector('.msg-linha');
+    if (linha && !linha.querySelector('.msg-editada')) {
+      const tag = document.createElement('span');
+      tag.className = 'msg-editada';
+      tag.textContent = '(editado)';
+      linha.appendChild(tag);
+    }
+  }
+}
+
+function removerMsgDaTela(chatId, msgId) {
+  const el = document.getElementById(chatId);
+  const msgEl = el.querySelector(`[data-msg-id="${msgId}"]`);
+  if (msgEl) {
+    msgEl.style.opacity = '0';
+    msgEl.style.transform = 'scale(0.9)';
+    msgEl.style.transition = 'all 0.2s';
+    setTimeout(() => msgEl.remove(), 200);
+  }
+}
+
+// ============================================================
+// EDITAR / DELETAR MENSAGEM
+// ============================================================
+
+function iniciarEdicao(chatId, msgId, contexto) {
+  const el = document.getElementById(chatId);
+  const msgEl = el.querySelector(`[data-msg-id="${msgId}"]`);
+  if (!msgEl) return;
+
+  const textoEl = msgEl.querySelector('.msg-texto');
+  const textoAtual = textoEl.textContent;
+
+  // Substitui o texto por um input
+  textoEl.style.display = 'none';
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-editando';
+  wrap.innerHTML = `
+    <input type="text" value="${escapeHtml(textoAtual)}" maxlength="2000">
+    <button class="mini verde" title="Salvar">✅</button>
+    <button class="secundario mini" title="Cancelar">❌</button>
+  `;
+  textoEl.parentElement.insertBefore(wrap, textoEl);
+
+  const input = wrap.querySelector('input');
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+
+  const salvar = async () => {
+    const novoTexto = input.value.trim();
+    if (!novoTexto || novoTexto === textoAtual) return cancelar();
+
+    let url;
+    if (contexto === 'canal') {
+      url = `/api/canais/${canalAtivo.id}/mensagens/${msgId}`;
+    } else {
+      url = `/api/conversas/${conversaAtual.conversa_id}/mensagens/${msgId}`;
+    }
+
+    const r = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texto: novoTexto }),
+    });
+
+    if (!r.ok) {
+      const data = await r.json();
+      alert(data.erro || 'Erro ao editar');
+      return cancelar();
+    }
+
+    atualizarMsgNaTela(chatId, msgId, novoTexto, true);
+    cancelar();
+  };
+
+  const cancelar = () => {
+    wrap.remove();
+    textoEl.style.display = '';
+  };
+
+  wrap.querySelector('button.verde').onclick = salvar;
+  wrap.querySelector('button.secundario').onclick = cancelar;
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); salvar(); }
+    if (e.key === 'Escape') { e.preventDefault(); cancelar(); }
+  });
+}
+
+async function deletarMsg(chatId, msgId, contexto) {
+  if (!confirm('Deletar esta mensagem?')) return;
+
+  let url;
+  if (contexto === 'canal') {
+    url = `/api/canais/${canalAtivo.id}/mensagens/${msgId}`;
+  } else {
+    url = `/api/conversas/${conversaAtual.conversa_id}/mensagens/${msgId}`;
+  }
+
+  const r = await fetch(url, { method: 'DELETE' });
+  if (!r.ok) {
+    const data = await r.json();
+    alert(data.erro || 'Erro ao deletar');
+    return;
+  }
+
+  removerMsgDaTela(chatId, msgId);
 }
 
 // ============================================================
@@ -459,6 +642,44 @@ async function entrarServidor() {
 }
 
 // ============================================================
+// MODAL EDITAR SERVIDOR
+// ============================================================
+
+function abrirModalEditarServidor() {
+  if (!servidorAtivo || !servidorAtivo.ehDono) {
+    alert('Só o dono pode editar o servidor');
+    return;
+  }
+  document.getElementById('edit-servidor-erro').textContent = '';
+  document.getElementById('edit-servidor-nome').value = servidorAtivo.servidor.nome;
+  document.getElementById('edit-servidor-desc').value = servidorAtivo.servidor.descricao || '';
+  document.getElementById('modal-editar-servidor').classList.add('ativo');
+}
+
+function fecharModalEditarServidor() {
+  document.getElementById('modal-editar-servidor').classList.remove('ativo');
+}
+
+async function salvarServidor() {
+  const nome = document.getElementById('edit-servidor-nome').value.trim();
+  const descricao = document.getElementById('edit-servidor-desc').value.trim();
+  const erroEl = document.getElementById('edit-servidor-erro');
+  erroEl.textContent = '';
+  if (!nome) { erroEl.textContent = 'Informe o nome'; return; }
+
+  const r = await fetch('/api/servidores/' + servidorAtivo.servidor.id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nome, descricao }),
+  });
+  const data = await r.json();
+  if (!r.ok) { erroEl.textContent = data.erro || 'Erro'; return; }
+
+  tocarSom();
+  fecharModalEditarServidor();
+}
+
+// ============================================================
 // TELAS
 // ============================================================
 
@@ -488,7 +709,7 @@ function mostrarTelaHome() {
   const telaCanal = document.getElementById('tela-canal');
   telaCanal.classList.add('ativa');
   telaCanal.classList.remove('tem-canal');
-  document.getElementById('app').classList.remove('canal-ativo');  // 🔥 esconde ☰
+  document.getElementById('app').classList.remove('canal-ativo');
 
   document.getElementById('titulo-main').textContent = 'Selecione um canal';
   document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
@@ -498,7 +719,7 @@ function mostrarTelaHome() {
 
 function abrirDM() {
   telaAtual = 'dm';
-  document.getElementById('app').classList.remove('canal-ativo');  // 🔥
+  document.getElementById('app').classList.remove('canal-ativo');
   esconderTelasMain();
   document.getElementById('tela-dm').classList.add('ativa');
   document.getElementById('titulo-main').textContent = '💬 Mensagens diretas';
@@ -507,7 +728,7 @@ function abrirDM() {
 
 function abrirAmigos() {
   telaAtual = 'amigos';
-  document.getElementById('app').classList.remove('canal-ativo');  // 🔥
+  document.getElementById('app').classList.remove('canal-ativo');
   esconderTelasMain();
   document.getElementById('tela-amigos').classList.add('ativa');
   document.getElementById('titulo-main').textContent = '👥 Amigos';
@@ -516,7 +737,7 @@ function abrirAmigos() {
 
 function abrirBuscar() {
   telaAtual = 'buscar';
-  document.getElementById('app').classList.remove('canal-ativo');  // 🔥
+  document.getElementById('app').classList.remove('canal-ativo');
   esconderTelasMain();
   document.getElementById('tela-buscar').classList.add('ativa');
   document.getElementById('titulo-main').textContent = '🔍 Buscar usuários';
@@ -783,7 +1004,7 @@ async function abrirConversa(amigo) {
   conversaAtual = { conversa_id: data.conversa_id, amigo: data.amigo };
 
   telaAtual = 'conversa';
-  document.getElementById('app').classList.remove('canal-ativo');  // 🔥
+  document.getElementById('app').classList.remove('canal-ativo');
   esconderTelasMain();
   document.getElementById('tela-conversa').classList.add('ativa');
   document.getElementById('titulo-main').textContent = '💬 Conversa';
@@ -796,26 +1017,6 @@ async function abrirConversa(amigo) {
   (d2.mensagens || []).forEach(adicionarMsgDM);
 
   document.getElementById('input-dm').focus();
-}
-
-function adicionarMsgDM(m) {
-  const el = document.getElementById('chat-dm');
-  const div = document.createElement('div');
-  div.className = 'msg-com-avatar';
-
-  div.innerHTML = `
-    ${avatarHTML({ nome: m.de_nome, avatar: m.de_avatar })}
-    <div class="msg-conteudo">
-      <div class="msg-linha">
-        <span class="msg-autor">${escapeHtml(m.de_nome || (m.de_id === meuUsuario.id ? 'Você' : '?'))}</span>
-        <span class="msg-hora">${formatarHora(m.hora)}</span>
-      </div>
-      <div class="msg-texto">${escapeHtml(m.texto)}</div>
-    </div>
-  `;
-
-  el.appendChild(div);
-  el.scrollTop = el.scrollHeight;
 }
 
 async function enviarMsgDM() {
@@ -1204,4 +1405,10 @@ window.addEventListener('load', async () => {
   document.getElementById('cad-senha').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') fazerCadastro();
   });
+
+  // 🆕 Nome do servidor clicável (abre edição)
+  const nomeServidorEl = document.getElementById('nome-servidor');
+  if (nomeServidorEl) {
+    nomeServidorEl.onclick = abrirModalEditarServidor;
+  }
 });

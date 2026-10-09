@@ -87,7 +87,6 @@ app.get('/api/eu', (req, res) => {
   res.json({ usuario });
 });
 
-// Atualizar avatar
 app.post('/api/avatar', exigirAuth, (req, res) => {
   const { avatar } = req.body;
   if (!avatar) return res.status(400).json({ erro: 'Avatar vazio' });
@@ -97,7 +96,6 @@ app.post('/api/avatar', exigirAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// Atualizar banner
 app.post('/api/banner', exigirAuth, (req, res) => {
   const { banner } = req.body;
   if (!banner) return res.status(400).json({ erro: 'Banner vazio' });
@@ -107,7 +105,6 @@ app.post('/api/banner', exigirAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// Atualizar bio
 app.post('/api/bio', exigirAuth, (req, res) => {
   const { bio } = req.body;
   if (typeof bio !== 'string') return res.status(400).json({ erro: 'Bio inválida' });
@@ -240,6 +237,56 @@ app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   res.json({ ok: true, mensagem: payload });
 });
 
+// 🆕 Editar mensagem de DM
+app.patch('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req, res) => {
+  const idConversa = Number(req.params.idConversa);
+  const idMensagem = Number(req.params.idMensagem);
+  const { texto } = req.body;
+  if (!texto || !texto.trim()) return res.status(400).json({ erro: 'Texto vazio' });
+
+  const conv = db.buscarConversaPorId(idConversa);
+  if (!conv) return res.status(404).json({ erro: 'Conversa não existe' });
+  const ehParticipante = conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id;
+  if (!ehParticipante) return res.status(403).json({ erro: 'Sem permissão' });
+
+  const msg = db.buscarMensagemPorId(idMensagem);
+  if (!msg || msg.conversa_id !== idConversa) return res.status(404).json({ erro: 'Mensagem não existe' });
+  if (msg.de_id !== req.usuario.id) return res.status(403).json({ erro: 'Só pode editar suas mensagens' });
+
+  db.editarMensagem(idMensagem, texto.trim());
+
+  const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
+  const socketOutro = [...online.values()].find((u) => u.id === outroId);
+
+  const payload = { id: idMensagem, conversa_id: idConversa, de_id: req.usuario.id, texto: texto.trim(), hora: msg.hora, editado: 1 };
+  if (socketOutro) io.to(socketOutro.socketId).emit('dm-editada', { conversa_id: idConversa, mensagem: payload });
+
+  res.json({ ok: true, mensagem: payload });
+});
+
+// 🆕 Deletar mensagem de DM
+app.delete('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req, res) => {
+  const idConversa = Number(req.params.idConversa);
+  const idMensagem = Number(req.params.idMensagem);
+
+  const conv = db.buscarConversaPorId(idConversa);
+  if (!conv) return res.status(404).json({ erro: 'Conversa não existe' });
+  const ehParticipante = conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id;
+  if (!ehParticipante) return res.status(403).json({ erro: 'Sem permissão' });
+
+  const msg = db.buscarMensagemPorId(idMensagem);
+  if (!msg || msg.conversa_id !== idConversa) return res.status(404).json({ erro: 'Mensagem não existe' });
+  if (msg.de_id !== req.usuario.id) return res.status(403).json({ erro: 'Só pode deletar suas mensagens' });
+
+  db.deletarMensagem(idMensagem);
+
+  const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
+  const socketOutro = [...online.values()].find((u) => u.id === outroId);
+
+  if (socketOutro) io.to(socketOutro.socketId).emit('dm-deletada', { conversa_id: idConversa, mensagem_id: idMensagem });
+  res.json({ ok: true });
+});
+
 app.delete('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const conv = db.buscarConversaPorId(id);
@@ -275,6 +322,23 @@ app.get('/api/servidores/:id', exigirAuth, (req, res) => {
     membros: db.listarMembros(id),
     ehDono: s.dono_id === req.usuario.id,
   });
+});
+
+// 🆕 Editar servidor (só dono)
+app.patch('/api/servidores/:id', exigirAuth, (req, res) => {
+  const id = Number(req.params.id);
+  const s = db.buscarServidorPorId(id);
+  if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
+  if (s.dono_id !== req.usuario.id) return res.status(403).json({ erro: 'Só o dono pode editar' });
+
+  const { nome, descricao } = req.body;
+  if (!nome || !nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
+
+  db.atualizarServidor(id, { nome: nome.trim(), descricao: (descricao || '').trim() });
+  const atualizado = db.buscarServidorPorId(id);
+
+  io.emit('servidor-atualizado', { servidor: atualizado });
+  res.json({ ok: true, servidor: atualizado });
 });
 
 app.post('/api/servidores/entrar', exigirAuth, (req, res) => {
@@ -355,6 +419,57 @@ app.post('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   });
 
   res.json({ ok: true, mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '' } });
+});
+
+// 🆕 Editar mensagem de canal
+app.patch('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) => {
+  const idCanal = Number(req.params.idCanal);
+  const idMensagem = Number(req.params.idMensagem);
+  const { texto } = req.body;
+  if (!texto || !texto.trim()) return res.status(400).json({ erro: 'Texto vazio' });
+
+  const c = db.buscarCanalPorId(idCanal);
+  if (!c) return res.status(404).json({ erro: 'Canal não existe' });
+  if (!db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
+
+  const msg = db.buscarMensagemCanalPorId(idMensagem);
+  if (!msg || msg.canal_id !== idCanal) return res.status(404).json({ erro: 'Mensagem não existe' });
+  if (msg.de_id !== req.usuario.id) return res.status(403).json({ erro: 'Só pode editar suas mensagens' });
+
+  db.editarMensagemCanal(idMensagem, texto.trim());
+
+  io.to('canal-' + idCanal).emit('canal-msg-editada', {
+    canal_id: idCanal,
+    mensagem: { id: idMensagem, canal_id: idCanal, de_id: req.usuario.id, texto: texto.trim(), hora: msg.hora, editado: 1 },
+  });
+  res.json({ ok: true });
+});
+
+// 🆕 Deletar mensagem de canal
+app.delete('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) => {
+  const idCanal = Number(req.params.idCanal);
+  const idMensagem = Number(req.params.idMensagem);
+
+  const c = db.buscarCanalPorId(idCanal);
+  if (!c) return res.status(404).json({ erro: 'Canal não existe' });
+  if (!db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
+
+  const msg = db.buscarMensagemCanalPorId(idMensagem);
+  if (!msg || msg.canal_id !== idCanal) return res.status(404).json({ erro: 'Mensagem não existe' });
+
+  const s = db.buscarServidorPorId(c.servidor_id);
+  const ehDono = s && s.dono_id === req.usuario.id;
+  if (msg.de_id !== req.usuario.id && !ehDono) {
+    return res.status(403).json({ erro: 'Sem permissão' });
+  }
+
+  db.deletarMensagemCanal(idMensagem);
+
+  io.to('canal-' + idCanal).emit('canal-msg-deletada', {
+    canal_id: idCanal,
+    mensagem_id: idMensagem,
+  });
+  res.json({ ok: true });
 });
 
 // ========== SOCKET.IO ==========

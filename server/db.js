@@ -41,7 +41,8 @@ db.exec(`
     de_id INTEGER NOT NULL,
     texto TEXT NOT NULL,
     hora INTEGER NOT NULL,
-    lida INTEGER NOT NULL DEFAULT 0
+    lida INTEGER NOT NULL DEFAULT 0,
+    editado INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS servidores (
@@ -73,7 +74,8 @@ db.exec(`
     canal_id INTEGER NOT NULL,
     de_id INTEGER NOT NULL,
     texto TEXT NOT NULL,
-    hora INTEGER NOT NULL
+    hora INTEGER NOT NULL,
+    editado INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios (email);
@@ -90,10 +92,16 @@ db.exec(`
 
 // ========== MIGRAÇÕES ==========
 function migrar() {
-  const cols = db.prepare('PRAGMA table_info(usuarios)').all().map(c => c.name);
-  if (!cols.includes('avatar')) db.exec("ALTER TABLE usuarios ADD COLUMN avatar TEXT DEFAULT ''");
-  if (!cols.includes('banner')) db.exec("ALTER TABLE usuarios ADD COLUMN banner TEXT DEFAULT ''");
-  if (!cols.includes('bio'))    db.exec("ALTER TABLE usuarios ADD COLUMN bio TEXT DEFAULT ''");
+  const colsU = db.prepare('PRAGMA table_info(usuarios)').all().map(c => c.name);
+  if (!colsU.includes('avatar')) db.exec("ALTER TABLE usuarios ADD COLUMN avatar TEXT DEFAULT ''");
+  if (!colsU.includes('banner')) db.exec("ALTER TABLE usuarios ADD COLUMN banner TEXT DEFAULT ''");
+  if (!colsU.includes('bio'))    db.exec("ALTER TABLE usuarios ADD COLUMN bio TEXT DEFAULT ''");
+
+  const colsM = db.prepare('PRAGMA table_info(mensagens)').all().map(c => c.name);
+  if (!colsM.includes('editado')) db.exec("ALTER TABLE mensagens ADD COLUMN editado INTEGER NOT NULL DEFAULT 0");
+
+  const colsMC = db.prepare('PRAGMA table_info(mensagens_canal)').all().map(c => c.name);
+  if (!colsMC.includes('editado')) db.exec("ALTER TABLE mensagens_canal ADD COLUMN editado INTEGER NOT NULL DEFAULT 0");
 }
 migrar();
 
@@ -254,19 +262,31 @@ function listarConversas(usuarioId) {
 
 function salvarMensagem({ conversaId, deId, texto }) {
   const stmt = db.prepare(
-    'INSERT INTO mensagens (conversa_id, de_id, texto, hora, lida) VALUES (?, ?, ?, ?, 0)'
+    'INSERT INTO mensagens (conversa_id, de_id, texto, hora, lida, editado) VALUES (?, ?, ?, ?, 0, 0)'
   );
   const hora = Date.now();
   const info = stmt.run(conversaId, deId, texto, hora);
-  return { id: info.lastInsertRowid, conversa_id: conversaId, de_id: deId, texto, hora, lida: 0 };
+  return { id: info.lastInsertRowid, conversa_id: conversaId, de_id: deId, texto, hora, lida: 0, editado: 0 };
 }
 
 function listarMensagens(conversaId, limite = 100) {
   return db.prepare(
-    `SELECT m.id, m.de_id, u.nome AS de_nome, u.avatar AS de_avatar, m.texto, m.hora, m.lida
+    `SELECT m.id, m.de_id, u.nome AS de_nome, u.avatar AS de_avatar, m.texto, m.hora, m.lida, m.editado
      FROM mensagens m JOIN usuarios u ON u.id = m.de_id
      WHERE m.conversa_id = ? ORDER BY m.hora DESC LIMIT ?`
   ).all(conversaId, limite).reverse();
+}
+
+function buscarMensagemPorId(id) {
+  return db.prepare('SELECT * FROM mensagens WHERE id = ?').get(id);
+}
+
+function editarMensagem(id, novoTexto) {
+  return db.prepare('UPDATE mensagens SET texto = ?, editado = 1 WHERE id = ?').run(novoTexto, id);
+}
+
+function deletarMensagem(id) {
+  return db.prepare('DELETE FROM mensagens WHERE id = ?').run(id);
 }
 
 function marcarComoLidas(conversaId, usuarioId) {
@@ -332,6 +352,12 @@ function listarServidoresDoUsuario(usuarioId) {
      WHERE m.usuario_id = ?
      ORDER BY s.criado_em`
   ).all(usuarioId);
+}
+
+function atualizarServidor(id, { nome, descricao }) {
+  return db.prepare(
+    'UPDATE servidores SET nome = ?, descricao = ? WHERE id = ?'
+  ).run(nome, descricao || '', id);
 }
 
 function ehMembro(servidorId, usuarioId) {
@@ -415,19 +441,31 @@ function deletarCanal(id, usuarioId) {
 
 function salvarMensagemCanal({ canalId, deId, texto }) {
   const stmt = db.prepare(
-    'INSERT INTO mensagens_canal (canal_id, de_id, texto, hora) VALUES (?, ?, ?, ?)'
+    'INSERT INTO mensagens_canal (canal_id, de_id, texto, hora, editado) VALUES (?, ?, ?, ?, 0)'
   );
   const hora = Date.now();
   const info = stmt.run(canalId, deId, texto, hora);
-  return { id: info.lastInsertRowid, canal_id: canalId, de_id: deId, texto, hora };
+  return { id: info.lastInsertRowid, canal_id: canalId, de_id: deId, texto, hora, editado: 0 };
 }
 
 function listarMensagensCanal(canalId, limite = 100) {
   return db.prepare(
-    `SELECT m.id, m.de_id, u.nome AS de_nome, u.avatar AS de_avatar, m.texto, m.hora
+    `SELECT m.id, m.de_id, u.nome AS de_nome, u.avatar AS de_avatar, m.texto, m.hora, m.editado
      FROM mensagens_canal m JOIN usuarios u ON u.id = m.de_id
      WHERE m.canal_id = ? ORDER BY m.hora DESC LIMIT ?`
   ).all(canalId, limite).reverse();
+}
+
+function buscarMensagemCanalPorId(id) {
+  return db.prepare('SELECT * FROM mensagens_canal WHERE id = ?').get(id);
+}
+
+function editarMensagemCanal(id, novoTexto) {
+  return db.prepare('UPDATE mensagens_canal SET texto = ?, editado = 1 WHERE id = ?').run(novoTexto, id);
+}
+
+function deletarMensagemCanal(id) {
+  return db.prepare('DELETE FROM mensagens_canal WHERE id = ?').run(id);
 }
 
 function limparMensagensCanal(canalId) {
@@ -441,9 +479,12 @@ module.exports = {
   listarAmigos, saoAmigos, listarPedidosRecebidos, listarPedidosEnviados,
   abrirConversa, buscarConversaPorId, listarConversas, salvarMensagem,
   listarMensagens, marcarComoLidas, limparHistoricoConversa,
+  buscarMensagemPorId, editarMensagem, deletarMensagem,
   criarServidor, buscarServidorPorId, buscarServidorPorCodigo,
-  listarServidoresDoUsuario, ehMembro, adicionarMembro, removerMembro,
-  listarMembros, deletarServidor,
+  listarServidoresDoUsuario, atualizarServidor,
+  ehMembro, adicionarMembro, removerMembro, listarMembros, deletarServidor,
   criarCanal, listarCanais, buscarCanalPorId, deletarCanal,
-  salvarMensagemCanal, listarMensagensCanal, limparMensagensCanal,
+  salvarMensagemCanal, listarMensagensCanal,
+  buscarMensagemCanalPorId, editarMensagemCanal, deletarMensagemCanal,
+  limparMensagensCanal,
 };
