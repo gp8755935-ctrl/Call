@@ -4,10 +4,11 @@
   <meta charset="UTF-8">
   <title>Meu Chat</title>
   <style>
-    body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 0 10px; }
-    input, button { padding: 8px 12px; font-size: 14px; margin: 4px 0; }
-    input { width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-    button { cursor: pointer; border: none; border-radius: 4px; background: #1976d2; color: white; }
+    * { box-sizing: border-box; }
+    body { font-family: sans-serif; margin: 0; padding: 0; background: #f0f0f0; }
+    input, button { padding: 8px 12px; font-size: 14px; border-radius: 4px; }
+    input { border: 1px solid #ccc; width: 100%; }
+    button { cursor: pointer; border: none; background: #1976d2; color: white; }
     button:hover { background: #1565c0; }
     button.secundario { background: #eee; color: #333; }
     button.secundario:hover { background: #ddd; }
@@ -15,81 +16,157 @@
     button.perigo:hover { background: #b71c1c; }
     button.mini { padding: 4px 10px; font-size: 12px; }
 
-    .tela { display: none; }
-    .tela.ativa { display: block; }
-
+    /* ===== AUTH ===== */
+    .tela-auth { max-width: 400px; margin: 80px auto; background: white;
+                 padding: 24px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,.1); }
     .abas-auth { display: flex; gap: 4px; margin-bottom: 12px; }
     .aba-auth { flex: 1; padding: 10px; text-align: center; cursor: pointer;
                 border-radius: 4px 4px 0 0; background: #eee; }
     .aba-auth.ativa { background: #1976d2; color: white; }
+    .erro { color: #c00; font-size: 13px; min-height: 18px; margin: 6px 0; }
 
-    .topo { display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #ddd; }
+    /* ===== APP ===== */
+    #app { display: none; height: 100vh; overflow: hidden; }
+    #app.ativo { display: flex; }
 
-    .abas { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 2px solid #ddd; }
-    .aba { padding: 10px 16px; cursor: pointer; border-radius: 4px 4px 0 0;
-           background: #f0f0f0; border-bottom: 3px solid transparent; }
-    .aba.ativa { background: white; border-bottom: 3px solid #1976d2; font-weight: bold; }
-    .aba .badge { background: #c62828; color: white; border-radius: 10px; padding: 2px 6px;
-                  font-size: 11px; margin-left: 4px; }
+    /* Sidebar de servidores (esquerda) */
+    .sidebar-servidores {
+      width: 72px; background: #1e1f22; padding: 12px 0;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 8px; overflow-y: auto;
+    }
+    .servidor-icon {
+      width: 48px; height: 48px; border-radius: 16px;
+      background: #36373d; color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold; font-size: 18px; cursor: pointer;
+      transition: all .15s; flex-shrink: 0;
+    }
+    .servidor-icon:hover { border-radius: 12px; background: #5865f2; }
+    .servidor-icon.ativo { border-radius: 12px; background: #5865f2; }
+    .servidor-icon.dm { background: #2b2d31; font-size: 22px; }
+    .servidor-icon.dm.ativo { background: #5865f2; }
+    .servidor-icon.add { background: #2b2d31; color: #43b581; font-size: 24px; }
 
-    .painel { display: none; }
-    .painel.ativo { display: block; }
+    /* Meio: canais + membros */
+    .sidebar-canais {
+      width: 240px; background: #2b2d31; color: #ccc;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .topo-servidor {
+      padding: 14px 16px; background: #1e1f22; color: white;
+      font-weight: bold; font-size: 15px;
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid #111;
+    }
+    .topo-servidor .codigo { font-size: 11px; color: #888; font-weight: normal; }
 
+    .secao {
+      padding: 12px 8px 4px 16px;
+      font-size: 11px; text-transform: uppercase; color: #888;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .secao button {
+      background: transparent; color: #888; font-size: 16px; padding: 0 6px;
+    }
+    .secao button:hover { color: white; background: transparent; }
+
+    .lista-canais, .lista-membros { flex: 1; overflow-y: auto; padding: 0 8px; }
+    .lista-membros { flex: 0 0 auto; max-height: 40%; }
+
+    .canal-item {
+      padding: 8px 10px; border-radius: 4px; cursor: pointer;
+      color: #b5bac1; font-size: 14px; margin: 2px 0;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .canal-item:hover { background: #35373c; color: white; }
+    .canal-item.ativo { background: #404249; color: white; }
+    .canal-item .del { opacity: 0; font-size: 12px; }
+    .canal-item:hover .del { opacity: .7; }
+    .canal-item .del:hover { opacity: 1; color: #f87171; }
+
+    .membro-item {
+      padding: 6px 10px; font-size: 14px; color: #b5bac1;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .membro-item .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .membro-item .dot.online { background: #2e7d32; }
+    .membro-item .dot.offline { background: #666; }
+    .membro-item .dono { font-size: 10px; background: #5865f2; color: white;
+                         padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
+
+    /* Área principal */
+    .main {
+      flex: 1; display: flex; flex-direction: column;
+      background: #313338; color: #eee; overflow: hidden;
+    }
+    .topo-main {
+      padding: 12px 16px; background: #313338; border-bottom: 1px solid #1e1f22;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .topo-main h3 { margin: 0; }
+    .topo-main .acoes { display: flex; gap: 6px; }
+
+    .chat-area {
+      flex: 1; overflow-y: auto; padding: 16px;
+      display: flex; flex-direction: column;
+    }
+    .msg { margin: 6px 0; font-size: 14px; }
+    .msg .autor { font-weight: bold; color: #5865f2; margin-right: 6px; }
+    .msg .hora { color: #888; font-size: 11px; margin-left: 6px; }
+    .sistema { color: #888; font-style: italic; text-align: center; margin: 10px 0; }
+    .vazio { text-align: center; color: #888; font-style: italic; padding: 30px; }
+
+    .barra-msg {
+      padding: 12px 16px; background: #313338;
+      display: flex; gap: 8px;
+    }
+    .barra-msg input { background: #383a40; border: none; color: white; }
+
+    /* Modal */
+    .modal-bg {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+      z-index: 1000; align-items: center; justify-content: center;
+    }
+    .modal-bg.ativo { display: flex; }
+    .modal {
+      background: white; padding: 24px; border-radius: 8px;
+      max-width: 400px; width: 90%;
+    }
+    .modal h3 { margin-top: 0; }
+    .modal input { margin: 6px 0; }
+    .modal .acoes { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+
+    /* Lista genérica (DMs/Amigos/Buscar dentro do app) */
     .lista { padding: 0; margin: 8px 0; }
     .lista li { list-style: none; padding: 10px; border: 1px solid #e0e0e0;
-                margin: 6px 0; border-radius: 6px;
+                background: white; margin: 4px 0; border-radius: 6px;
                 display: flex; justify-content: space-between; align-items: center; }
     .lista li:hover { background: #f9f9f9; }
     .lista li.clicavel { cursor: pointer; }
-
     .info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
     .nome { font-weight: bold; }
     .email { font-size: 12px; color: #888; }
-
-    .status { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-              margin-right: 6px; }
-    .online { background: #2e7d32; }
-    .offline { background: #aaa; }
-
-    .acoes { display: flex; gap: 4px; flex-shrink: 0; }
-
     .preview { color: #666; font-size: 13px; white-space: nowrap;
-               overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+               overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
     .nao-lidas { background: #c62828; color: white; border-radius: 10px;
                  padding: 2px 8px; font-size: 12px; font-weight: bold; }
-    .hora-lista { color: #aaa; font-size: 11px; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                  margin-right: 6px; }
+    .status-dot.online { background: #2e7d32; }
+    .status-dot.offline { background: #aaa; }
 
-    /* Chat / conversa */
-    #tela-conversa { display: none; }
-    #tela-conversa.ativa { display: block; }
-
-    .topo-conversa { display: flex; align-items: center; gap: 12px;
-                     padding-bottom: 8px; border-bottom: 1px solid #ddd; margin-bottom: 10px; }
-    .topo-conversa h3 { margin: 0; flex: 1; }
-
-    #chat {
-      border: 1px solid #333; height: 400px;
-      overflow-y: auto; padding: 10px; background: #fafafa; border-radius: 4px;
-    }
-    .msg { margin: 6px 0; font-size: 14px; }
-    .msg .hora { color: #999; font-size: 11px; margin-left: 6px; }
-    .eu { color: #1976d2; text-align: right; }
-    .ele { color: #2e7d32; }
-    .sistema { color: #888; font-style: italic; text-align: center; }
-
-    #barra { display: flex; gap: 6px; margin-top: 8px; }
-    #barra input { flex: 1; }
-
-    .erro { color: #c00; font-size: 13px; min-height: 18px; margin: 6px 0; }
-    .vazio { text-align: center; color: #888; font-style: italic; padding: 20px; }
+    /* Tela dentro do main (DM / Amigos / Buscar) */
+    .tela-main { display: none; flex: 1; overflow-y: auto; padding: 20px;
+                 background: #fafafa; color: #222; }
+    .tela-main.ativa { display: block; }
   </style>
 </head>
 <body>
 
-  <!-- ============ TELA DE LOGIN / CADASTRO ============ -->
-  <div id="tela-auth" class="tela ativa">
-    <h2>Meu Chat</h2>
+  <!-- ============ TELA DE LOGIN ============ -->
+  <div id="tela-auth" class="tela-auth">
+    <h2 style="margin-top:0">Meu Chat</h2>
 
     <div class="abas-auth">
       <div id="aba-login" class="aba-auth ativa" onclick="mudarAbaAuth('login')">Entrar</div>
@@ -112,63 +189,129 @@
     </div>
   </div>
 
-  <!-- ============ TELA PRINCIPAL ============ -->
-  <div id="tela-app" class="tela">
-    <div class="topo">
-      <strong id="nome-usuario">...</strong>
-      <button class="secundario" onclick="fazerLogout()">Sair</button>
+  <!-- ============ APP PRINCIPAL ============ -->
+  <div id="app">
+
+    <!-- Coluna 1: Servidores -->
+    <div class="sidebar-servidores" id="lista-servidores">
+      <!-- Preenchido via JS -->
+      <div class="servidor-icon add" onclick="abrirModalServidor()" title="Criar ou entrar em servidor">+</div>
     </div>
 
-    <div class="abas">
-      <div id="tab-conversas" class="aba ativa" onclick="mudarAba('conversas')">
-        💬 Conversas <span id="badge-dm" class="badge" style="display:none">0</span>
+    <!-- Coluna 2: Canais + Membros -->
+    <div class="sidebar-canais" id="sidebar-canais" style="display:none">
+      <div class="topo-servidor">
+        <span id="nome-servidor">Servidor</span>
+        <span class="codigo" id="codigo-servidor"></span>
       </div>
-      <div id="tab-amigos" class="aba" onclick="mudarAba('amigos')">
-        👥 Amigos <span id="badge-pedidos" class="badge" style="display:none">0</span>
+
+      <div class="secao">
+        Canais de texto
+        <button onclick="criarCanalPrompt()" title="Novo canal">+</button>
       </div>
-      <div id="tab-buscar" class="aba" onclick="mudarAba('buscar')">🔍 Buscar</div>
+      <div class="lista-canais" id="lista-canais"></div>
+
+      <div class="secao">Membros (<span id="num-membros">0</span>)</div>
+      <div class="lista-membros" id="lista-membros"></div>
     </div>
 
-    <!-- PAINEL: CONVERSAS -->
-    <div id="painel-conversas" class="painel ativo">
-      <h3>Minhas conversas</h3>
-      <ul id="lista-conversas" class="lista"></ul>
-    </div>
+    <!-- Coluna 3: Main -->
+    <div class="main">
+      <!-- Topo -->
+      <div class="topo-main">
+        <h3 id="titulo-main">Selecione um servidor</h3>
+        <div class="acoes">
+          <button class="secundario mini" onclick="abrirDM()">💬 Mensagens diretas</button>
+          <button class="secundario mini" onclick="abrirAmigos()">👥 Amigos</button>
+          <button class="secundario mini" onclick="abrirBuscar()">🔍 Buscar</button>
+          <button class="secundario mini" onclick="fazerLogout()">Sair</button>
+        </div>
+      </div>
 
-    <!-- PAINEL: AMIGOS -->
-    <div id="painel-amigos" class="painel">
-      <h3>Pedidos recebidos</h3>
-      <ul id="lista-pedidos" class="lista"></ul>
+      <!-- Tela de chat de canal -->
+      <div id="tela-canal" class="tela-main ativa" style="padding:0; background:#313338;">
+        <div class="chat-area" id="chat-canal"></div>
+        <div class="barra-msg">
+          <input id="input-canal" placeholder="Digite...">
+          <button onclick="enviarMsgCanal()">Enviar</button>
+        </div>
+      </div>
 
-      <h3>Meus amigos</h3>
-      <ul id="lista-amigos" class="lista"></ul>
+      <!-- Tela de DMs -->
+      <div id="tela-dm" class="tela-main">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+          <h3 style="margin:0">💬 Conversas</h3>
+          <button class="secundario" onclick="voltarParaServidor()">← Voltar</button>
+        </div>
+        <ul id="lista-conversas" class="lista"></ul>
+      </div>
 
-      <h3>Pedidos enviados</h3>
-      <ul id="lista-enviados" class="lista"></ul>
-    </div>
+      <!-- Tela de conversa aberta -->
+      <div id="tela-conversa" class="tela-main" style="padding:0; background:#313338;">
+        <div style="padding:12px 16px; border-bottom:1px solid #1e1f22; display:flex;
+                    justify-content:space-between; align-items:center">
+          <div>
+            <button class="secundario mini" onclick="voltarDMs()">← Voltar</button>
+            <strong id="nome-conversa" style="margin-left:12px">...</strong>
+            <span id="status-conversa"></span>
+          </div>
+        </div>
+        <div class="chat-area" id="chat-dm"></div>
+        <div class="barra-msg">
+          <input id="input-dm" placeholder="Digite...">
+          <button onclick="enviarMsgDM()">Enviar</button>
+        </div>
+      </div>
 
-    <!-- PAINEL: BUSCAR -->
-    <div id="painel-buscar" class="painel">
-      <h3>Buscar usuários</h3>
-      <input id="busca-input" placeholder="Digite nome ou email..."
-             oninput="buscarUsuarios()">
-      <ul id="lista-busca" class="lista"></ul>
+      <!-- Tela de Amigos -->
+      <div id="tela-amigos" class="tela-main">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+          <h3 style="margin:0">👥 Amigos</h3>
+          <button class="secundario" onclick="voltarParaServidor()">← Voltar</button>
+        </div>
+
+        <h4>Pedidos recebidos</h4>
+        <ul id="lista-pedidos" class="lista"></ul>
+
+        <h4>Meus amigos</h4>
+        <ul id="lista-amigos" class="lista"></ul>
+
+        <h4>Pedidos enviados</h4>
+        <ul id="lista-enviados" class="lista"></ul>
+      </div>
+
+      <!-- Tela de Buscar -->
+      <div id="tela-buscar" class="tela-main">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+          <h3 style="margin:0">🔍 Buscar usuários</h3>
+          <button class="secundario" onclick="voltarParaServidor()">← Voltar</button>
+        </div>
+        <input id="busca-input" placeholder="Digite nome ou email..." oninput="buscarUsuarios()">
+        <ul id="lista-busca" class="lista"></ul>
+      </div>
     </div>
   </div>
 
-  <!-- ============ TELA DE CONVERSA ============ -->
-  <div id="tela-conversa">
-    <div class="topo-conversa">
-      <button class="secundario mini" onclick="voltarConversas()">← Voltar</button>
-      <h3 id="nome-conversa">...</h3>
-      <span id="status-conversa"></span>
-    </div>
+  <!-- ============ MODAIS ============ -->
+  <div id="modal-servidor" class="modal-bg">
+    <div class="modal">
+      <h3>Criar ou entrar em servidor</h3>
 
-    <div id="chat"></div>
+      <label><strong>Criar novo</strong></label>
+      <input id="modal-nome-servidor" placeholder="Nome do servidor">
+      <input id="modal-desc-servidor" placeholder="Descrição (opcional)">
+      <button onclick="criarServidor()" style="width:100%">Criar servidor</button>
 
-    <div id="barra">
-      <input id="msg" placeholder="Digite...">
-      <button id="enviar" onclick="enviarMensagem()">Enviar</button>
+      <hr style="margin: 16px 0;">
+
+      <label><strong>Entrar com código</strong></label>
+      <input id="modal-codigo-servidor" placeholder="Ex: STZVZ5WR" style="text-transform:uppercase">
+      <button class="secundario" onclick="entrarServidor()" style="width:100%">Entrar</button>
+
+      <div class="erro" id="modal-servidor-erro"></div>
+      <div class="acoes">
+        <button class="secundario" onclick="fecharModalServidor()">Fechar</button>
+      </div>
     </div>
   </div>
 
