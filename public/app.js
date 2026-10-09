@@ -268,6 +268,16 @@ const rtcConfig = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    {
+      urls: 'turn:SEU-URL-AQUI.metered.live:443',
+      username: 'SEU-USERNAME',
+      credential: 'SUA-CREDENTIAL',
+    },
+    {
+      urls: 'turn:SEU-URL-AQUI.metered.live:80',
+      username: 'SEU-USERNAME',
+      credential: 'SUA-CREDENTIAL',
+    },
   ],
 };
 
@@ -371,10 +381,15 @@ function criarPeerConnection() {
   };
 
   peerConnection.ontrack = (event) => {
-    const audioRemoto = document.getElementById('audio-remoto');
-    audioRemoto.srcObject = event.streams[0];
-    audioRemoto.play().catch((e) => console.warn('Autoplay bloqueado:', e));
-  };
+  const audioRemoto = document.getElementById('audio-remoto');
+  audioRemoto.srcObject = event.streams[0];
+  audioRemoto.muted = false;         // 👈 garante que não tá mudo
+  audioRemoto.volume = 1.0;          // 👈 volume máximo
+  audioRemoto.play().catch((e) => {
+    console.warn('Autoplay bloqueado:', e);
+    alert('Clique em qualquer lugar da página para liberar o áudio');
+  });
+};
 
   peerConnection.onconnectionstatechange = () => {
     if (
