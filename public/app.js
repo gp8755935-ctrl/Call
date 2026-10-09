@@ -1,72 +1,184 @@
-const socket = io();
-
-let meuNome = '';
+let socket = null;
+let meuUsuario = null;
 let salaAtual = null;
 let pedidoPendente = null;
 let meuSocketId = null;
+let timeoutDigitando = null;
 let naoLidas = 0;
 let tituloOriginal = document.title;
-let timeoutDigitando = null;
 
-// ========== CONEXÃO ==========
+// ========== TROCA DE ABAS ==========
 
-socket.on('connect', () => {
-  meuSocketId = socket.id;
-  console.log('Meu socket id:', meuSocketId);
-});
+function mudarAba(qual) {
+  document.getElementById('aba-login').classList.toggle('ativa', qual === 'login');
+  document.getElementById('aba-cadastro').classList.toggle('ativa', qual === 'cadastro');
+  document.getElementById('form-login').style.display = qual === 'login' ? 'block' : 'none';
+  document.getElementById('form-cadastro').style.display = qual === 'cadastro' ? 'block' : 'none';
+  document.getElementById('login-erro').textContent = '';
+  document.getElementById('cad-erro').textContent = '';
+}
 
-window.addEventListener('load', () => {
-  const salvo = localStorage.getItem('meuNome');
-  if (salvo) {
-    document.getElementById('nome').value = salvo;
-    entrar();
-  }
-});
+// ========== LOGIN / CADASTRO ==========
 
-// ========== LOGIN ==========
+async function fazerLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const senha = document.getElementById('login-senha').value;
+  const erroEl = document.getElementById('login-erro');
+  erroEl.textContent = '';
 
-function entrar() {
-  meuNome = document.getElementById('nome').value.trim();
-  if (!meuNome) {
-    alert('Digite um nome');
+  if (!email || !senha) {
+    erroEl.textContent = 'Preencha email e senha';
     return;
   }
 
-  localStorage.setItem('meuNome', meuNome);
-  socket.emit('login', meuNome);
-
-  document.getElementById('login').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  document.getElementById('msg').focus();
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, senha }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      erroEl.textContent = data.erro || 'Erro ao entrar';
+      return;
+    }
+    entrarNoApp(data.usuario);
+  } catch (e) {
+    erroEl.textContent = 'Erro de conexão';
+  }
 }
 
-function esquecer() {
-  localStorage.removeItem('meuNome');
-  document.getElementById('nome').value = '';
-  document.getElementById('nome').focus();
+async function fazerCadastro() {
+  const nome = document.getElementById('cad-nome').value.trim();
+  const email = document.getElementById('cad-email').value.trim();
+  const senha = document.getElementById('cad-senha').value;
+  const erroEl = document.getElementById('cad-erro');
+  erroEl.textContent = '';
+
+  if (!nome || !email || !senha) {
+    erroEl.textContent = 'Preencha todos os campos';
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/cadastro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, email, senha }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      erroEl.textContent = data.erro || 'Erro ao cadastrar';
+      return;
+    }
+    entrarNoApp(data.usuario);
+  } catch (e) {
+    erroEl.textContent = 'Erro de conexão';
+  }
 }
 
-function sair() {
-  if (!confirm('Sair? O nome salvo será apagado.')) return;
-  localStorage.removeItem('meuNome');
-  socket.disconnect();
+async function fazerLogout() {
+  if (!confirm('Sair da conta?')) return;
+  await fetch('/api/logout', { method: 'POST' });
   location.reload();
 }
 
-// ========== LISTA DE ONLINE ==========
+// ========== ENTRAR NO APP ==========
 
-socket.on('lista-online', (users) => {
-  const ul = document.getElementById('online');
-  ul.innerHTML = '';
-  users
-    .filter((u) => u.socketId !== meuSocketId)
-    .forEach((u) => {
-      const li = document.createElement('li');
-      li.textContent = u.nome;
-      li.onclick = () => tentarConectar(u);
-      ul.appendChild(li);
-    });
-});
+function entrarNoApp(usuario) {
+  meuUsuario = usuario;
+  document.getElementById('nome-usuario').textContent = usuario.nome;
+
+  document.getElementById('tela-auth').classList.remove('ativa');
+  document.getElementById('tela-app').classList.add('ativa');
+
+  conectarSocket();
+}
+
+// ========== SOCKET ==========
+
+function conectarSocket() {
+  if (socket) return;
+
+  socket = io();
+
+  socket.on('connect', () => {
+    meuSocketId = socket.id;
+    console.log('Conectado como', meuUsuario.nome, '— socket', meuSocketId);
+  });
+
+  socket.on('connect_error', (err) => {
+    console.error('Erro de conexão:', err.message);
+    if (err.message === 'Não autenticado' || err.message === 'Token inválido') {
+      alert('Sessão expirada. Faça login de novo.');
+      location.reload();
+    }
+  });
+
+  socket.on('lista-online', (users) => {
+    const ul = document.getElementById('online');
+    ul.innerHTML = '';
+    users
+      .filter((u) => u.socketId !== meuSocketId)
+      .forEach((u) => {
+        const li = document.createElement('li');
+        li.textContent = u.nome;
+        li.onclick = () => tentarConectar(u);
+        ul.appendChild(li);
+      });
+  });
+
+  socket.on('pedido-recebido', ({ de }) => {
+    pedidoPendente = de.socketId;
+    document.getElementById('pedido-texto').textContent =
+      `${de.nome} quer falar com você`;
+    document.getElementById('pedido').style.display = 'block';
+  });
+
+  socket.on('conexao-aceita', ({ sala, historico }) => {
+    salaAtual = sala;
+    document.getElementById('msg').disabled = false;
+    document.getElementById('enviar').disabled = false;
+    document.getElementById('btnDesconectar').style.display = 'inline-block';
+    document.getElementById('btnLimpar').style.display = 'inline-block';
+
+    const chat = document.getElementById('chat');
+    chat.innerHTML = '';
+
+    if (historico && historico.length > 0) {
+      adicionarMsg('--- histórico ---', 'sistema');
+      historico.forEach((m) => {
+        const cls = m.de === meuUsuario.nome ? 'eu' : 'ele';
+        adicionarMsg(`${m.de}: ${m.texto}`, cls, m.hora);
+      });
+      adicionarMsg('--- conectado ---', 'sistema');
+    } else {
+      adicionarMsg('--- conectado ---', 'sistema');
+    }
+
+    document.getElementById('msg').focus();
+  });
+
+  socket.on('conexao-encerrada', () => {
+    limparSala();
+    adicionarMsg('--- a outra pessoa encerrou a conversa ---', 'sistema');
+  });
+
+  socket.on('mensagem', ({ de, texto, hora }) => {
+    adicionarMsg(`${de}: ${texto}`, 'ele', hora);
+    notificar(de, texto);
+    document.getElementById('digitando').textContent = '';
+  });
+
+  socket.on('digitando', ({ nome }) => {
+    const el = document.getElementById('digitando');
+    el.textContent = `${nome} está digitando...`;
+    clearTimeout(timeoutDigitando);
+    timeoutDigitando = setTimeout(() => (el.textContent = ''), 2000);
+  });
+}
+
+// ========== AÇÕES DO CHAT ==========
 
 function tentarConectar(u) {
   if (salaAtual) {
@@ -75,15 +187,6 @@ function tentarConectar(u) {
   }
   socket.emit('pedir-conexao', { paraSocketId: u.socketId });
 }
-
-// ========== PEDIDO RECEBIDO ==========
-
-socket.on('pedido-recebido', ({ de }) => {
-  pedidoPendente = de.socketId;
-  document.getElementById('pedido-texto').textContent =
-    `${de.nome} quer falar com você`;
-  document.getElementById('pedido').style.display = 'block';
-});
 
 function aceitar() {
   socket.emit('aceitar-conexao', { deSocketId: pedidoPendente });
@@ -95,46 +198,12 @@ function recusar() {
   document.getElementById('pedido').style.display = 'none';
 }
 
-// ========== CONEXÃO ==========
-
-socket.on('conexao-aceita', ({ sala, historico }) => {
-  salaAtual = sala;
-  document.getElementById('msg').disabled = false;
-  document.getElementById('enviar').disabled = false;
-  document.getElementById('btnDesconectar').style.display = 'inline-block';
-  document.getElementById('btnLimpar').style.display = 'inline-block';
-  document.getElementById('btnLigar').style.display = 'inline-block';
-
-  const chat = document.getElementById('chat');
-  chat.innerHTML = '';
-
-  if (historico && historico.length > 0) {
-    adicionarMsg('--- histórico ---', 'sistema');
-    historico.forEach((m) => {
-      const cls = m.de === meuNome ? 'eu' : 'ele';
-      adicionarMsg(`${m.de}: ${m.texto}`, cls, m.hora);
-    });
-    adicionarMsg('--- conectado ---', 'sistema');
-  } else {
-    adicionarMsg('--- conectado ---', 'sistema');
-  }
-
-  document.getElementById('msg').focus();
-});
-
 function encerrar() {
   if (!salaAtual) return;
-  if (chamadaAtiva) desligar();
   socket.emit('encerrar-conexao', { sala: salaAtual });
   limparSala();
   adicionarMsg('--- você encerrou a conversa ---', 'sistema');
 }
-
-socket.on('conexao-encerrada', () => {
-  if (chamadaAtiva) desligar(true);
-  limparSala();
-  adicionarMsg('--- a outra pessoa encerrou a conversa ---', 'sistema');
-});
 
 function limparSala() {
   salaAtual = null;
@@ -142,11 +211,8 @@ function limparSala() {
   document.getElementById('enviar').disabled = true;
   document.getElementById('btnDesconectar').style.display = 'none';
   document.getElementById('btnLimpar').style.display = 'none';
-  document.getElementById('btnLigar').style.display = 'none';
   document.getElementById('digitando').textContent = '';
 }
-
-// ========== LIMPAR HISTÓRICO ==========
 
 function limparHistorico() {
   if (!salaAtual) return;
@@ -154,19 +220,13 @@ function limparHistorico() {
   socket.emit('limpar-historico', { sala: salaAtual });
 }
 
-socket.on('historico-limpo', () => {
-  const chat = document.getElementById('chat');
-  chat.innerHTML = '';
-  adicionarMsg('--- histórico apagado ---', 'sistema');
-});
-
 // ========== MENSAGENS ==========
 
 const msgInput = document.getElementById('msg');
 
 msgInput.addEventListener('input', () => {
   if (!salaAtual) return;
-  socket.emit('digitando', { sala: salaAtual, nome: meuNome });
+  socket.emit('digitando', { sala: salaAtual, nome: meuUsuario.nome });
 });
 
 document.getElementById('enviar').onclick = enviar;
@@ -178,25 +238,12 @@ function enviar() {
   if (!msgInput.value.trim() || !salaAtual) return;
 
   socket.emit('mensagem', { sala: salaAtual, texto: msgInput.value });
-  adicionarMsg(`${meuNome}: ${msgInput.value}`, 'eu');
+  adicionarMsg(`${meuUsuario.nome}: ${msgInput.value}`, 'eu');
   msgInput.value = '';
   msgInput.focus();
 }
 
-socket.on('mensagem', ({ de, texto, hora }) => {
-  adicionarMsg(`${de}: ${texto}`, 'ele', hora);
-  notificar(de, texto);
-  document.getElementById('digitando').textContent = '';
-});
-
-socket.on('digitando', ({ nome }) => {
-  const el = document.getElementById('digitando');
-  el.textContent = `${nome} está digitando...`;
-  clearTimeout(timeoutDigitando);
-  timeoutDigitando = setTimeout(() => (el.textContent = ''), 2000);
-});
-
-// ========== RENDER DA MENSAGEM ==========
+// ========== RENDER ==========
 
 function adicionarMsg(txt, cls, horaMs) {
   const div = document.createElement('div');
@@ -253,308 +300,25 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// ============================================================
-// WEBRTC — CHAMADA DE VOZ
-// ============================================================
+// ========== INICIALIZAÇÃO ==========
 
-let peerConnection = null;
-let localStream = null;
-let chamadaAtiva = false;
-let timerChamada = null;
-let segundosChamada = 0;
-let offerPendente = null;
-
-// 🔥 TURN primeiro — mais confiável em redes restritivas
-const rtcConfig = {
-  iceServers: [
-    {
-      urls: 'turns:global.relay.metered.ca:443?transport=tcp',
-      username: '161d0f2efb2c3ef542a1c0e3',
-      credential: 'CWydqcwhGQ9x8aS7',
-    },
-    {
-      urls: 'turn:global.relay.metered.ca:443',
-      username: '161d0f2efb2c3ef542a1c0e3',
-      credential: 'CWydqcwhGQ9x8aS7',
-    },
-    {
-      urls: 'turn:global.relay.metered.ca:80',
-      username: '161d0f2efb2c3ef542a1c0e3',
-      credential: 'CWydqcwhGQ9x8aS7',
-    },
-    {
-      urls: 'turn:global.relay.metered.ca:80?transport=tcp',
-      username: '161d0f2efb2c3ef542a1c0e3',
-      credential: 'CWydqcwhGQ9x8aS7',
-    },
-    {
-      urls: 'stun:stun.relay.metered.ca:80',
-    },
-    {
-      urls: 'stun:stun.l.google.com:19302',
-    },
-  ],
-  iceCandidatePoolSize: 10,
-  iceTransportPolicy: 'all',
-};
-
-// ---------- INICIAR CHAMADA ----------
-
-async function ligar() {
-  if (!salaAtual) return;
-
+// Ao carregar, tenta pegar quem tá logado
+window.addEventListener('load', async () => {
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-  } catch (err) {
-    alert('Não foi possível acessar o microfone: ' + err.message);
-    return;
-  }
-
-  criarPeerConnection();
-
-  localStream.getTracks().forEach((track) => {
-    peerConnection.addTrack(track, localStream);
-  });
-
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
-
-  socket.emit('webrtc-offer', { sala: salaAtual, offer });
-
-  mostrarChamada('📞 Chamando...');
-}
-
-// ---------- RECEBER OFERTA (novo ou ICE restart) ----------
-
-socket.on('webrtc-offer', async ({ offer }) => {
-  if (!salaAtual) return;
-
-  // Se já tá em chamada e peerConnection existe, é um ICE restart
-  if (chamadaAtiva && peerConnection) {
-    console.log('🔄 Recebendo ICE restart...');
-    try {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      socket.emit('webrtc-answer', { sala: salaAtual, answer });
-    } catch (e) {
-      console.warn('Erro no ICE restart:', e);
+    const r = await fetch('/api/eu');
+    if (r.ok) {
+      const data = await r.json();
+      entrarNoApp(data.usuario);
     }
-    return;
-  }
-
-  // Senão, é uma nova chamada
-  offerPendente = offer;
-  document.getElementById('chamada-recebida').style.display = 'block';
-});
-
-async function aceitarChamada() {
-  document.getElementById('chamada-recebida').style.display = 'none';
-
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-  } catch (err) {
-    alert('Não foi possível acessar o microfone: ' + err.message);
-    return;
-  }
-
-  criarPeerConnection();
-
-  localStream.getTracks().forEach((track) => {
-    peerConnection.addTrack(track, localStream);
-  });
-
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(offerPendente));
-
-  const answer = await peerConnection.createAnswer();
-  await peerConnection.setLocalDescription(answer);
-
-  socket.emit('webrtc-answer', { sala: salaAtual, answer });
-
-  iniciarTimer();
-  mostrarChamada('🎙️ Em chamada');
-}
-
-function recusarChamada() {
-  document.getElementById('chamada-recebida').style.display = 'none';
-  socket.emit('webrtc-encerrar', { sala: salaAtual });
-  offerPendente = null;
-}
-
-// ---------- RECEBER RESPOSTA ----------
-
-socket.on('webrtc-answer', async ({ answer }) => {
-  if (!peerConnection) return;
-  try {
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-    iniciarTimer();
-    mostrarChamada('🎙️ Em chamada');
   } catch (e) {
-    console.warn('Erro ao setar answer:', e);
+    // não logado, mostra tela de auth
   }
+
+  // Enter nos campos
+  document.getElementById('login-senha').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') fazerLogin();
+  });
+  document.getElementById('cad-senha').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') fazerCadastro();
+  });
 });
-
-// ---------- ICE CANDIDATES ----------
-
-socket.on('webrtc-ice', async ({ candidate }) => {
-  if (!peerConnection || !candidate) return;
-  try {
-    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-  } catch (err) {
-    console.warn('Erro ao adicionar ICE:', err);
-  }
-});
-
-// ---------- CRIAR PEER CONNECTION ----------
-
-function criarPeerConnection() {
-  peerConnection = new RTCPeerConnection(rtcConfig);
-
-  peerConnection.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.emit('webrtc-ice', { sala: salaAtual, candidate: event.candidate });
-    }
-  };
-
-  peerConnection.ontrack = (event) => {
-    console.log('ontrack disparou:', event.streams, 'track:', event.track.kind);
-
-    const audioRemoto = document.getElementById('audio-remoto');
-
-    if (!audioRemoto.srcObject && event.streams && event.streams[0]) {
-      audioRemoto.srcObject = event.streams[0];
-    }
-
-    event.track.onunmute = () => {
-      console.log('🔊 Track desmutou');
-      audioRemoto.muted = false;
-      audioRemoto.volume = 1.0;
-      audioRemoto.play().catch((e) => console.warn('Autoplay bloqueado:', e));
-    };
-
-    event.track.onended = () => {
-      console.warn('⚠️ Track terminou — a conexão caiu');
-    };
-
-    audioRemoto.play().catch((e) => console.warn('Play falhou:', e));
-  };
-
-  peerConnection.oniceconnectionstatechange = () => {
-    const state = peerConnection ? peerConnection.iceConnectionState : 'null';
-    console.log('ICE state:', state);
-
-    if (state === 'failed') {
-      console.log('🔄 ICE falhou, tentando reconectar...');
-      tentarReconectar();
-    }
-  };
-
-  peerConnection.onconnectionstatechange = () => {
-    console.log('Connection state:', peerConnection.connectionState);
-
-    if (peerConnection.connectionState === 'failed') {
-      console.log('❌ Connection falhou');
-    }
-  };
-
-  chamadaAtiva = true;
-
-  setTimeout(() => {
-    const audioRemoto = document.getElementById('audio-remoto');
-    if (audioRemoto && audioRemoto.srcObject) {
-      audioRemoto.play().catch((e) => console.warn(e));
-    }
-  }, 1000);
-}
-
-// ---------- RECONEXÃO AUTOMÁTICA ----------
-
-async function tentarReconectar() {
-  if (!peerConnection || !salaAtual) return;
-  if (peerConnection.iceConnectionState !== 'failed') return;
-
-  try {
-    console.log('🔄 ICE restart...');
-    const offer = await peerConnection.createOffer({ iceRestart: true });
-    await peerConnection.setLocalDescription(offer);
-    socket.emit('webrtc-offer', { sala: salaAtual, offer });
-  } catch (e) {
-    console.warn('Falha no ICE restart:', e);
-  }
-}
-
-// ---------- DESLIGAR ----------
-
-function desligar(remoto = false) {
-  if (localStream) {
-    localStream.getTracks().forEach((t) => t.stop());
-    localStream = null;
-  }
-  if (peerConnection) {
-    peerConnection.close();
-    peerConnection = null;
-  }
-
-  if (!remoto && salaAtual) {
-    socket.emit('webrtc-encerrar', { sala: salaAtual });
-  }
-
-  chamadaAtiva = false;
-  offerPendente = null;
-  pararTimer();
-  esconderChamada();
-  document.getElementById('chamada-recebida').style.display = 'none';
-}
-
-socket.on('webrtc-encerrada', () => {
-  if (!chamadaAtiva) return;
-  desligar(true);
-  adicionarMsg('--- chamada encerrada pelo outro lado ---', 'sistema');
-});
-
-// ---------- DESTRAVAR ÁUDIO ----------
-
-function destravarAudio() {
-  const audioRemoto = document.getElementById('audio-remoto');
-  if (audioRemoto && audioRemoto.srcObject) {
-    audioRemoto.muted = false;
-    audioRemoto.volume = 1.0;
-    audioRemoto.play()
-      .then(() => console.log('🔊 Áudio destravado'))
-      .catch((e) => console.warn('Falha ao destravar:', e));
-  }
-}
-
-// ---------- UI DA CHAMADA ----------
-
-function mostrarChamada(texto) {
-  document.getElementById('chamada-status').textContent = texto;
-  document.getElementById('chamada').style.display = 'block';
-  document.getElementById('btnLigar').style.display = 'none';
-  document.getElementById('btnDesligar').style.display = 'inline-block';
-}
-
-function esconderChamada() {
-  document.getElementById('chamada').style.display = 'none';
-  document.getElementById('btnLigar').style.display = 'inline-block';
-  document.getElementById('btnDesligar').style.display = 'none';
-  document.getElementById('chamada-tempo').textContent = '00:00';
-}
-
-function iniciarTimer() {
-  segundosChamada = 0;
-  pararTimer();
-  timerChamada = setInterval(() => {
-    segundosChamada++;
-    const min = String(Math.floor(segundosChamada / 60)).padStart(2, '0');
-    const seg = String(segundosChamada % 60).padStart(2, '0');
-    document.getElementById('chamada-tempo').textContent = `${min}:${seg}`;
-  }, 1000);
-}
-
-function pararTimer() {
-  if (timerChamada) {
-    clearInterval(timerChamada);
-    timerChamada = null;
-  }
-}

@@ -4,12 +4,21 @@
   <meta charset="UTF-8">
   <title>Meu Chat</title>
   <style>
-    body { font-family: sans-serif; max-width: 600px; margin: 20px auto; }
-    input, button { padding: 6px 10px; font-size: 14px; }
+    body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 0 10px; }
+    input, button { padding: 8px 12px; font-size: 14px; margin: 4px 0; }
+    input { width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+    button { cursor: pointer; border: none; border-radius: 4px; background: #1976d2; color: white; }
+    button:hover { background: #1565c0; }
+    button.secundario { background: #eee; color: #333; }
+    button.secundario:hover { background: #ddd; }
 
-    #login {
-      display: flex; gap: 6px; align-items: center;
-    }
+    .tela { display: none; }
+    .tela.ativa { display: block; }
+
+    .abas { display: flex; gap: 4px; margin-bottom: 12px; }
+    .aba { flex: 1; padding: 10px; text-align: center; cursor: pointer; border-radius: 4px 4px 0 0;
+           background: #eee; }
+    .aba.ativa { background: #1976d2; color: white; }
 
     #online { padding: 0; }
     #online li {
@@ -30,43 +39,60 @@
     .ele { color: #2e7d32; }
     .sistema { color: #888; font-style: italic; text-align: center; }
 
-    #digitando {
-      color: #666; font-style: italic; font-size: 12px;
-      height: 16px; margin-top: 4px;
-    }
+    #digitando { color: #666; font-style: italic; font-size: 12px; height: 16px; margin-top: 4px; }
 
-    #barra {
-      display: flex; gap: 6px; margin-top: 6px;
-    }
+    #barra { display: flex; gap: 6px; margin-top: 6px; }
     #barra input { flex: 1; }
 
-    #pedido {
-      display: none; border: 1px solid red; padding: 8px;
-      margin-top: 10px; border-radius: 4px;
-      background: #fff5f5;
-    }
+    #pedido { display: none; border: 1px solid red; padding: 8px; margin-top: 10px;
+              border-radius: 4px; background: #fff5f5; }
+
+    .erro { color: #c00; font-size: 13px; min-height: 18px; margin: 6px 0; }
+    .topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+            padding-bottom: 8px; border-bottom: 1px solid #ddd; }
   </style>
 </head>
 <body>
-  <h2>Meu Chat</h2>
 
-  <div id="login">
-    <input id="nome" placeholder="Seu nome" autofocus>
-    <button onclick="entrar()">Entrar</button>
-    <button onclick="esquecer()" title="Limpar campo">🗑️</button>
+  <!-- ============ TELA DE LOGIN / CADASTRO ============ -->
+  <div id="tela-auth" class="tela ativa">
+    <h2>Meu Chat</h2>
+
+    <div class="abas">
+      <div id="aba-login" class="aba ativa" onclick="mudarAba('login')">Entrar</div>
+      <div id="aba-cadastro" class="aba" onclick="mudarAba('cadastro')">Criar conta</div>
+    </div>
+
+    <!-- Login -->
+    <div id="form-login">
+      <input id="login-email" type="email" placeholder="Email">
+      <input id="login-senha" type="password" placeholder="Senha">
+      <div class="erro" id="login-erro"></div>
+      <button onclick="fazerLogin()" style="width:100%">Entrar</button>
+    </div>
+
+    <!-- Cadastro -->
+    <div id="form-cadastro" style="display:none">
+      <input id="cad-nome" type="text" placeholder="Seu nome">
+      <input id="cad-email" type="email" placeholder="Email">
+      <input id="cad-senha" type="password" placeholder="Senha (mín 6)">
+      <div class="erro" id="cad-erro"></div>
+      <button onclick="fazerCadastro()" style="width:100%">Criar conta</button>
+    </div>
   </div>
 
-  <div id="app" style="display:none">
+  <!-- ============ TELA DO CHAT ============ -->
+  <div id="tela-app" class="tela">
+    <div class="topo">
+      <strong id="nome-usuario">...</strong>
+      <button class="secundario" onclick="fazerLogout()">Sair</button>
+    </div>
+
     <div style="display:flex; justify-content:space-between; align-items:center">
       <h3 style="margin: 8px 0">Online:</h3>
       <div>
-        <button id="btnLimpar" onclick="limparHistorico()" style="display:none">
-          🧹 Limpar histórico
-        </button>
-        <button id="btnDesconectar" onclick="encerrar()" style="display:none">
-          ❌ Encerrar conversa
-        </button>
-        <button onclick="sair()" title="Sair da conta">🚪 Sair</button>
+        <button id="btnLimpar" onclick="limparHistorico()" style="display:none">🧹 Limpar</button>
+        <button id="btnDesconectar" onclick="encerrar()" style="display:none">❌ Encerrar</button>
       </div>
     </div>
     <ul id="online"></ul>
@@ -77,45 +103,13 @@
     <div id="barra">
       <input id="msg" placeholder="Digite..." disabled>
       <button id="enviar" disabled>Enviar</button>
-      <button id="btnLigar" onclick="ligar()" style="display:none">📞 Ligar</button>
-      <button id="btnDesligar" onclick="desligar()" style="display:none">📞 Desligar</button>
     </div>
 
     <div id="pedido">
       <span id="pedido-texto"></span>
       <button onclick="aceitar()">Aceitar</button>
-      <button onclick="recusar()">Recusar</button>
+      <button onclick="recusar()" class="secundario">Recusar</button>
     </div>
-  </div>
-
-  <!-- Áudio do outro lado toca por aqui -->
-  <audio id="audio-remoto" autoplay></audio>
-
-  <!-- Painel da chamada (canto inferior direito) -->
-  <div id="chamada" style="display:none; position:fixed; bottom:20px; right:20px;
-       background:#1976d2; color:white; padding:15px 20px; border-radius:8px;
-       box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-family:sans-serif; z-index:1000">
-    <div style="font-size:16px; margin-bottom:8px" id="chamada-status">📞 Chamando...</div>
-    <div style="font-size:12px; opacity:0.8" id="chamada-tempo">00:00</div>
-    <button onclick="destravarAudio()" style="margin-top:10px; background:#fff; color:#1976d2;
-            border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:12px">
-      🔊 Ativar áudio
-    </button>
-  </div>
-
-  <!-- Pedido de chamada recebida -->
-  <div id="chamada-recebida" style="display:none; position:fixed; bottom:20px; right:20px;
-       background:#2e7d32; color:white; padding:15px 20px; border-radius:8px;
-       box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-family:sans-serif; z-index:1000">
-    <div style="margin-bottom:8px"><strong>Alguém</strong> está te ligando...</div>
-    <button onclick="aceitarChamada()" style="background:#fff; color:#2e7d32; border:none;
-            padding:8px 16px; border-radius:4px; cursor:pointer; margin-right:6px">
-      ✅ Aceitar
-    </button>
-    <button onclick="recusarChamada()" style="background:transparent; color:#fff;
-            border:1px solid #fff; padding:8px 16px; border-radius:4px; cursor:pointer">
-      ❌ Recusar
-    </button>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
