@@ -34,11 +34,8 @@ let tituloOriginal = 'Void — Conecte-se';
 
 let telaAtual = 'home';
 
-// Reply (responder mensagem)
-let replyAtual = {
-  canal: null, // { msgId, autor, texto }
-  dm: null,
-};
+// Reply
+let replyAtual = { canal: null, dm: null };
 
 // ============================================================
 // AUTH
@@ -324,8 +321,23 @@ document.addEventListener('click', (e) => {
   document.querySelectorAll('.emoji-picker').forEach((el) => el.classList.remove('ativo'));
 });
 
+// 🔥 Fecha picker ao redimensionar (teclado abrir/fechar) e ao rolar o chat
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.emoji-picker.ativo').forEach((el) => {
+    el.classList.remove('ativo');
+  });
+});
+
+document.addEventListener('scroll', (e) => {
+  if (e.target && e.target.closest && e.target.closest('.chat-area')) {
+    document.querySelectorAll('.emoji-picker.ativo').forEach((el) => {
+      el.classList.remove('ativo');
+    });
+  }
+}, true);
+
 // ============================================================
-// REPLY (responder mensagem)
+// REPLY (responder)
 // ============================================================
 
 function ativarReply(contexto, msgId, autor, texto) {
@@ -362,11 +374,11 @@ let swipeEstado = {
   msgEl: null,
   startX: 0,
   startY: 0,
-  tipo: null, // 'touch' | 'mouse'
+  tipo: null,
 };
 
 function ativarSwipe(msgEl) {
-  const chatId = msgEl.parentElement.id; // chat-canal ou chat-dm
+  const chatId = msgEl.parentElement.id;
   const contexto = chatId === 'chat-canal' ? 'canal' : 'dm';
   const msgId = Number(msgEl.dataset.msgId);
   const autor = msgEl.querySelector('.msg-autor')?.textContent || '?';
@@ -376,10 +388,7 @@ function ativarSwipe(msgEl) {
 }
 
 function iniciarSwipe(e, msgEl) {
-  // Se já tá em outro swipe, cancela
   if (swipeEstado.ativo) return;
-
-  // Ignora se for clique em botão
   if (e.target.closest('button')) return;
 
   const isTouch = e.type.startsWith('touch');
@@ -409,31 +418,26 @@ function moverSwipe(e) {
   const dx = clientX - swipeEstado.startX;
   const dy = clientY - swipeEstado.startY;
 
-  // Se o movimento vertical for maior que o horizontal, cancela (é scroll)
   if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) {
     cancelarSwipe();
     return;
   }
 
-  // Só permite mover pra direita
   if (dx < 0) {
     swipeEstado.msgEl.style.transform = '';
     swipeEstado.msgEl.classList.remove('arrastando-ativo');
     return;
   }
 
-  // Limita a 100px
   const deslocamento = Math.min(dx, 100);
   swipeEstado.msgEl.style.transform = `translateX(${deslocamento}px)`;
 
-  // Ativa visual "pronto pra responder" se passou de 60px
   if (deslocamento >= 60) {
     swipeEstado.msgEl.classList.add('arrastando-ativo');
   } else {
     swipeEstado.msgEl.classList.remove('arrastando-ativo');
   }
 
-  // Previne scroll horizontal
   if (isTouch && Math.abs(dx) > 10 && e.cancelable) {
     e.preventDefault();
   }
@@ -450,12 +454,10 @@ function terminarSwipe(e) {
   msgEl.classList.remove('arrastando');
 
   if (deslocamento >= 60) {
-    // Ativa reply
     ativarSwipe(msgEl);
     msgEl.classList.remove('arrastando-ativo');
   }
 
-  // Volta pra posição original
   msgEl.style.transform = '';
   setTimeout(() => {
     msgEl.classList.remove('arrastando-ativo');
@@ -472,7 +474,6 @@ function cancelarSwipe() {
   swipeEstado = { ativo: false, x: 0, y: 0, msgEl: null, startX: 0, startY: 0, tipo: null };
 }
 
-// Event listeners globais (delegação)
 document.addEventListener('mousedown', (e) => {
   const msgEl = e.target.closest('.msg-com-avatar');
   if (!msgEl) return;
@@ -619,7 +620,6 @@ async function abrirCanal(canal) {
   socket.emit('entrar-canal', { canalId: canal.id });
   renderizarCanais();
 
-  // Cancela reply se houver
   cancelarReply('canal');
 
   const r = await fetch(`/api/canais/${canal.id}/mensagens`);
@@ -683,6 +683,9 @@ function enviarMsgCanal() {
     body: JSON.stringify(body),
   }).then(async (r) => {
     if (!r.ok) { alert('Erro ao enviar'); return; }
+    // 🔥 scroll pro final
+    const el = document.getElementById('chat-canal');
+    setTimeout(() => { el.scrollTop = el.scrollHeight; }, 100);
   });
 }
 
@@ -1441,6 +1444,10 @@ async function enviarMsgDM() {
   const data = await r.json();
   if (!r.ok) { alert(data.erro || 'Erro'); return; }
   adicionarMsgDM(data.mensagem);
+
+  // 🔥 scroll pro final
+  const el = document.getElementById('chat-dm');
+  setTimeout(() => { el.scrollTop = el.scrollHeight; }, 100);
 }
 
 // ============================================================
