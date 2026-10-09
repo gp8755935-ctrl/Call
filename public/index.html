@@ -474,9 +474,16 @@
     }
 
     /* 🆕 Esconde a barra de mensagem quando NÃO há canal selecionado */
-    #tela-canal:not(.tem-canal) .barra-msg {
-      display: none;
-    }
+#tela-canal:not(.tem-canal) .barra-msg {
+  display: none;
+}
+
+/* 🆕 Esconde o hamburger ☰ no mobile quando não há canal ativo */
+@media (max-width: 768px) {
+  #tela-canal:not(.tem-canal) .btn-hamburger {
+    display: none !important;
+  }
+}
 
     .chat-area {
       flex: 1; overflow-y: auto;
