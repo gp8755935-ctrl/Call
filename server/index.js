@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const path = require('path');           // 👈 adiciona isso
 const { Server } = require('socket.io');
 const db = require('./db');
 
@@ -7,7 +8,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, '..', 'public')));   // 👈 muda isso
 
 const online = new Map();
 
