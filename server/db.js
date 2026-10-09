@@ -12,6 +12,9 @@ db.exec(`
     nome TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     senha_hash TEXT NOT NULL,
+    avatar TEXT DEFAULT '',
+    banner TEXT DEFAULT '',
+    bio TEXT DEFAULT '',
     criado_em INTEGER NOT NULL
   );
 
@@ -21,8 +24,6 @@ db.exec(`
     para_id INTEGER NOT NULL,
     status TEXT NOT NULL,
     criado_em INTEGER NOT NULL,
-    FOREIGN KEY (de_id) REFERENCES usuarios(id),
-    FOREIGN KEY (para_id) REFERENCES usuarios(id),
     UNIQUE(de_id, para_id)
   );
 
@@ -43,15 +44,13 @@ db.exec(`
     lida INTEGER NOT NULL DEFAULT 0
   );
 
-  -- NOVAS: SERVIDORES
   CREATE TABLE IF NOT EXISTS servidores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL,
     descricao TEXT DEFAULT '',
     dono_id INTEGER NOT NULL,
     codigo_convite TEXT NOT NULL UNIQUE,
-    criado_em INTEGER NOT NULL,
-    FOREIGN KEY (dono_id) REFERENCES usuarios(id)
+    criado_em INTEGER NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS membros_servidor (
@@ -59,8 +58,6 @@ db.exec(`
     servidor_id INTEGER NOT NULL,
     usuario_id INTEGER NOT NULL,
     entrou_em INTEGER NOT NULL,
-    FOREIGN KEY (servidor_id) REFERENCES servidores(id),
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
     UNIQUE(servidor_id, usuario_id)
   );
 
@@ -68,8 +65,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     servidor_id INTEGER NOT NULL,
     nome TEXT NOT NULL,
-    criado_em INTEGER NOT NULL,
-    FOREIGN KEY (servidor_id) REFERENCES servidores(id)
+    criado_em INTEGER NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS mensagens_canal (
@@ -77,9 +73,7 @@ db.exec(`
     canal_id INTEGER NOT NULL,
     de_id INTEGER NOT NULL,
     texto TEXT NOT NULL,
-    hora INTEGER NOT NULL,
-    FOREIGN KEY (canal_id) REFERENCES canais(id),
-    FOREIGN KEY (de_id) REFERENCES usuarios(id)
+    hora INTEGER NOT NULL
   );
 
   CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios (email);
@@ -94,14 +88,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_msg_canal ON mensagens_canal (canal_id, hora);
 `);
 
-// ========== USUÁRIOS (mantidos iguais) ==========
+// ========== USUÁRIOS ==========
 
 function criarUsuario({ nome, email, senhaHash }) {
   const stmt = db.prepare(
-    'INSERT INTO usuarios (nome, email, senha_hash, criado_em) VALUES (?, ?, ?, ?)'
+    'INSERT INTO usuarios (nome, email, senha_hash, avatar, banner, bio, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?)'
   );
-  const info = stmt.run(nome, email.toLowerCase(), senhaHash, Date.now());
-  return { id: info.lastInsertRowid, nome, email: email.toLowerCase() };
+  const info = stmt.run(nome, email.toLowerCase(), senhaHash, '', '', '', Date.now());
+  return { id: info.lastInsertRowid, nome, email: email.toLowerCase(), avatar: '', banner: '', bio: '' };
 }
 
 function buscarUsuarioPorEmail(email) {
@@ -109,16 +103,16 @@ function buscarUsuarioPorEmail(email) {
 }
 
 function buscarUsuarioPorId(id) {
-  return db.prepare('SELECT id, nome, email FROM usuarios WHERE id = ?').get(id);
+  return db.prepare('SELECT id, nome, email, avatar, banner, bio FROM usuarios WHERE id = ?').get(id);
 }
 
 function listarUsuarios() {
-  return db.prepare('SELECT id, nome, email FROM usuarios ORDER BY nome').all();
+  return db.prepare('SELECT id, nome, email, avatar, banner, bio FROM usuarios ORDER BY nome').all();
 }
 
 function buscarUsuariosPorNome(termo, excluirId) {
   const stmt = db.prepare(
-    `SELECT id, nome, email FROM usuarios
+    `SELECT id, nome, email, avatar, banner, bio FROM usuarios
      WHERE (nome LIKE ? OR email LIKE ?) AND id != ?
      ORDER BY nome LIMIT 20`
   );
@@ -126,7 +120,19 @@ function buscarUsuariosPorNome(termo, excluirId) {
   return stmt.all(like, like, excluirId);
 }
 
-// ========== AMIZADES (mantidas) ==========
+function atualizarAvatar(usuarioId, avatarBase64) {
+  return db.prepare('UPDATE usuarios SET avatar = ? WHERE id = ?').run(avatarBase64, usuarioId);
+}
+
+function atualizarBanner(usuarioId, bannerBase64) {
+  return db.prepare('UPDATE usuarios SET banner = ? WHERE id = ?').run(bannerBase64, usuarioId);
+}
+
+function atualizarBio(usuarioId, bio) {
+  return db.prepare('UPDATE usuarios SET bio = ? WHERE id = ?').run(bio, usuarioId);
+}
+
+// ========== AMIZADES ==========
 
 function buscarAmizadeEntre(a, b) {
   return db.prepare(
@@ -153,7 +159,7 @@ function deletarAmizade(id) {
 
 function listarAmigos(usuarioId) {
   return db.prepare(
-    `SELECT u.id, u.nome, u.email, a.id as amizade_id
+    `SELECT u.id, u.nome, u.email, u.avatar, u.banner, u.bio, a.id as amizade_id
      FROM amizades a
      JOIN usuarios u ON (
        (a.de_id = u.id AND a.para_id = ?) OR
@@ -175,7 +181,7 @@ function saoAmigos(a, b) {
 
 function listarPedidosRecebidos(usuarioId) {
   return db.prepare(
-    `SELECT a.id as amizade_id, u.id, u.nome, u.email, a.criado_em
+    `SELECT a.id as amizade_id, u.id, u.nome, u.email, u.avatar, a.criado_em
      FROM amizades a
      JOIN usuarios u ON u.id = a.de_id
      WHERE a.para_id = ? AND a.status = 'pendente'
@@ -185,7 +191,7 @@ function listarPedidosRecebidos(usuarioId) {
 
 function listarPedidosEnviados(usuarioId) {
   return db.prepare(
-    `SELECT a.id as amizade_id, u.id, u.nome, u.email, a.criado_em
+    `SELECT a.id as amizade_id, u.id, u.nome, u.email, u.avatar, a.criado_em
      FROM amizades a
      JOIN usuarios u ON u.id = a.para_id
      WHERE a.de_id = ? AND a.status = 'pendente'
@@ -193,7 +199,7 @@ function listarPedidosEnviados(usuarioId) {
   ).all(usuarioId);
 }
 
-// ========== CONVERSAS / DMs (mantidas) ==========
+// ========== CONVERSAS ==========
 
 function abrirConversa(idA, idB) {
   const a = Math.min(idA, idB);
@@ -223,7 +229,7 @@ function listarConversas(usuarioId) {
 
   const resultado = [];
   for (const c of conversas) {
-    const outro = db.prepare('SELECT id, nome, email FROM usuarios WHERE id = ?').get(c.outro_id);
+    const outro = db.prepare('SELECT id, nome, email, avatar FROM usuarios WHERE id = ?').get(c.outro_id);
     if (!outro) continue;
     const ultima = db.prepare(
       'SELECT de_id, texto, hora FROM mensagens WHERE conversa_id = ? ORDER BY hora DESC LIMIT 1'
@@ -248,7 +254,7 @@ function salvarMensagem({ conversaId, deId, texto }) {
 
 function listarMensagens(conversaId, limite = 100) {
   return db.prepare(
-    `SELECT m.id, m.de_id, u.nome AS de_nome, m.texto, m.hora, m.lida
+    `SELECT m.id, m.de_id, u.nome AS de_nome, u.avatar AS de_avatar, m.texto, m.hora, m.lida
      FROM mensagens m JOIN usuarios u ON u.id = m.de_id
      WHERE m.conversa_id = ? ORDER BY m.hora DESC LIMIT ?`
   ).all(conversaId, limite).reverse();
@@ -275,7 +281,6 @@ function gerarCodigoConvite() {
 
 function criarServidor({ nome, descricao, donoId }) {
   let codigo;
-  // Garante código único
   do { codigo = gerarCodigoConvite(); }
   while (db.prepare('SELECT 1 FROM servidores WHERE codigo_convite = ?').get(codigo));
 
@@ -285,12 +290,10 @@ function criarServidor({ nome, descricao, donoId }) {
 
   const servidorId = info.lastInsertRowid;
 
-  // Adiciona dono como membro
   db.prepare(
     'INSERT INTO membros_servidor (servidor_id, usuario_id, entrou_em) VALUES (?, ?, ?)'
   ).run(servidorId, donoId, Date.now());
 
-  // Cria canal #geral padrão
   db.prepare(
     'INSERT INTO canais (servidor_id, nome, criado_em) VALUES (?, ?, ?)'
   ).run(servidorId, 'geral', Date.now());
@@ -333,9 +336,7 @@ function adicionarMembro(servidorId, usuarioId) {
   const existente = db.prepare(
     'SELECT id FROM membros_servidor WHERE servidor_id = ? AND usuario_id = ?'
   ).get(servidorId, usuarioId);
-
   if (existente) return false;
-
   db.prepare(
     'INSERT INTO membros_servidor (servidor_id, usuario_id, entrou_em) VALUES (?, ?, ?)'
   ).run(servidorId, usuarioId, Date.now());
@@ -350,7 +351,7 @@ function removerMembro(servidorId, usuarioId) {
 
 function listarMembros(servidorId) {
   return db.prepare(
-    `SELECT u.id, u.nome, u.email, m.entrou_em
+    `SELECT u.id, u.nome, u.email, u.avatar, u.banner, u.bio, m.entrou_em
      FROM membros_servidor m
      JOIN usuarios u ON u.id = m.usuario_id
      WHERE m.servidor_id = ?
@@ -361,7 +362,6 @@ function listarMembros(servidorId) {
 function deletarServidor(id, donoId) {
   const s = db.prepare('SELECT dono_id FROM servidores WHERE id = ?').get(id);
   if (!s || s.dono_id !== donoId) return false;
-
   db.prepare('DELETE FROM mensagens_canal WHERE canal_id IN (SELECT id FROM canais WHERE servidor_id = ?)').run(id);
   db.prepare('DELETE FROM canais WHERE servidor_id = ?').run(id);
   db.prepare('DELETE FROM membros_servidor WHERE servidor_id = ?').run(id);
@@ -374,16 +374,11 @@ function deletarServidor(id, donoId) {
 function criarCanal(servidorId, nome) {
   const nomeLimpo = nome.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
   if (!nomeLimpo) return null;
-
-  const existente = db.prepare(
-    'SELECT 1 FROM canais WHERE servidor_id = ? AND nome = ?'
-  ).get(servidorId, nomeLimpo);
+  const existente = db.prepare('SELECT 1 FROM canais WHERE servidor_id = ? AND nome = ?').get(servidorId, nomeLimpo);
   if (existente) return null;
-
   const info = db.prepare(
     'INSERT INTO canais (servidor_id, nome, criado_em) VALUES (?, ?, ?)'
   ).run(servidorId, nomeLimpo, Date.now());
-
   return { id: info.lastInsertRowid, servidor_id: servidorId, nome: nomeLimpo, criado_em: Date.now() };
 }
 
@@ -399,12 +394,9 @@ function buscarCanalPorId(id) {
 
 function deletarCanal(id, usuarioId) {
   const c = db.prepare(
-    `SELECT c.*, s.dono_id
-     FROM canais c JOIN servidores s ON s.id = c.servidor_id
-     WHERE c.id = ?`
+    `SELECT c.*, s.dono_id FROM canais c JOIN servidores s ON s.id = c.servidor_id WHERE c.id = ?`
   ).get(id);
   if (!c || c.dono_id !== usuarioId) return false;
-
   db.prepare('DELETE FROM mensagens_canal WHERE canal_id = ?').run(id);
   db.prepare('DELETE FROM canais WHERE id = ?').run(id);
   return true;
@@ -423,7 +415,7 @@ function salvarMensagemCanal({ canalId, deId, texto }) {
 
 function listarMensagensCanal(canalId, limite = 100) {
   return db.prepare(
-    `SELECT m.id, m.de_id, u.nome AS de_nome, m.texto, m.hora
+    `SELECT m.id, m.de_id, u.nome AS de_nome, u.avatar AS de_avatar, m.texto, m.hora
      FROM mensagens_canal m JOIN usuarios u ON u.id = m.de_id
      WHERE m.canal_id = ? ORDER BY m.hora DESC LIMIT ?`
   ).all(canalId, limite).reverse();
@@ -434,20 +426,15 @@ function limparMensagensCanal(canalId) {
 }
 
 module.exports = {
-  // usuários
-  criarUsuario, buscarUsuarioPorEmail, buscarUsuarioPorId, listarUsuarios, buscarUsuariosPorNome,
-  // amizades
+  criarUsuario, buscarUsuarioPorEmail, buscarUsuarioPorId, listarUsuarios,
+  buscarUsuariosPorNome, atualizarAvatar, atualizarBanner, atualizarBio,
   buscarAmizadeEntre, criarPedidoAmizade, atualizarStatusAmizade, deletarAmizade,
   listarAmigos, saoAmigos, listarPedidosRecebidos, listarPedidosEnviados,
-  // DMs
   abrirConversa, buscarConversaPorId, listarConversas, salvarMensagem,
   listarMensagens, marcarComoLidas, limparHistoricoConversa,
-  // servidores
   criarServidor, buscarServidorPorId, buscarServidorPorCodigo,
   listarServidoresDoUsuario, ehMembro, adicionarMembro, removerMembro,
   listarMembros, deletarServidor,
-  // canais
   criarCanal, listarCanais, buscarCanalPorId, deletarCanal,
-  // mensagens de canal
   salvarMensagemCanal, listarMensagensCanal, limparMensagensCanal,
 };

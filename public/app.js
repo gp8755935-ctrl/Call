@@ -1,14 +1,27 @@
+// Helper: gera HTML do avatar (imagem se tiver, inicial colorida se não)
+function avatarHTML(usuario, classe = '') {
+  if (!usuario) return '';
+  const cls = 'avatar ' + classe;
+  if (usuario.avatar) {
+    return `<div class="${cls}"><img src="${usuario.avatar}" alt=""></div>`;
+  }
+  const inicial = (usuario.nome || '?').charAt(0).toUpperCase();
+  const cores = ['#0284c7', '#0891b2', '#16a34a', '#7c3aed', '#db2777', '#ea580c'];
+  const cor = cores[(usuario.nome || '').charCodeAt(0) % cores.length];
+  return `<div class="${cls}" style="background: linear-gradient(180deg, ${cor}99, ${cor})">${inicial}</div>`;
+}
+
 let socket = null;
 let meuUsuario = null;
 let onlineIds = new Set();
 
 let servidores = [];
-let servidorAtivo = null;    // { servidor, canais, membros, ehDono }
-let canalAtivo = null;       // { id, nome }
-let conversaAtual = null;    // { conversa_id, amigo }
+let servidorAtivo = null;
+let canalAtivo = null;
+let conversaAtual = null;
 let timeoutBusca = null;
 let naoLidasTotal = 0;
-let tituloOriginal = 'Meu Chat';
+let tituloOriginal = 'Void — Conecte-se';
 
 // ============================================================
 // AUTH
@@ -71,6 +84,8 @@ function entrarNoApp(usuario) {
   document.getElementById('tela-auth').style.display = 'none';
   document.getElementById('app').classList.add('ativo');
 
+  atualizarAvataresNaUI();
+
   conectarSocket();
   carregarServidores();
   carregarAmizades();
@@ -107,6 +122,27 @@ function conectarSocket() {
     alert(`${por.nome} aceitou seu pedido!`);
   });
 
+  socket.on('perfil-atualizado', ({ usuario_id, avatar, banner, bio }) => {
+    if (usuario_id === meuUsuario.id) {
+      if (avatar !== undefined) meuUsuario.avatar = avatar;
+      if (banner !== undefined) meuUsuario.banner = banner;
+      if (bio !== undefined) meuUsuario.bio = bio;
+      atualizarAvataresNaUI();
+    }
+    if (conversaAtual && conversaAtual.amigo.id === usuario_id) {
+      if (avatar !== undefined) conversaAtual.amigo.avatar = avatar;
+    }
+    if (servidorAtivo) {
+      fetch('/api/servidores/' + servidorAtivo.servidor.id).then(async (r) => {
+        if (r.ok) {
+          servidorAtivo = await r.json();
+          renderizarMembros();
+        }
+      });
+    }
+    carregarConversas();
+  });
+
   socket.on('dm-nova', ({ conversa_id, mensagem }) => {
     tocarSom();
     if (conversaAtual && conversaAtual.conversa_id === conversa_id) {
@@ -124,7 +160,6 @@ function conectarSocket() {
     }
   });
 
-  // Canal: nova mensagem
   socket.on('canal-nova-msg', ({ canal_id, mensagem }) => {
     if (canalAtivo && canalAtivo.id === canal_id) {
       adicionarMsgCanal(mensagem);
@@ -170,7 +205,6 @@ async function carregarServidores() {
     servidores = data.servidores || [];
     renderizarServidores();
 
-    // Se tem servidor e nenhum ativo, abre o primeiro
     if (servidores.length > 0 && !servidorAtivo) {
       abrirServidor(servidores[0].id);
     }
@@ -210,17 +244,11 @@ async function abrirServidor(id) {
     document.getElementById('nome-servidor').textContent = data.servidor.nome;
     document.getElementById('codigo-servidor').textContent = 'convite: ' + data.servidor.codigo_convite;
 
-    // Marca ativo
     renderizarServidores();
-
-    // Entra nas salas de socket
     socket.emit('entrar-servidores');
-
-    // Atualiza UI
     renderizarCanais();
     renderizarMembros();
 
-    // Abre o primeiro canal
     if (data.canais.length > 0) {
       abrirCanal(data.canais[0]);
     } else {
@@ -244,7 +272,6 @@ function renderizarCanais() {
 
     const span = document.createElement('span');
     span.textContent = '# ' + c.nome;
-
     d.appendChild(span);
 
     if (servidorAtivo.ehDono) {
@@ -274,6 +301,7 @@ function renderizarMembros() {
     const estaOnline = onlineIds.has(m.id);
 
     d.innerHTML = `
+      ${avatarHTML(m, 'mini')}
       <span class="dot ${estaOnline ? 'online' : 'offline'}"></span>
       <span>${escapeHtml(m.nome)}</span>
       ${m.id === servidorAtivo.servidor.dono_id ? '<span class="dono">dono</span>' : ''}
@@ -287,7 +315,6 @@ function atualizarMembrosOnline() {
 }
 
 async function abrirCanal(canal) {
-  // Sai do canal antigo
   if (canalAtivo) socket.emit('sair-canal', { canalId: canalAtivo.id });
 
   canalAtivo = canal;
@@ -305,6 +332,8 @@ async function abrirCanal(canal) {
 
   document.getElementById('input-canal').focus();
   mostrarTelaCanal();
+
+  if (window.innerWidth <= 768) fecharSidebarMobile();
 }
 
 async function criarCanalPrompt() {
@@ -339,28 +368,24 @@ function enviarMsgCanal() {
     body: JSON.stringify({ texto }),
   }).then(async (r) => {
     if (!r.ok) { alert('Erro ao enviar'); return; }
-    // Não adiciona aqui: o socket vai retornar pro próprio (via io.to do servidor)
   });
 }
 
 function adicionarMsgCanal(m) {
   const el = document.getElementById('chat-canal');
   const div = document.createElement('div');
-  div.className = 'msg';
+  div.className = 'msg-com-avatar';
 
-  const autor = document.createElement('span');
-  autor.className = 'autor';
-  autor.textContent = m.de_nome + ':';
-
-  const texto = document.createTextNode(' ' + m.texto);
-
-  const hora = document.createElement('span');
-  hora.className = 'hora';
-  hora.textContent = formatarHora(m.hora);
-
-  div.appendChild(autor);
-  div.appendChild(texto);
-  div.appendChild(hora);
+  div.innerHTML = `
+    ${avatarHTML({ nome: m.de_nome, avatar: m.de_avatar })}
+    <div class="msg-conteudo">
+      <div class="msg-linha">
+        <span class="msg-autor">${escapeHtml(m.de_nome)}</span>
+        <span class="msg-hora">${formatarHora(m.hora)}</span>
+      </div>
+      <div class="msg-texto">${escapeHtml(m.texto)}</div>
+    </div>
+  `;
 
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
@@ -422,12 +447,13 @@ async function entrarServidor() {
 }
 
 // ============================================================
-// TELAS (main)
+// TELAS
 // ============================================================
 
 function esconderTelasMain() {
   ['tela-canal', 'tela-dm', 'tela-conversa', 'tela-amigos', 'tela-buscar'].forEach((id) => {
-    document.getElementById(id).classList.remove('ativa');
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('ativa');
   });
 }
 
@@ -502,11 +528,13 @@ function renderizarPedidos(pedidos) {
     const li = document.createElement('li');
     const info = document.createElement('div');
     info.className = 'info';
-    info.innerHTML = `<span class="nome">${p.nome}</span><span class="email">${p.email}</span>`;
+    info.innerHTML = `
+      <span class="nome">${avatarHTML(p, 'mini')} ${p.nome}</span>
+      <span class="email">${p.email}</span>`;
     const acoes = document.createElement('div');
 
     const btnA = document.createElement('button');
-    btnA.className = 'mini';
+    btnA.className = 'mini verde';
     btnA.textContent = '✅ Aceitar';
     btnA.onclick = () => aceitarPedido(p.amizade_id);
 
@@ -536,8 +564,13 @@ function renderizarAmigos(amigos) {
 
     const info = document.createElement('div');
     info.className = 'info';
-    info.innerHTML = `<span class="nome"><span class="status-dot ${estaOnline ? 'online' : 'offline'}"></span>${a.nome}</span>
-                      <span class="email">${estaOnline ? '🟢 online' : '⚫ offline'}</span>`;
+    info.innerHTML = `
+      <span class="nome">
+        ${avatarHTML(a, 'mini')}
+        <span class="status-dot ${estaOnline ? 'online' : 'offline'}"></span>
+        ${a.nome}
+      </span>
+      <span class="email">${estaOnline ? '🟢 online' : '⚫ offline'}</span>`;
 
     const acoes = document.createElement('div');
 
@@ -570,7 +603,9 @@ function renderizarEnviados(enviados) {
     const li = document.createElement('li');
     const info = document.createElement('div');
     info.className = 'info';
-    info.innerHTML = `<span class="nome">${p.nome}</span><span class="email">${p.email}</span>`;
+    info.innerHTML = `
+      <span class="nome">${avatarHTML(p, 'mini')} ${p.nome}</span>
+      <span class="email">${p.email}</span>`;
     const s = document.createElement('span');
     s.className = 'email';
     s.textContent = '⏳ Pendente';
@@ -628,14 +663,16 @@ function buscarUsuarios() {
       const li = document.createElement('li');
       const info = document.createElement('div');
       info.className = 'info';
-      info.innerHTML = `<span class="nome">${u.nome}</span><span class="email">${u.email}</span>`;
+      info.innerHTML = `
+        <span class="nome">${avatarHTML(u, 'mini')} ${u.nome}</span>
+        <span class="email">${u.email}</span>`;
       const acoes = document.createElement('div');
       if (amigosIds.has(u.id)) acoes.innerHTML = '<span class="email">✅ Já é amigo</span>';
       else if (enviadosIds.has(u.id)) acoes.innerHTML = '<span class="email">⏳ Enviado</span>';
       else if (recebidosIds.has(u.id)) acoes.innerHTML = '<span class="email">📩 Te mandou pedido</span>';
       else {
         const b = document.createElement('button');
-        b.className = 'mini';
+        b.className = 'mini verde';
         b.textContent = '+ Adicionar';
         b.onclick = () => pedirAmizade(u.id);
         acoes.appendChild(b);
@@ -660,7 +697,7 @@ async function pedirAmizade(paraId) {
 }
 
 // ============================================================
-// DMs (conversas)
+// DMs
 // ============================================================
 
 async function carregarConversas() {
@@ -684,7 +721,11 @@ async function carregarConversas() {
       ? `${c.ultima.de_id === meuUsuario.id ? 'Você: ' : ''}${c.ultima.texto}`
       : '(sem mensagens)';
     info.innerHTML = `
-      <span class="nome"><span class="status-dot ${estaOnline ? 'online' : 'offline'}"></span>${c.amigo.nome}</span>
+      <span class="nome">
+        ${avatarHTML(c.amigo, 'mini')}
+        <span class="status-dot ${estaOnline ? 'online' : 'offline'}"></span>
+        ${c.amigo.nome}
+      </span>
       <span class="preview">${escapeHtml(preview)}</span>
     `;
     li.appendChild(info);
@@ -727,11 +768,19 @@ async function abrirConversa(amigo) {
 function adicionarMsgDM(m) {
   const el = document.getElementById('chat-dm');
   const div = document.createElement('div');
-  div.className = 'msg';
-  const ehMinha = m.de_id === meuUsuario.id;
-  div.innerHTML = `<span class="autor">${escapeHtml(m.de_nome || (ehMinha ? 'Você' : '?'))}:</span>
-                   ${escapeHtml(m.texto)}
-                   <span class="hora">${formatarHora(m.hora)}</span>`;
+  div.className = 'msg-com-avatar';
+
+  div.innerHTML = `
+    ${avatarHTML({ nome: m.de_nome, avatar: m.de_avatar })}
+    <div class="msg-conteudo">
+      <div class="msg-linha">
+        <span class="msg-autor">${escapeHtml(m.de_nome || (m.de_id === meuUsuario.id ? 'Você' : '?'))}</span>
+        <span class="msg-hora">${formatarHora(m.hora)}</span>
+      </div>
+      <div class="msg-texto">${escapeHtml(m.texto)}</div>
+    </div>
+  `;
+
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
 }
@@ -749,6 +798,160 @@ async function enviarMsgDM() {
   const data = await r.json();
   if (!r.ok) { alert(data.erro || 'Erro'); return; }
   adicionarMsgDM(data.mensagem);
+}
+
+// ============================================================
+// PERFIL / AVATAR / BANNER / BIO
+// ============================================================
+
+function abrirModalPerfil() {
+  document.getElementById('perfil-nome-display').textContent = meuUsuario.nome;
+  document.getElementById('perfil-email-display').textContent = meuUsuario.email;
+  document.getElementById('perfil-bio').value = meuUsuario.bio || '';
+  atualizarPreviewAvatar(meuUsuario);
+  atualizarPreviewBanner(meuUsuario);
+  document.getElementById('modal-perfil').classList.add('ativo');
+}
+
+function fecharModalPerfil() {
+  document.getElementById('modal-perfil').classList.remove('ativo');
+}
+
+function atualizarPreviewAvatar(usuario) {
+  const el = document.getElementById('avatar-preview');
+  if (usuario.avatar) {
+    el.innerHTML = `<img src="${usuario.avatar}" alt="">`;
+    el.style.background = 'transparent';
+  } else {
+    const inicial = (usuario.nome || '?').charAt(0).toUpperCase();
+    el.innerHTML = inicial;
+    el.style.background = 'linear-gradient(180deg, #38bdf8, #0284c7)';
+  }
+}
+
+function atualizarPreviewBanner(usuario) {
+  const el = document.getElementById('perfil-banner');
+  if (usuario.banner) {
+    el.style.backgroundImage = `url(${usuario.banner})`;
+  } else {
+    el.style.backgroundImage = '';
+  }
+}
+
+async function uploadAvatar(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    alert('Escolha uma imagem');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = async () => {
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width - min) / 2;
+      const sy = (img.height - min) / 2;
+
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+
+      const base64 = canvas.toDataURL('image/jpeg', 0.85);
+
+      const r = await fetch('/api/avatar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar: base64 }),
+      });
+
+      if (!r.ok) { alert('Erro ao salvar avatar'); return; }
+
+      meuUsuario.avatar = base64;
+      atualizarPreviewAvatar(meuUsuario);
+      atualizarAvataresNaUI();
+      tocarSom();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function uploadBanner(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    alert('Escolha uma imagem');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = async () => {
+      const w = 800, h = 300;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+
+      const ratio = Math.max(w / img.width, h / img.height);
+      const nw = img.width * ratio;
+      const nh = img.height * ratio;
+      const sx = (nw - w) / 2 / ratio;
+      const sy = (nh - h) / 2 / ratio;
+      const sw = w / ratio;
+      const sh = h / ratio;
+
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+
+      const base64 = canvas.toDataURL('image/jpeg', 0.85);
+
+      const r = await fetch('/api/banner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ banner: base64 }),
+      });
+
+      if (!r.ok) { alert('Erro ao salvar banner'); return; }
+
+      meuUsuario.banner = base64;
+      atualizarPreviewBanner(meuUsuario);
+      tocarSom();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function salvarBio() {
+  const bio = document.getElementById('perfil-bio').value.trim();
+  if (bio === (meuUsuario.bio || '')) return;
+
+  const r = await fetch('/api/bio', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bio }),
+  });
+
+  if (!r.ok) { alert('Erro ao salvar bio'); return; }
+
+  meuUsuario.bio = bio;
+  tocarSom();
+}
+
+function atualizarAvataresNaUI() {
+  const el = document.getElementById('avatar-usuario');
+  if (el) {
+    el.outerHTML = avatarHTML(meuUsuario, '').replace('class="avatar "', 'id="avatar-usuario" class="avatar"');
+  }
 }
 
 // ============================================================
@@ -774,10 +977,12 @@ function tocarSom() {
   try {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
+    osc.type = 'sine';
     osc.connect(gain);
     gain.connect(audioCtx.destination);
-    osc.frequency.value = 660;
-    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
     osc.start();
     osc.stop(audioCtx.currentTime + 0.2);
@@ -793,11 +998,24 @@ function atualizarTitulo() {
 }
 document.addEventListener('visibilitychange', atualizarTitulo);
 
-// Enter nos inputs
 document.addEventListener('keypress', (e) => {
   if (e.target.id === 'input-canal' && e.key === 'Enter') enviarMsgCanal();
   if (e.target.id === 'input-dm' && e.key === 'Enter') enviarMsgDM();
 });
+
+// ============================================================
+// RESPONSIVO MOBILE
+// ============================================================
+
+function abrirSidebarMobile() {
+  document.getElementById('sidebar-canais').classList.add('aberto');
+  document.getElementById('overlay-mobile').classList.add('ativo');
+}
+
+function fecharSidebarMobile() {
+  document.getElementById('sidebar-canais').classList.remove('aberto');
+  document.getElementById('overlay-mobile').classList.remove('ativo');
+}
 
 // ============================================================
 // INIT

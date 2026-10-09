@@ -10,7 +10,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -29,7 +29,7 @@ function exigirAuth(req, res, next) {
   next();
 }
 
-// ========== ROTAS DE AUTH ==========
+// ========== AUTH ==========
 
 app.post('/api/cadastro', async (req, res) => {
   const { nome, email, senha } = req.body;
@@ -52,13 +52,26 @@ app.post('/api/cadastro', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   const { email, senha } = req.body;
   if (!email || !senha) return res.status(400).json({ erro: 'Preencha tudo' });
+
   const usuario = db.buscarUsuarioPorEmail(email);
   if (!usuario) return res.status(400).json({ erro: 'Email ou senha inválidos' });
+
   const ok = await auth.verificarSenha(senha, usuario.senha_hash);
   if (!ok) return res.status(400).json({ erro: 'Email ou senha inválidos' });
+
   const token = auth.gerarToken(usuario);
   res.cookie('token', token, { httpOnly: true, sameSite: 'lax', maxAge: 30 * 24 * 60 * 60 * 1000 });
-  res.json({ ok: true, usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email } });
+  res.json({
+    ok: true,
+    usuario: {
+      id: usuario.id,
+      nome: usuario.nome,
+      email: usuario.email,
+      avatar: usuario.avatar || '',
+      banner: usuario.banner || '',
+      bio: usuario.bio || '',
+    },
+  });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -72,6 +85,36 @@ app.get('/api/eu', (req, res) => {
   const usuario = db.buscarUsuarioPorId(u.id);
   if (!usuario) return res.status(401).json({ erro: 'Usuário não existe' });
   res.json({ usuario });
+});
+
+// Atualizar avatar
+app.post('/api/avatar', exigirAuth, (req, res) => {
+  const { avatar } = req.body;
+  if (!avatar) return res.status(400).json({ erro: 'Avatar vazio' });
+  if (avatar.length > 800000) return res.status(400).json({ erro: 'Imagem muito grande' });
+  db.atualizarAvatar(req.usuario.id, avatar);
+  io.emit('perfil-atualizado', { usuario_id: req.usuario.id, avatar });
+  res.json({ ok: true });
+});
+
+// Atualizar banner
+app.post('/api/banner', exigirAuth, (req, res) => {
+  const { banner } = req.body;
+  if (!banner) return res.status(400).json({ erro: 'Banner vazio' });
+  if (banner.length > 2500000) return res.status(400).json({ erro: 'Imagem muito grande' });
+  db.atualizarBanner(req.usuario.id, banner);
+  io.emit('perfil-atualizado', { usuario_id: req.usuario.id, banner });
+  res.json({ ok: true });
+});
+
+// Atualizar bio
+app.post('/api/bio', exigirAuth, (req, res) => {
+  const { bio } = req.body;
+  if (typeof bio !== 'string') return res.status(400).json({ erro: 'Bio inválida' });
+  if (bio.length > 200) return res.status(400).json({ erro: 'Bio muito longa (máx 200)' });
+  db.atualizarBio(req.usuario.id, bio);
+  io.emit('perfil-atualizado', { usuario_id: req.usuario.id, bio });
+  res.json({ ok: true });
 });
 
 // ========== AMIZADES ==========
@@ -150,7 +193,7 @@ app.delete('/api/amizades/:id', exigirAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ========== CONVERSAS (DMs) ==========
+// ========== DMs ==========
 
 app.post('/api/conversas/abrir', exigirAuth, (req, res) => {
   const { amigoId } = req.body;
@@ -187,13 +230,14 @@ app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const msg = db.salvarMensagem({ conversaId: id, deId: req.usuario.id, texto: texto.trim() });
   const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
   const socketOutro = [...online.values()].find((u) => u.id === outroId);
+
+  const meusDados = db.buscarUsuarioPorId(req.usuario.id);
+  const payload = { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '' };
+
   if (socketOutro) {
-    io.to(socketOutro.socketId).emit('dm-nova', {
-      conversa_id: id,
-      mensagem: { ...msg, de_nome: req.usuario.nome },
-    });
+    io.to(socketOutro.socketId).emit('dm-nova', { conversa_id: id, mensagem: payload });
   }
-  res.json({ ok: true, mensagem: { ...msg, de_nome: req.usuario.nome } });
+  res.json({ ok: true, mensagem: payload });
 });
 
 app.delete('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
@@ -233,30 +277,25 @@ app.get('/api/servidores/:id', exigirAuth, (req, res) => {
   });
 });
 
-// Entrar via código
 app.post('/api/servidores/entrar', exigirAuth, (req, res) => {
   const { codigo } = req.body;
   if (!codigo) return res.status(400).json({ erro: 'Informe o código' });
   const s = db.buscarServidorPorCodigo(codigo.trim());
   if (!s) return res.status(404).json({ erro: 'Código inválido' });
-
   const entrou = db.adicionarMembro(s.id, req.usuario.id);
   if (!entrou) return res.status(400).json({ erro: 'Você já é membro' });
-
   res.json({ ok: true, servidor: s });
 });
 
-// Sair do servidor
 app.post('/api/servidores/:id/sair', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const s = db.buscarServidorPorId(id);
   if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
-  if (s.dono_id === req.usuario.id) return res.status(400).json({ erro: 'Dono não pode sair, delete o servidor' });
+  if (s.dono_id === req.usuario.id) return res.status(400).json({ erro: 'Dono não pode sair' });
   db.removerMembro(id, req.usuario.id);
   res.json({ ok: true });
 });
 
-// Deletar servidor (só dono)
 app.delete('/api/servidores/:id', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const ok = db.deletarServidor(id, req.usuario.id);
@@ -308,13 +347,14 @@ app.post('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   if (!db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
 
   const msg = db.salvarMensagemCanal({ canalId: id, deId: req.usuario.id, texto: texto.trim() });
+  const meusDados = db.buscarUsuarioPorId(req.usuario.id);
 
   io.to('canal-' + id).emit('canal-nova-msg', {
     canal_id: id,
-    mensagem: { ...msg, de_nome: req.usuario.nome },
+    mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '' },
   });
 
-  res.json({ ok: true, mensagem: { ...msg, de_nome: req.usuario.nome } });
+  res.json({ ok: true, mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '' } });
 });
 
 // ========== SOCKET.IO ==========
@@ -352,7 +392,6 @@ io.on('connection', (socket) => {
 
   notificarListaOnline();
 
-  // Entrar em salas de servidores (pra receber notificações de canal)
   socket.on('entrar-servidores', () => {
     const servidores = db.listarServidoresDoUsuario(socket.usuario.id);
     servidores.forEach((s) => socket.join('servidor-' + s.id));
