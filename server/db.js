@@ -347,8 +347,15 @@ function listarConversas(usuarioId) {
   return conversas.map((c) => {
     const amigo = buscarUsuarioPorId(c.amigo_id);
     const ultima = db.prepare(
-      'SELECT * FROM mensagens WHERE conversa_id = ? ORDER BY id DESC LIMIT 1'
+      `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
+       FROM mensagens m
+       LEFT JOIN usuarios u ON u.id = m.de_id
+       WHERE m.conversa_id = ?
+       ORDER BY m.id DESC LIMIT 1`
     ).get(c.id);
+    if (ultima && ultima.anexo) {
+      try { ultima.anexo = JSON.parse(ultima.anexo); } catch (e) { ultima.anexo = null; }
+    }
     const naoLidas = db.prepare(
       'SELECT COUNT(*) as n FROM mensagens WHERE conversa_id = ? AND de_id != ? AND lida = 0'
     ).get(c.id, usuarioId).n;
@@ -377,17 +384,28 @@ function salvarMensagem({ conversaId, deId, texto, replyId, replyAutor, replyTex
   return buscarMensagemPorId(info.lastInsertRowid);
 }
 
+// 🔥 JOIN pra trazer de_nome e de_avatar
 function buscarMensagemPorId(id) {
-  const m = db.prepare('SELECT * FROM mensagens WHERE id = ?').get(id);
+  const m = db.prepare(
+    `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
+     FROM mensagens m
+     LEFT JOIN usuarios u ON u.id = m.de_id
+     WHERE m.id = ?`
+  ).get(id);
   if (m && m.anexo) {
     try { m.anexo = JSON.parse(m.anexo); } catch (e) { m.anexo = null; }
   }
   return m;
 }
 
+// 🔥 JOIN pra trazer de_nome e de_avatar em TODAS as mensagens
 function listarMensagens(conversaId) {
   const msgs = db.prepare(
-    'SELECT * FROM mensagens WHERE conversa_id = ? ORDER BY id ASC LIMIT 200'
+    `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
+     FROM mensagens m
+     LEFT JOIN usuarios u ON u.id = m.de_id
+     WHERE m.conversa_id = ?
+     ORDER BY m.id ASC LIMIT 200`
   ).all(conversaId);
   return msgs.map((m) => {
     if (m.anexo) {
@@ -565,17 +583,28 @@ function salvarMensagemCanal({ canalId, deId, texto, replyId, replyAutor, replyT
   return buscarMensagemCanalPorId(info.lastInsertRowid);
 }
 
+// 🔥 JOIN pra trazer de_nome e de_avatar
 function buscarMensagemCanalPorId(id) {
-  const m = db.prepare('SELECT * FROM mensagens_canal WHERE id = ?').get(id);
+  const m = db.prepare(
+    `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
+     FROM mensagens_canal m
+     LEFT JOIN usuarios u ON u.id = m.de_id
+     WHERE m.id = ?`
+  ).get(id);
   if (m && m.anexo) {
     try { m.anexo = JSON.parse(m.anexo); } catch (e) { m.anexo = null; }
   }
   return m;
 }
 
+// 🔥 JOIN pra trazer de_nome e de_avatar em TODAS as mensagens
 function listarMensagensCanal(canalId) {
   const msgs = db.prepare(
-    'SELECT * FROM mensagens_canal WHERE canal_id = ? ORDER BY id ASC LIMIT 200'
+    `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
+     FROM mensagens_canal m
+     LEFT JOIN usuarios u ON u.id = m.de_id
+     WHERE m.canal_id = ?
+     ORDER BY m.id ASC LIMIT 200`
   ).all(canalId);
   return msgs.map((m) => {
     if (m.anexo) {
@@ -687,4 +716,4 @@ module.exports = {
   adicionarReacao,
   removerReacao,
   listarReacoesDeMensagens,
-}; 
+};
