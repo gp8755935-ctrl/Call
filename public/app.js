@@ -638,6 +638,7 @@ function renderAnexoHTML(anexo) {
   } catch (e) { return ''; }
   return '';
 }
+
 // ============================================================
 // MEDIA PLAYER
 // ============================================================
@@ -873,11 +874,18 @@ async function fazerCadastro() {
 
 async function fazerLogout() {
   if (!confirm('Sair?')) return;
-  await fetch('/api/logout', { method: 'POST' });
+  try { await fetch('/api/logout', { method: 'POST' }); } catch (e) {}
+  try { localStorage.setItem('void-logout', Date.now()); } catch (e) {}
+  if (socket) { socket.disconnect(); socket = null; }
   location.reload();
 }
 
 function entrarNoApp(usuario) {
+  if (!usuario || !usuario.id) {
+    document.getElementById('tela-auth').style.display = 'flex';
+    document.getElementById('app').classList.remove('ativo');
+    return;
+  }
   meuUsuario = usuario;
   document.getElementById('tela-auth').style.display = 'none';
   document.getElementById('app').classList.add('ativo');
@@ -915,14 +923,8 @@ function conectarSocket() {
 
   socket.on('connect', () => {
     console.log('Conectado como', meuUsuario.nome, '— socket', socket.id);
-
-    // 🔥 Re-entra nos quartos ao reconectar
-    if (servidorAtivo) {
-      socket.emit('entrar-servidores');
-    }
-    if (canalAtivo) {
-      socket.emit('entrar-canal', { canalId: canalAtivo.id });
-    }
+    if (servidorAtivo) socket.emit('entrar-servidores');
+    if (canalAtivo) socket.emit('entrar-canal', { canalId: canalAtivo.id });
   });
 
   socket.on('disconnect', (motivo) => {
@@ -1225,6 +1227,94 @@ function conectarSocket() {
     if (usuarioId === meuUsuario.id) return;
     esconderDigitando('dm');
   });
+}
+
+// ============================================================
+// BLOQUEIOS E SILENCIADOS (estado local)
+// ============================================================
+
+let bloqueadosLocal = new Set();
+let silenciadosUsuarioLocal = new Set();
+let silenciadosServidorLocal = new Set();
+
+function estaBloqueadoLocal(id) { return bloqueadosLocal.has(id); }
+function estaSilenciadoLocal(tipo, id) {
+  if (tipo === 'usuario') return silenciadosUsuarioLocal.has(id);
+  if (tipo === 'servidor') return silenciadosServidorLocal.has(id);
+  return false;
+}
+
+async function carregarBloqueiosESilenciados() {
+  try {
+    const r1 = await fetch('/api/bloqueados');
+    if (r1.ok) {
+      const d1 = await r1.json();
+      bloqueadosLocal = new Set((d1.bloqueados || []).map((b) => b.id));
+    }
+  } catch (e) {}
+}
+
+// ============================================================
+// DIGITANDO
+// ============================================================
+
+function emitirDigitando(contexto) {
+  if (!config.digitando) return;
+  if (!socket) return;
+  const agora = Date.now();
+  if (agora - ultimoEnvioDigitando[contexto] < 800) return;
+  ultimoEnvioDigitando[contexto] = agora;
+
+  if (contexto === 'canal') {
+    if (!canalAtivo) return;
+    socket.emit('digitando-canal', { canalId: canalAtivo.id, nome: meuUsuario.nome });
+  } else {
+    if (!conversaAtual) return;
+    socket.emit('digitando-dm', {
+      conversaId: conversaAtual.conversa_id,
+      paraUsuarioId: conversaAtual.amigo.id,
+      nome: meuUsuario.nome,
+    });
+  }
+
+  clearTimeout(digitandoTimeout[contexto]);
+  digitandoTimeout[contexto] = setTimeout(() => { pararDigitando(contexto); }, 1500);
+}
+
+function pararDigitando(contexto) {
+  if (!socket) return;
+  clearTimeout(digitandoTimeout[contexto]);
+  digitandoTimeout[contexto] = null;
+
+  if (contexto === 'canal') {
+    if (!canalAtivo) return;
+    socket.emit('parou-digitando-canal', { canalId: canalAtivo.id });
+  } else {
+    if (!conversaAtual) return;
+    socket.emit('parou-digitando-dm', {
+      conversaId: conversaAtual.conversa_id,
+      paraUsuarioId: conversaAtual.amigo.id,
+    });
+  }
+}
+
+function mostrarDigitando(contexto, nome) {
+  const barId = contexto === 'canal' ? 'digitando-canal' : 'digitando-dm';
+  const textoId = contexto === 'canal' ? 'digitando-canal-texto' : 'digitando-dm-texto';
+  const bar = document.getElementById(barId);
+  const texto = document.getElementById(textoId);
+  if (!bar || !texto) return;
+  texto.textContent = `${nome} está digitando`;
+  bar.classList.add('ativo');
+  clearTimeout(timeoutAlguemDigitando[contexto]);
+  timeoutAlguemDigitando[contexto] = setTimeout(() => { esconderDigitando(contexto); }, 3000);
+}
+
+function esconderDigitando(contexto) {
+  const barId = contexto === 'canal' ? 'digitando-canal' : 'digitando-dm';
+  const bar = document.getElementById(barId);
+  if (bar) bar.classList.remove('ativo');
+  clearTimeout(timeoutAlguemDigitando[contexto]);
 }
 
 // ============================================================
@@ -1547,6 +1637,7 @@ document.addEventListener('touchstart', (e) => {
 }, { passive: true });
 document.addEventListener('touchmove', (e) => moverSwipe(e), { passive: false });
 document.addEventListener('touchend', terminarSwipe);
+
 // ============================================================
 // SERVIDORES
 // ============================================================
@@ -1669,7 +1760,6 @@ async function abrirServidor(id) {
     document.getElementById('nome-servidor').textContent = data.servidor.nome;
     document.getElementById('codigo-servidor').textContent = 'convite: ' + data.servidor.codigo_convite;
 
-    // 🔥 Guarda silenciado local
     if (data.silenciado) silenciadosServidorLocal.add(data.servidor.id);
     else silenciadosServidorLocal.delete(data.servidor.id);
 
@@ -1770,7 +1860,6 @@ function fecharPainelMembros() {
   painelMembrosAberto = false;
 }
 
-// Fecha painel clicando fora
 document.addEventListener('click', (e) => {
   const painel = document.getElementById('painel-membros');
   if (!painel.classList.contains('aberto')) return;
@@ -2116,10 +2205,6 @@ async function entrarServidor() {
   telaAtual = 'canal';
   abrirServidor(data.servidor.id);
 }
-
-// ============================================================
-// MODAL EDITAR SERVIDOR
-// ============================================================
 
 function abrirModalEditarServidor() {
   if (!servidorAtivo || !servidorAtivo.ehDono) { alert('Só o dono pode editar'); return; }
@@ -3461,7 +3546,7 @@ document.addEventListener('click', (e) => {
 });
 
 // ============================================================
-// HELPERS
+// HELPERS FINAIS
 // ============================================================
 
 function formatarHora(ms) {
@@ -3497,7 +3582,7 @@ document.addEventListener('input', (e) => {
 });
 
 // ============================================================
-// RESPONSIVO MOBILE
+// SIDEBAR MOBILE
 // ============================================================
 
 function abrirSidebarMobile() {
@@ -3511,52 +3596,18 @@ function fecharSidebarMobile() {
 }
 
 // ============================================================
-// INIT
-// ============================================================
-
-window.addEventListener('load', async () => {
-  carregarConfig();
-  bindConfig();
-
-  try {
-    const r = await fetch('/api/eu');
-    if (r.ok) {
-      const data = await r.json();
-      entrarNoApp(data.usuario);
-      await carregarBloqueiosESilenciados();
-    }
-  } catch (e) {}
-
-  document.getElementById('login-senha').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') fazerLogin();
-  });
-  document.getElementById('cad-senha').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') fazerCadastro();
-  });
-
-  const nomeServidorEl = document.getElementById('nome-servidor');
-  if (nomeServidorEl) nomeServidorEl.onclick = abrirModalEditarServidor;
-
-  montarEmojiPicker();
-  montarPickerReacao();
-});
-
-// ============================================================
 // 🔥 KEEP-ALIVE — Mantém a conexão viva no celular
 // ============================================================
 
-// 🔥 Quando a aba volta ao foco (celular), verifica se o socket está vivo
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
     console.log('[VISIBILITY] Aba voltou ao foco');
 
-    // Reconecta o socket se estiver morto
     if (socket && !socket.connected) {
       console.log('[VISIBILITY] Socket morto, reconectando...');
       socket.connect();
     }
 
-    // Recarrega a conversa atual
     if (conversaAtual) {
       fetch(`/api/conversas/${conversaAtual.conversa_id}/mensagens`)
         .then(r => r.json())
@@ -3570,7 +3621,6 @@ document.addEventListener('visibilitychange', () => {
         .catch(() => {});
     }
 
-    // Recarrega o canal atual
     if (canalAtivo) {
       fetch(`/api/canais/${canalAtivo.id}/mensagens`)
         .then(r => r.json())
@@ -3584,7 +3634,6 @@ document.addEventListener('visibilitychange', () => {
         .catch(() => {});
     }
 
-    // Re-entra nos quartos
     if (socket && socket.connected) {
       if (servidorAtivo) socket.emit('entrar-servidores');
       if (canalAtivo) socket.emit('entrar-canal', { canalId: canalAtivo.id });
@@ -3592,7 +3641,6 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// 🔥 Heartbeat a cada 20s — mantém o socket vivo
 setInterval(() => {
   if (socket && !socket.connected) {
     console.log('[HEARTBEAT] Socket morto, reconectando...');
@@ -3600,13 +3648,58 @@ setInterval(() => {
   }
 }, 20000);
 
-// 🔥 Reconecta ao voltar online (celular perdeu sinal e voltou)
 window.addEventListener('online', () => {
   console.log('[ONLINE] Voltou a ter internet');
   if (socket && !socket.connected) socket.connect();
 });
 
-// 🔥 Fecha o socket ao sair
-window.addEventListener('beforeunload', () => {
-  if (socket) socket.disconnect();
+// ============================================================
+// INIT
+// ============================================================
+
+window.addEventListener('load', async () => {
+  carregarConfig();
+  bindConfig();
+
+  try {
+    const r = await fetch('/api/eu', { credentials: 'same-origin' });
+    if (r.ok) {
+      const data = await r.json();
+      if (data && data.usuario && data.usuario.id) {
+        entrarNoApp(data.usuario);
+        await carregarBloqueiosESilenciados();
+      } else {
+        meuUsuario = null;
+        document.getElementById('tela-auth').style.display = 'flex';
+        document.getElementById('app').classList.remove('ativo');
+      }
+    } else {
+      meuUsuario = null;
+      document.getElementById('tela-auth').style.display = 'flex';
+      document.getElementById('app').classList.remove('ativo');
+    }
+  } catch (e) {
+    meuUsuario = null;
+    document.getElementById('tela-auth').style.display = 'flex';
+    document.getElementById('app').classList.remove('ativo');
+  }
+
+  document.getElementById('login-senha').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') fazerLogin();
+  });
+  document.getElementById('cad-senha').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') fazerCadastro();
+  });
+
+  const nomeServidorEl = document.getElementById('nome-servidor');
+  if (nomeServidorEl) nomeServidorEl.onclick = abrirModalEditarServidor;
+
+  montarEmojiPicker();
+  montarPickerReacao();
+
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'void-logout') {
+      location.reload();
+    }
+  });
 });
