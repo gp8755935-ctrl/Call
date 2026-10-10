@@ -529,7 +529,7 @@
       flex-shrink: 0;
     }
 
-    /* AVATAR */
+    /* AVATAR — garante que NÃO haja filter/opacity indesejado */
     .avatar {
       width: 40px; height: 40px;
       border-radius: 50%;
@@ -543,11 +543,13 @@
       color: white; font-weight: 900; font-size: 16px;
       text-shadow: 0 1px 2px rgba(0,0,0,0.2);
       overflow: hidden;
+      filter: none !important;
+      opacity: 1 !important;
     }
     .avatar.mini { width: 28px; height: 28px; font-size: 12px; border-width: 1.5px; }
     .avatar.grande { width: 96px; height: 96px; font-size: 36px; border-width: 3px; }
     .avatar.gigante { width: 110px; height: 110px; font-size: 40px; border-width: 4px; }
-    .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; filter: none; opacity: 1; }
 
     /* MENSAGENS COM AVATAR */
     .msg-com-avatar {
@@ -1092,7 +1094,7 @@
       position: relative; z-index: 1;
     }
 
-    /* MODAL DE PERFIL */
+    /* ===== MODAL DE PERFIL (edição e visita) ===== */
     .modal-perfil {
       padding: 0 !important;
       overflow: hidden;
@@ -1104,7 +1106,6 @@
       position: relative;
       width: 100%;
       height: 150px;
-      cursor: pointer;
       overflow: hidden;
       background: linear-gradient(135deg,
         rgba(56, 189, 248, 0.5),
@@ -1119,25 +1120,60 @@
       background-position: center;
       background-repeat: no-repeat;
       transition: transform 0.3s;
+      /* 🔥 garante que a imagem do banner não seja escurecida */
+      filter: none !important;
+      opacity: 1 !important;
     }
-    .perfil-banner:hover .perfil-banner-img {
-      transform: scale(1.05);
-    }
-    .perfil-banner-overlay {
+
+    /* Botão de fechar no canto do modal de visita */
+    .modal-fechar {
       position: absolute;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.5);
+      top: 10px;
+      right: 10px;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.95);
+      border: 2px solid rgba(255, 255, 255, 1);
+      color: var(--texto-medio);
+      font-size: 16px;
+      line-height: 1;
       display: flex;
       align-items: center;
       justify-content: center;
+      cursor: pointer;
+      z-index: 5;
+      box-shadow: 0 2px 10px rgba(2, 132, 199, 0.3);
+      padding: 0;
+      font-weight: 900;
+    }
+    .modal-fechar::before { display: none; }
+    .modal-fechar:hover {
+      background: white;
+      transform: scale(1.1);
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
+    }
+
+    /* ===== sobreposição de edição (só quando for o próprio perfil) ===== */
+    .perfil-banner.clicavel { cursor: pointer; }
+    .perfil-banner-overlay {
+      position: absolute;
+      inset: 0;
+      /* 🔥 NÃO usar rgba(0,0,0,0.5) — isso escurece a foto */
+      background: linear-gradient(180deg, rgba(2,132,199,0.0), rgba(2,132,199,0.45));
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 10px;
       color: white;
       font-weight: 800;
-      font-size: 14px;
+      font-size: 13px;
       opacity: 0;
       transition: opacity 0.2s;
       pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.4);
     }
-    .perfil-banner:hover .perfil-banner-overlay {
+    .perfil-banner.clicavel:hover .perfil-banner-overlay {
       opacity: 1;
     }
 
@@ -1160,9 +1196,10 @@
     .avatar-overlay {
       position: absolute; inset: 0;
       border-radius: 50%;
-      background: rgba(0, 0, 0, 0.5);
+      /* 🔥 Só um leve tingimento, sem preto pesado */
+      background: rgba(2, 132, 199, 0.35);
       display: flex; align-items: center; justify-content: center;
-      color: white; font-size: 32px;
+      color: white; font-size: 28px;
       opacity: 0; transition: opacity 0.2s;
       pointer-events: none;
     }
@@ -1193,6 +1230,19 @@
       text-transform: uppercase;
       letter-spacing: 1px;
       text-shadow: 0 1px 0 rgba(255,255,255,0.8);
+    }
+    .perfil-bio-texto {
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.55);
+      border: 1.5px solid rgba(255, 255, 255, 0.9);
+      border-radius: 14px;
+      color: var(--texto-escuro);
+      font-size: 13px;
+      line-height: 1.5;
+      font-weight: 600;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
 
     .modal-perfil .acoes {
@@ -1599,10 +1649,10 @@
     </div>
   </div>
 
-  <!-- MODAL PERFIL -->
+  <!-- ============ MODAL PERFIL (EDIÇÃO DO PRÓPRIO) ============ -->
   <div id="modal-perfil" class="modal-bg">
     <div class="modal modal-perfil">
-      <div class="perfil-banner" id="perfil-banner-container"
+      <div class="perfil-banner clicavel" id="perfil-banner-container"
            onclick="document.getElementById('input-banner').click()">
         <div id="perfil-banner" class="perfil-banner-img"></div>
         <div class="perfil-banner-overlay">
@@ -1632,6 +1682,33 @@
 
       <div class="acoes">
         <button class="secundario" onclick="fecharModalPerfil()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL VISITAR PERFIL (OUTRA PESSOA) ============ -->
+  <div id="modal-perfil-visita" class="modal-bg">
+    <div class="modal modal-perfil">
+      <button class="modal-fechar" onclick="fecharPerfilVisitado()">✕</button>
+
+      <div class="perfil-banner">
+        <div id="visita-banner" class="perfil-banner-img"></div>
+      </div>
+
+      <div class="perfil-avatar-wrapper">
+        <div class="avatar-container">
+          <div id="visita-avatar" class="avatar gigante"></div>
+        </div>
+      </div>
+
+      <div class="perfil-info">
+        <h3 id="visita-nome">...</h3>
+        <p id="visita-email">...</p>
+        <div id="visita-bio" class="perfil-bio-texto">Sem descrição.</div>
+      </div>
+
+      <div class="acoes">
+        <button class="secundario" onclick="fecharPerfilVisitado()">Fechar</button>
       </div>
     </div>
   </div>

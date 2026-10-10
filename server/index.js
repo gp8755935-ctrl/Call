@@ -569,10 +569,15 @@ function notificarListaOnline() {
 io.on('connection', (socket) => {
   console.log('conectado:', socket.usuario.nome, socket.id);
 
+  // 🔥 MODIFICADO: agora inclui avatar, banner e bio
+  const dadosCompletos = db.buscarUsuarioPorId(socket.usuario.id) || {};
   online.set(socket.id, {
     id: socket.usuario.id,
     nome: socket.usuario.nome,
     email: socket.usuario.email,
+    avatar: dadosCompletos.avatar || '',
+    banner: dadosCompletos.banner || '',
+    bio: dadosCompletos.bio || '',
     socketId: socket.id,
   });
 

@@ -1,14 +1,15 @@
 // Helper: gera HTML do avatar
-function avatarHTML(usuario, classe = '') {
+function avatarHTML(usuario, classe = '', onclick = null) {
   if (!usuario) return '';
   const cls = 'avatar ' + classe;
+  const attr = onclick ? ` onclick="${onclick}" style="cursor:pointer"` : '';
   if (usuario.avatar) {
-    return `<div class="${cls}"><img src="${usuario.avatar}" alt=""></div>`;
+    return `<div class="${cls}"${attr}><img src="${usuario.avatar}" alt=""></div>`;
   }
   const inicial = (usuario.nome || '?').charAt(0).toUpperCase();
   const cores = ['#0284c7', '#0891b2', '#16a34a', '#7c3aed', '#db2777', '#ea580c'];
   const cor = cores[(usuario.nome || '').charCodeAt(0) % cores.length];
-  return `<div class="${cls}" style="background: linear-gradient(180deg, ${cor}99, ${cor})">${inicial}</div>`;
+  return `<div class="${cls}"${attr} style="background: linear-gradient(180deg, ${cor}99, ${cor})${onclick ? '; cursor:pointer' : ''}">${inicial}</div>`;
 }
 
 // Lista de emojis
@@ -255,17 +256,35 @@ function montarEmojiPicker() {
   ['emoji-picker-canal', 'emoji-picker-dm'].forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
+
     let html = '';
     for (const [categoria, emojis] of Object.entries(EMOJIS)) {
       html += `<div class="emoji-categoria">${categoria}</div>`;
       html += `<div class="emoji-grid">`;
       emojis.forEach((e) => {
-        html += `<span onclick="inserirEmoji('${id}', '${e}')">${e}</span>`;
+        html += `<span data-emoji="${e}">${e}</span>`;
       });
       html += `</div>`;
     }
     el.innerHTML = html;
+
+    el.addEventListener('click', (e) => {
+      const span = e.target.closest('span[data-emoji]');
+      if (!span) return;
+      e.stopPropagation();
+      const emoji = span.getAttribute('data-emoji');
+      inserirEmoji(id, emoji);
+    });
   });
+}
+
+function inserirEmoji(pickerId, emoji) {
+  const inputId = pickerId === 'emoji-picker-canal' ? 'input-canal' : 'input-dm';
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  input.value += emoji;
+  input.focus();
+  document.getElementById(pickerId).classList.remove('ativo');
 }
 
 function toggleEmojiPicker(contexto) {
@@ -285,18 +304,14 @@ function toggleEmojiPicker(contexto) {
 
   el.classList.add('ativo');
 
-  // 🔥 Pega a largura real da janela
   const windowWidth = window.innerWidth;
   const isMobile = windowWidth <= 768;
-
-  // 🔥 No mobile, o picker ocupa quase toda a largura
   const margem = 12;
   const larguraMax = isMobile ? (windowWidth - margem * 2) : 340;
 
   el.style.width = larguraMax + 'px';
   el.style.maxWidth = larguraMax + 'px';
 
-  // 🔥 Calcula altura depois de setar a largura (emoji grid muda)
   const altura = Math.min(320, el.scrollHeight || 320);
   const rect = input.getBoundingClientRect();
   const espacoAcima = rect.top;
@@ -313,7 +328,6 @@ function toggleEmojiPicker(contexto) {
       : window.innerHeight - altura - 10;
   }
 
-  // 🔥 Calcula left pra centralizar e nunca sair da tela
   let left;
   if (isMobile) {
     left = margem;
@@ -329,6 +343,16 @@ function toggleEmojiPicker(contexto) {
   el.style.left = left + 'px';
   el.style.bottom = 'auto';
 }
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.emoji-picker')) return;
+  if (e.target.closest('.emoji-btn')) return;
+
+  document.querySelectorAll('.emoji-picker.ativo').forEach((el) => {
+    el.classList.remove('ativo');
+  });
+});
+
 document.addEventListener('scroll', (e) => {
   if (e.target && e.target.closest && e.target.closest('.chat-area')) {
     document.querySelectorAll('.emoji-picker.ativo').forEach((el) => {
@@ -336,6 +360,20 @@ document.addEventListener('scroll', (e) => {
     });
   }
 }, true);
+
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.emoji-picker.ativo').forEach((el) => {
+    el.classList.remove('ativo');
+  });
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.emoji-picker.ativo').forEach((el) => {
+      el.classList.remove('ativo');
+    });
+  }
+});
 
 // ============================================================
 // REPLY (responder)
@@ -365,8 +403,7 @@ function cancelarReply(contexto) {
 }
 
 // ============================================================
-// SWIPE TO REPLY
-// ============================================================
+// SWIPE TO REPLY// ============================================================
 
 let swipeEstado = {
   ativo: false,
@@ -600,8 +637,10 @@ function renderizarMembros() {
     d.className = 'membro-item';
     const estaOnline = onlineIds.has(m.id);
 
+    // 🔥 foto clicável → abre perfil visitado
+    const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(m).replace(/"/g, '&quot;')})`;
     d.innerHTML = `
-      ${avatarHTML(m, 'mini')}
+      ${avatarHTML(m, 'mini', onclickAttr)}
       <span class="dot ${estaOnline ? 'online' : 'offline'}"></span>
       <span>${escapeHtml(m.nome)}</span>
       ${m.id === servidorAtivo.servidor.dono_id ? '<span class="dono">dono</span>' : ''}
@@ -684,7 +723,6 @@ function enviarMsgCanal() {
     body: JSON.stringify(body),
   }).then(async (r) => {
     if (!r.ok) { alert('Erro ao enviar'); return; }
-    // 🔥 scroll pro final
     const el = document.getElementById('chat-canal');
     setTimeout(() => { el.scrollTop = el.scrollHeight; }, 100);
   });
@@ -731,9 +769,13 @@ function criarElMsg(m, chatId, contexto) {
   const reacoes = m.reacoes || {};
   const reply = replyHTML(m);
 
+  // 🔥 avatar na mensagem também é clicável → abre perfil
+  const usuarioMsg = { nome: m.de_nome, avatar: m.de_avatar, id: m.de_id };
+  const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(usuarioMsg).replace(/"/g, '&quot;')})`;
+
   div.innerHTML = `
     <div class="msg-reply-hint">↩️</div>
-    ${avatarHTML({ nome: m.de_nome, avatar: m.de_avatar })}
+    ${avatarHTML(usuarioMsg, '', onclickAttr)}
     <div class="msg-conteudo">
       <div class="msg-linha">
         <span class="msg-autor">${escapeHtml(m.de_nome || (ehMinha ? 'Você' : '?'))}</span>
@@ -1180,8 +1222,9 @@ function renderizarPedidos(pedidos) {
     const li = document.createElement('li');
     const info = document.createElement('div');
     info.className = 'info';
+    const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(p).replace(/"/g, '&quot;')})`;
     info.innerHTML = `
-      <span class="nome">${avatarHTML(p, 'mini')} ${p.nome}</span>
+      <span class="nome">${avatarHTML(p, 'mini', onclickAttr)} ${p.nome}</span>
       <span class="email">${p.email}</span>`;
     const acoes = document.createElement('div');
 
@@ -1216,9 +1259,10 @@ function renderizarAmigos(amigos) {
 
     const info = document.createElement('div');
     info.className = 'info';
+    const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(a).replace(/"/g, '&quot;')})`;
     info.innerHTML = `
       <span class="nome">
-        ${avatarHTML(a, 'mini')}
+        ${avatarHTML(a, 'mini', onclickAttr)}
         <span class="status-dot ${estaOnline ? 'online' : 'offline'}"></span>
         ${a.nome}
       </span>
@@ -1255,8 +1299,9 @@ function renderizarEnviados(enviados) {
     const li = document.createElement('li');
     const info = document.createElement('div');
     info.className = 'info';
+    const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(p).replace(/"/g, '&quot;')})`;
     info.innerHTML = `
-      <span class="nome">${avatarHTML(p, 'mini')} ${p.nome}</span>
+      <span class="nome">${avatarHTML(p, 'mini', onclickAttr)} ${p.nome}</span>
       <span class="email">${p.email}</span>`;
     const s = document.createElement('span');
     s.className = 'email';
@@ -1315,8 +1360,9 @@ function buscarUsuarios() {
       const li = document.createElement('li');
       const info = document.createElement('div');
       info.className = 'info';
+      const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(u).replace(/"/g, '&quot;')})`;
       info.innerHTML = `
-        <span class="nome">${avatarHTML(u, 'mini')} ${u.nome}</span>
+        <span class="nome">${avatarHTML(u, 'mini', onclickAttr)} ${u.nome}</span>
         <span class="email">${u.email}</span>`;
       const acoes = document.createElement('div');
       if (amigosIds.has(u.id)) acoes.innerHTML = '<span class="email">✅ Já é amigo</span>';
@@ -1372,9 +1418,10 @@ async function carregarConversas() {
     const preview = c.ultima
       ? `${c.ultima.de_id === meuUsuario.id ? 'Você: ' : ''}${c.ultima.texto}`
       : '(sem mensagens)';
+    const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(c.amigo).replace(/"/g, '&quot;')})`;
     info.innerHTML = `
       <span class="nome">
-        ${avatarHTML(c.amigo, 'mini')}
+        ${avatarHTML(c.amigo, 'mini', onclickAttr)}
         <span class="status-dot ${estaOnline ? 'online' : 'offline'}"></span>
         ${c.amigo.nome}
       </span>
@@ -1387,7 +1434,11 @@ async function carregarConversas() {
       b.textContent = c.nao_lidas;
       li.appendChild(b);
     }
-    li.onclick = () => abrirConversa(c.amigo);
+    li.onclick = (e) => {
+      // se clicou no avatar, não abre a conversa
+      if (e.target.closest('.avatar')) return;
+      abrirConversa(c.amigo);
+    };
     ul.appendChild(li);
   });
 }
@@ -1446,13 +1497,12 @@ async function enviarMsgDM() {
   if (!r.ok) { alert(data.erro || 'Erro'); return; }
   adicionarMsgDM(data.mensagem);
 
-  // 🔥 scroll pro final
   const el = document.getElementById('chat-dm');
   setTimeout(() => { el.scrollTop = el.scrollHeight; }, 100);
 }
 
 // ============================================================
-// PERFIL
+// PERFIL — EDIÇÃO
 // ============================================================
 
 function abrirModalPerfil() {
@@ -1505,12 +1555,73 @@ async function salvarBio() {
   tocarSom();
 }
 
+// 🔥 CORRIGIDO: não substitui mais o outerHTML do elemento inteiro.
+// Só atualiza o conteúdo interno do #avatar-usuario.
 function atualizarAvataresNaUI() {
   const el = document.getElementById('avatar-usuario');
-  if (el) {
-    el.outerHTML = avatarHTML(meuUsuario, '').replace('class="avatar "', 'id="avatar-usuario" class="avatar"');
+  if (!el) return;
+  el.className = 'avatar';
+  el.removeAttribute('style');
+  if (meuUsuario.avatar) {
+    el.innerHTML = `<img src="${meuUsuario.avatar}" alt="">`;
+  } else {
+    const inicial = (meuUsuario.nome || '?').charAt(0).toUpperCase();
+    el.innerHTML = inicial;
+    el.style.background = 'linear-gradient(180deg, #38bdf8, #0284c7)';
   }
 }
+
+// ============================================================
+// PERFIL — VISITA (outra pessoa)
+// ============================================================
+
+function abrirPerfilVisitado(usuario) {
+  if (!usuario || !usuario.nome) return;
+
+  // se for você mesmo, abre o modal de edição
+  if (meuUsuario && usuario.id === meuUsuario.id) {
+    abrirModalPerfil();
+    return;
+  }
+
+  document.getElementById('visita-nome').textContent = usuario.nome;
+  document.getElementById('visita-email').textContent = usuario.email || '';
+
+  // avatar
+  const avatarEl = document.getElementById('visita-avatar');
+  if (usuario.avatar) {
+    avatarEl.innerHTML = `<img src="${usuario.avatar}" alt="">`;
+    avatarEl.style.background = 'transparent';
+  } else {
+    const inicial = (usuario.nome || '?').charAt(0).toUpperCase();
+    avatarEl.innerHTML = inicial;
+    avatarEl.style.background = 'linear-gradient(180deg, #38bdf8, #0284c7)';
+  }
+
+  // banner
+  const bannerEl = document.getElementById('visita-banner');
+  if (usuario.banner) {
+    bannerEl.style.backgroundImage = `url(${usuario.banner})`;
+  } else {
+    bannerEl.style.backgroundImage = '';
+  }
+
+  // bio
+  document.getElementById('visita-bio').textContent =
+    (usuario.bio && usuario.bio.trim()) ? usuario.bio : 'Sem descrição.';
+
+  document.getElementById('modal-perfil-visita').classList.add('ativo');
+}
+
+function fecharPerfilVisitado() {
+  document.getElementById('modal-perfil-visita').classList.remove('ativo');
+}
+
+// fechar ao clicar no fundo
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'modal-perfil-visita') fecharPerfilVisitado();
+  if (e.target.id === 'modal-perfil') fecharModalPerfil();
+});
 
 // ============================================================
 // UPLOAD
