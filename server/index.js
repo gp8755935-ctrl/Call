@@ -13,11 +13,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Pasta de uploads (cria se não existir)
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
-// Configuração do multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOADS_DIR),
   filename: (req, file, cb) => {
@@ -30,28 +28,27 @@ const storage = multer.diskStorage({
 const TIPOS_PERMITIDOS = {
   foto: {
     mimes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'],
-    max: 10 * 1024 * 1024, // 10MB
+    max: 10 * 1024 * 1024,
   },
   video: {
     mimes: ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-matroska'],
-    max: 100 * 1024 * 1024, // 100MB
+    max: 100 * 1024 * 1024,
   },
   arquivo: {
-    mimes: null, // qualquer um
-    max: 100 * 1024 * 1024, // 100MB
+    mimes: null,
+    max: 100 * 1024 * 1024,
   },
 };
 
 const upload = multer({
   storage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // limite global
+  limits: { fileSize: 100 * 1024 * 1024 },
 });
 
 app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// Serve os uploads (com proteção básica)
 app.get('/uploads/:filename', (req, res) => {
   const filename = path.basename(req.params.filename);
   const filepath = path.join(UPLOADS_DIR, filename);
@@ -83,14 +80,12 @@ app.post('/api/upload', exigirAuth, upload.single('arquivo'), (req, res) => {
     const tipoSolicitado = (req.body.tipo || 'arquivo').toLowerCase();
     const regras = TIPOS_PERMITIDOS[tipoSolicitado] || TIPOS_PERMITIDOS.arquivo;
 
-    // Verifica tamanho
     if (req.file.size > regras.max) {
       fs.unlinkSync(req.file.path);
       const mb = (regras.max / 1024 / 1024).toFixed(0);
       return res.status(400).json({ erro: `Arquivo muito grande (máx ${mb}MB para ${tipoSolicitado})` });
     }
 
-    // Verifica mime
     if (regras.mimes && !regras.mimes.includes(req.file.mimetype)) {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ erro: `Tipo não permitido para ${tipoSolicitado}` });
@@ -619,7 +614,6 @@ app.delete('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) 
     return res.status(403).json({ erro: 'Sem permissão' });
   }
 
-  // Remove o arquivo do disco, se houver
   if (msg.anexo && msg.anexo.url && msg.anexo.url.startsWith('/uploads/')) {
     const filename = path.basename(msg.anexo.url);
     const filepath = path.join(UPLOADS_DIR, filename);
@@ -681,6 +675,8 @@ io.on('connection', (socket) => {
     servidores.forEach((s) => socket.join('servidor-' + s.id));
   });
 
+  // 🔥 MODIFICADO: só ENTRA no room, NUNCA sai.
+  // Assim o socket continua recebendo msg de canais visitados anteriormente.
   socket.on('entrar-canal', ({ canalId }) => {
     const c = db.buscarCanalPorId(canalId);
     if (!c) return;
@@ -688,9 +684,11 @@ io.on('connection', (socket) => {
     socket.join('canal-' + canalId);
   });
 
-  socket.on('sair-canal', ({ canalId }) => {
-    socket.leave('canal-' + canalId);
-  });
+  // 🔥 REMOVIDO: 'sair-canal' não existe mais.
+  // Se quiser implementar saída de servidor depois, dá pra fazer.
+  // socket.on('sair-canal', ({ canalId }) => {
+  //   socket.leave('canal-' + canalId);
+  // });
 
   socket.on('digitando-canal', ({ canalId, nome }) => {
     socket.to('canal-' + canalId).emit('alguem-digitando-canal', {
@@ -731,4 +729,4 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
-}); 
+});

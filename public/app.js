@@ -57,7 +57,6 @@ let anexoTipo = null;
 
 let longPressTimer = null;
 
-// CONFIG
 const CONFIG_PADRAO = {
   somMsg: true,
   somReacao: true,
@@ -406,8 +405,8 @@ function abrirMenuAnexo(event, btn, contexto) {
   requestAnimationFrame(() => {
     const rect = btn.getBoundingClientRect();
     const mRect = menu.getBoundingClientRect();
-    const mW = mRect.width || 220;
-    const mH = mRect.height || 280;
+    const mW = mRect.width || 240;
+    const mH = mRect.height || 320;
 
     let top = rect.top - mH - 8;
     let left = rect.left;
@@ -642,7 +641,6 @@ function renderAnexoHTML(anexo) {
       </div>`;
     }
 
-    // ÁUDIO
     if (a.tipo === 'arquivo' && ehArquivoDeAudio(a)) {
       const idUnico = 'audio-' + Math.random().toString(36).slice(2, 10);
       return `<div class="msg-anexo">
@@ -913,7 +911,6 @@ function inicializarMediaPlayers(container) {
   });
 }
 
-// Abrir imagem em modal
 document.addEventListener('click', (e) => {
   const img = e.target.closest('.msg-anexo-imagem');
   if (!img) return;
@@ -1477,11 +1474,9 @@ document.addEventListener('keydown', (e) => {
     fecharImagem();
     fecharMenuAnexo();
 
-    // Fecha câmera
     const modalCamera = document.getElementById('modal-camera');
     if (modalCamera && modalCamera.classList.contains('ativo')) fecharCamera();
 
-    // Cancela gravação se estiver ativa
     if (gravacaoEstado.ativo) cancelarGravacao();
   }
 });
@@ -1870,7 +1865,8 @@ function atualizarMembrosOnline() {
 }
 
 async function abrirCanal(canal) {
-  if (canalAtivo) socket.emit('sair-canal', { canalId: canalAtivo.id });
+  // 🔥 NÃO emite mais 'sair-canal' — o socket fica em todos os rooms.
+  // Assim continua recebendo notificações de canais visitados anteriormente.
 
   pararDigitando('canal');
   esconderDigitando('canal');
@@ -3050,20 +3046,11 @@ function fecharEditor() {
 // ============================================================
 
 let gravacaoEstado = {
-  ativo: false,
-  gravando: false,
-  mediaRecorder: null,
-  chunks: [],
-  stream: null,
-  blob: null,
-  inicio: 0,
-  timerInterval: null,
-  barsInterval: null,
-  audioCtxAnalyser: null,
-  audioCtxSource: null,
-  audioCtx: null,
-  duracao: 0,
-  contexto: null,
+  ativo: false, gravando: false, mediaRecorder: null,
+  chunks: [], stream: null, blob: null, inicio: 0,
+  timerInterval: null, barsInterval: null,
+  audioCtxAnalyser: null, audioCtxSource: null, audioCtx: null,
+  duracao: 0, contexto: null,
 };
 
 const GRAVACAO_MAX_SEGUNDOS = 120;
@@ -3214,9 +3201,7 @@ function iniciarTimerGravacao() {
     const m = Math.floor(seg / 60);
     const s = seg % 60;
     el.textContent = `${m}:${s.toString().padStart(2, '0')}`;
-    if (seg >= GRAVACAO_MAX_SEGUNDOS) {
-      pararGravacao();
-    }
+    if (seg >= GRAVACAO_MAX_SEGUNDOS) pararGravacao();
   }, 200);
 }
 
@@ -3239,9 +3224,7 @@ function iniciarBarsGravacao() {
     gravacaoEstado.audioCtx = audioCtx;
     gravacaoEstado.audioCtxAnalyser = analyser;
     gravacaoEstado.audioCtxSource = source;
-  } catch (e) {
-    analyser = null;
-  }
+  } catch (e) { analyser = null; }
 
   const dataArray = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
 
@@ -3264,8 +3247,7 @@ function iniciarBarsGravacao() {
 function pararBarsGravacao() {
   clearInterval(gravacaoEstado.barsInterval);
   gravacaoEstado.barsInterval = null;
-  const bars = document.querySelectorAll('#gravacao-bars span');
-  bars.forEach((bar) => { bar.style.height = '6px'; });
+  document.querySelectorAll('#gravacao-bars span').forEach((bar) => { bar.style.height = '6px'; });
   if (gravacaoEstado.audioCtx) {
     try { gravacaoEstado.audioCtx.close(); } catch (e) {}
     gravacaoEstado.audioCtx = null;
@@ -3388,10 +3370,7 @@ function finalizarGravacaoEstado() {
   dica.textContent = 'Segure o botão pra gravar';
 
   const audio = document.getElementById('preview-audio');
-  if (audio) {
-    audio.pause();
-    audio.src = '';
-  }
+  if (audio) { audio.pause(); audio.src = ''; }
   const barraFill = document.getElementById('preview-barra-fill');
   if (barraFill) barraFill.style.width = '0%';
 
@@ -3401,20 +3380,11 @@ function finalizarGravacaoEstado() {
   if (inputDM) inputDM.disabled = false;
 
   gravacaoEstado = {
-    ativo: false,
-    gravando: false,
-    mediaRecorder: null,
-    chunks: [],
-    stream: null,
-    blob: null,
-    inicio: 0,
-    timerInterval: null,
-    barsInterval: null,
-    audioCtxAnalyser: null,
-    audioCtxSource: null,
-    audioCtx: null,
-    duracao: 0,
-    contexto: null,
+    ativo: false, gravando: false, mediaRecorder: null,
+    chunks: [], stream: null, blob: null, inicio: 0,
+    timerInterval: null, barsInterval: null,
+    audioCtxAnalyser: null, audioCtxSource: null, audioCtx: null,
+    duracao: 0, contexto: null,
   };
 }
 
@@ -3451,19 +3421,58 @@ async function abrirCamera(contexto) {
   controlesFoto.style.display = 'none';
   canvas.style.display = 'none';
 
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false,
-    });
-  } catch (e) {
-    alert('Não foi possível acessar a câmera.\nVerifique as permissões do navegador.');
+  // 🔥 Lista de tentativas de constraints — da mais específica pra mais genérica
+  const tentativas = [
+    { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+    { video: { facingMode: 'user' }, audio: false },
+    { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+    { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+    { video: true, audio: false },
+  ];
+
+  let stream = null;
+  let ultimoErro = null;
+
+  for (const constraints of tentativas) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('✅ Câmera aberta com:', JSON.stringify(constraints));
+      break;
+    } catch (e) {
+      ultimoErro = e;
+      console.warn('❌ Falhou:', JSON.stringify(constraints), '→', e.name, e.message);
+    }
+  }
+
+  if (!stream) {
+    let msg = 'Não foi possível acessar a câmera.\n\n';
+    if (ultimoErro) {
+      msg += 'Erro: ' + ultimoErro.name + '\n';
+      if (ultimoErro.name === 'NotAllowedError') {
+        msg += 'Você precisa permitir o acesso à câmera nas configurações do navegador.';
+      } else if (ultimoErro.name === 'NotFoundError') {
+        msg += 'Nenhuma câmera foi encontrada no seu dispositivo.';
+      } else if (ultimoErro.name === 'NotReadableError') {
+        msg += 'A câmera está sendo usada por outro programa (Zoom, Teams, OBS, etc). Feche ele e tente de novo.';
+      } else if (ultimoErro.name === 'OverconstrainedError') {
+        msg += 'Sua câmera não suporta as configurações solicitadas.';
+      } else if (ultimoErro.name === 'SecurityError') {
+        msg += 'Acesso bloqueado por segurança. Use HTTPS ou localhost.';
+      } else {
+        msg += ultimoErro.message || 'Erro desconhecido.';
+      }
+    }
+    alert(msg);
     return;
   }
 
   cameraEstado.stream = stream;
   video.srcObject = stream;
+
+  video.onloadedmetadata = () => {
+    video.play().catch(() => {});
+  };
+
   modal.classList.add('ativo');
 }
 
@@ -3562,10 +3571,6 @@ function atualizarTitulo() {
   }
 }
 document.addEventListener('visibilitychange', atualizarTitulo);
-
-// ============================================================
-// INPUTS — digitando + Enter
-// ============================================================
 
 document.addEventListener('keypress', (e) => {
   if (e.target.id === 'input-canal' && e.key === 'Enter') enviarMsgCanal();
