@@ -45,7 +45,8 @@ db.exec(`
     editado INTEGER NOT NULL DEFAULT 0,
     reply_id INTEGER DEFAULT NULL,
     reply_autor TEXT DEFAULT NULL,
-    reply_texto TEXT DEFAULT NULL
+    reply_texto TEXT DEFAULT NULL,
+    anexo TEXT DEFAULT NULL
   );
 
   CREATE TABLE IF NOT EXISTS servidores (
@@ -81,7 +82,8 @@ db.exec(`
     editado INTEGER NOT NULL DEFAULT 0,
     reply_id INTEGER DEFAULT NULL,
     reply_autor TEXT DEFAULT NULL,
-    reply_texto TEXT DEFAULT NULL
+    reply_texto TEXT DEFAULT NULL,
+    anexo TEXT DEFAULT NULL
   );
 
   CREATE TABLE IF NOT EXISTS reacoes (
@@ -120,12 +122,14 @@ function migrar() {
   if (!colsM.includes('reply_id')) db.exec("ALTER TABLE mensagens ADD COLUMN reply_id INTEGER DEFAULT NULL");
   if (!colsM.includes('reply_autor')) db.exec("ALTER TABLE mensagens ADD COLUMN reply_autor TEXT DEFAULT NULL");
   if (!colsM.includes('reply_texto')) db.exec("ALTER TABLE mensagens ADD COLUMN reply_texto TEXT DEFAULT NULL");
+  if (!colsM.includes('anexo')) db.exec("ALTER TABLE mensagens ADD COLUMN anexo TEXT DEFAULT NULL");
 
   const colsMC = db.prepare('PRAGMA table_info(mensagens_canal)').all().map(c => c.name);
   if (!colsMC.includes('editado')) db.exec("ALTER TABLE mensagens_canal ADD COLUMN editado INTEGER NOT NULL DEFAULT 0");
   if (!colsMC.includes('reply_id')) db.exec("ALTER TABLE mensagens_canal ADD COLUMN reply_id INTEGER DEFAULT NULL");
   if (!colsMC.includes('reply_autor')) db.exec("ALTER TABLE mensagens_canal ADD COLUMN reply_autor TEXT DEFAULT NULL");
   if (!colsMC.includes('reply_texto')) db.exec("ALTER TABLE mensagens_canal ADD COLUMN reply_texto TEXT DEFAULT NULL");
+  if (!colsMC.includes('anexo')) db.exec("ALTER TABLE mensagens_canal ADD COLUMN anexo TEXT DEFAULT NULL");
 }
 migrar();
 
@@ -284,30 +288,39 @@ function listarConversas(usuarioId) {
   return resultado;
 }
 
-function salvarMensagem({ conversaId, deId, texto, replyId, replyAutor, replyTexto }) {
+function salvarMensagem({ conversaId, deId, texto, replyId, replyAutor, replyTexto, anexo }) {
   const stmt = db.prepare(
-    `INSERT INTO mensagens (conversa_id, de_id, texto, hora, lida, editado, reply_id, reply_autor, reply_texto)
-     VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)`
+    `INSERT INTO mensagens (conversa_id, de_id, texto, hora, lida, editado, reply_id, reply_autor, reply_texto, anexo)
+     VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`
   );
   const hora = Date.now();
-  const info = stmt.run(conversaId, deId, texto, hora, replyId || null, replyAutor || null, replyTexto || null);
+  const anexoJson = anexo ? JSON.stringify(anexo) : null;
+  const info = stmt.run(conversaId, deId, texto, hora, replyId || null, replyAutor || null, replyTexto || null, anexoJson);
   return {
     id: info.lastInsertRowid, conversa_id: conversaId, de_id: deId, texto, hora, lida: 0, editado: 0,
-    reply_id: replyId || null, reply_autor: replyAutor || null, reply_texto: replyTexto || null
+    reply_id: replyId || null, reply_autor: replyAutor || null, reply_texto: replyTexto || null,
+    anexo: anexo || null
   };
 }
 
 function listarMensagens(conversaId, limite = 100) {
-  return db.prepare(
+  const rows = db.prepare(
     `SELECT m.id, m.de_id, u.nome AS de_nome, u.avatar AS de_avatar, m.texto, m.hora, m.lida, m.editado,
-            m.reply_id, m.reply_autor, m.reply_texto
+            m.reply_id, m.reply_autor, m.reply_texto, m.anexo
      FROM mensagens m JOIN usuarios u ON u.id = m.de_id
      WHERE m.conversa_id = ? ORDER BY m.hora DESC LIMIT ?`
   ).all(conversaId, limite).reverse();
+
+  return rows.map((r) => ({
+    ...r,
+    anexo: r.anexo ? safeJsonParse(r.anexo) : null,
+  }));
 }
 
 function buscarMensagemPorId(id) {
-  return db.prepare('SELECT * FROM mensagens WHERE id = ?').get(id);
+  const r = db.prepare('SELECT * FROM mensagens WHERE id = ?').get(id);
+  if (r && r.anexo) r.anexo = safeJsonParse(r.anexo);
+  return r;
 }
 
 function editarMensagem(id, novoTexto) {
@@ -468,30 +481,39 @@ function deletarCanal(id, usuarioId) {
 
 // ========== MENSAGENS DE CANAL ==========
 
-function salvarMensagemCanal({ canalId, deId, texto, replyId, replyAutor, replyTexto }) {
+function salvarMensagemCanal({ canalId, deId, texto, replyId, replyAutor, replyTexto, anexo }) {
   const stmt = db.prepare(
-    `INSERT INTO mensagens_canal (canal_id, de_id, texto, hora, editado, reply_id, reply_autor, reply_texto)
-     VALUES (?, ?, ?, ?, 0, ?, ?, ?)`
+    `INSERT INTO mensagens_canal (canal_id, de_id, texto, hora, editado, reply_id, reply_autor, reply_texto, anexo)
+     VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`
   );
   const hora = Date.now();
-  const info = stmt.run(canalId, deId, texto, hora, replyId || null, replyAutor || null, replyTexto || null);
+  const anexoJson = anexo ? JSON.stringify(anexo) : null;
+  const info = stmt.run(canalId, deId, texto, hora, replyId || null, replyAutor || null, replyTexto || null, anexoJson);
   return {
     id: info.lastInsertRowid, canal_id: canalId, de_id: deId, texto, hora, editado: 0,
-    reply_id: replyId || null, reply_autor: replyAutor || null, reply_texto: replyTexto || null
+    reply_id: replyId || null, reply_autor: replyAutor || null, reply_texto: replyTexto || null,
+    anexo: anexo || null
   };
 }
 
 function listarMensagensCanal(canalId, limite = 100) {
-  return db.prepare(
+  const rows = db.prepare(
     `SELECT m.id, m.de_id, u.nome AS de_nome, u.avatar AS de_avatar, m.texto, m.hora, m.editado,
-            m.reply_id, m.reply_autor, m.reply_texto
+            m.reply_id, m.reply_autor, m.reply_texto, m.anexo
      FROM mensagens_canal m JOIN usuarios u ON u.id = m.de_id
      WHERE m.canal_id = ? ORDER BY m.hora DESC LIMIT ?`
   ).all(canalId, limite).reverse();
+
+  return rows.map((r) => ({
+    ...r,
+    anexo: r.anexo ? safeJsonParse(r.anexo) : null,
+  }));
 }
 
 function buscarMensagemCanalPorId(id) {
-  return db.prepare('SELECT * FROM mensagens_canal WHERE id = ?').get(id);
+  const r = db.prepare('SELECT * FROM mensagens_canal WHERE id = ?').get(id);
+  if (r && r.anexo) r.anexo = safeJsonParse(r.anexo);
+  return r;
 }
 
 function editarMensagemCanal(id, novoTexto) {
@@ -541,6 +563,12 @@ function listarReacoesDeMensagens(tipo, alvoIds) {
     porMsg[r.alvo_id][r.emoji].push(r.usuario_id);
   }
   return porMsg;
+}
+
+// ========== HELPERS ==========
+
+function safeJsonParse(str) {
+  try { return JSON.parse(str); } catch (e) { return null; }
 }
 
 module.exports = {

@@ -345,9 +345,7 @@
       cursor: pointer;
       transition: color 0.15s;
     }
-    .topo-servidor .nome:hover {
-      color: var(--agua-1);
-    }
+    .topo-servidor .nome:hover { color: var(--agua-1); }
     .topo-servidor .codigo {
       font-size: 10px; color: var(--agua-2);
       font-family: 'Courier New', monospace;
@@ -485,9 +483,7 @@
       display: block; overflow-y: auto; padding: 24px;
     }
 
-    #tela-canal:not(.tem-canal) .barra-msg {
-      display: none;
-    }
+    #tela-canal:not(.tem-canal) .barra-msg { display: none; }
 
     .chat-area {
       flex: 1; overflow-y: auto;
@@ -504,7 +500,7 @@
       text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
     }
 
-    /* ============ BARRA DE DIGITANDO ============ */
+    /* DIGITANDO */
     .digitando-bar {
       display: none;
       align-items: center;
@@ -520,7 +516,6 @@
       text-shadow: 0 1px 0 rgba(255,255,255,0.6);
     }
     .digitando-bar.ativo { display: flex; }
-
     .digitando-dots {
       display: inline-flex;
       gap: 3px;
@@ -535,7 +530,6 @@
     }
     .digitando-dots span:nth-child(2) { animation-delay: 0.2s; }
     .digitando-dots span:nth-child(3) { animation-delay: 0.4s; }
-
     @keyframes digitandoPulse {
       0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
       30%           { opacity: 1;   transform: translateY(-3px); }
@@ -561,7 +555,7 @@
       flex-shrink: 0;
     }
 
-    /* ============ AVATAR ============ */
+    /* AVATAR */
     .avatar {
       width: 40px; height: 40px;
       border-radius: 50%;
@@ -582,7 +576,6 @@
     .avatar.mini { width: 28px; height: 28px; font-size: 12px; border-width: 1.5px; }
     .avatar.grande { width: 96px; height: 96px; font-size: 36px; border-width: 3px; }
     .avatar.gigante { width: 110px; height: 110px; font-size: 40px; border-width: 4px; }
-
     .avatar img {
       width: 100%; height: 100%;
       object-fit: cover;
@@ -593,10 +586,7 @@
       position: relative;
       z-index: 1;
     }
-
-    .avatar.com-imagem {
-      background: #e0f2fe !important;
-    }
+    .avatar.com-imagem { background: #e0f2fe !important; }
 
     .msg-com-avatar {
       display: flex; gap: 10px;
@@ -645,73 +635,639 @@
       word-wrap: break-word;
       max-width: fit-content;
     }
+    .msg-texto:empty { display: none; }
 
-    .msg-acoes {
-      position: absolute;
-      top: -8px;
-      right: 0;
-      display: none;
-      gap: 4px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(224,242,254,0.9));
+    /* ANEXOS */
+    .msg-anexo {
+      margin-top: 4px;
+      max-width: 440px;
+    }
+    .msg-anexo-imagem {
+      display: block;
+      max-width: 400px;
+      max-height: 400px;
+      border-radius: 14px;
+      border: 2px solid rgba(255,255,255,0.95);
+      box-shadow: 0 4px 16px rgba(2,132,199,0.25);
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      object-fit: cover;
+      background: #e0f2fe;
+    }
+    .msg-anexo-imagem:hover {
+      transform: scale(1.02);
+      box-shadow: 0 6px 20px rgba(2,132,199,0.4);
+    }
+    .msg-anexo-arquivo {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: linear-gradient(160deg, rgba(255,255,255,0.85), rgba(224,242,254,0.7));
       border: 1.5px solid rgba(255,255,255,0.95);
-      border-radius: 999px;
-      padding: 4px 8px;
-      box-shadow: 0 4px 12px rgba(2,132,199,0.3);
-      z-index: 5;
-    }
-    .msg-com-avatar:hover .msg-acoes {
-      display: flex;
-    }
-    .msg-acoes button {
-      padding: 2px 6px;
+      border-radius: 14px;
+      color: var(--texto-escuro);
+      text-decoration: none;
+      font-weight: 700;
       font-size: 13px;
-      background: transparent;
-      border: none;
-      box-shadow: none;
+      box-shadow: 0 4px 12px rgba(2,132,199,0.15);
+      transition: all 0.2s;
+      max-width: 100%;
+    }
+    .msg-anexo-arquivo:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(2,132,199,0.3);
+      background: linear-gradient(160deg, rgba(255,255,255,1), rgba(186,230,253,0.9));
+    }
+    .msg-anexo-arquivo .arquivo-icone { font-size: 22px; flex-shrink: 0; }
+    .msg-anexo-arquivo .arquivo-info {
+      display: flex; flex-direction: column; gap: 2px;
+      min-width: 0;
+    }
+    .msg-anexo-arquivo .arquivo-nome {
+      font-weight: 900;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 220px;
+    }
+    .msg-anexo-arquivo .arquivo-tam {
+      font-size: 11px;
       color: var(--texto-medio);
       font-weight: 700;
-      border-radius: 6px;
+    }
+        /* MEDIA PLAYER */
+    .media-player {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: linear-gradient(160deg, rgba(255,255,255,0.85), rgba(224,242,254,0.7));
+      border: 2px solid rgba(255,255,255,0.95);
+      border-radius: 999px;
+      box-shadow: inset 0 2px 0 rgba(255,255,255,0.9),
+                  inset 0 -2px 6px rgba(56,189,248,0.15),
+                  0 4px 14px rgba(2,132,199,0.15);
+      max-width: 440px;
+      width: 100%;
+      position: relative;
+      transition: box-shadow 0.2s;
+    }
+    .media-player.tocando {
+      box-shadow: inset 0 2px 0 rgba(255,255,255,0.9),
+                  inset 0 -2px 6px rgba(56,189,248,0.25),
+                  0 6px 20px rgba(2,132,199,0.3),
+                  0 0 20px rgba(6,182,212,0.35);
+    }
+    .media-player-video-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 440px;
+      width: 100%;
+      padding: 8px;
+      background: linear-gradient(160deg, rgba(255,255,255,0.85), rgba(224,242,254,0.7));
+      border: 2px solid rgba(255,255,255,0.95);
+      border-radius: 18px;
+      box-shadow: inset 0 2px 0 rgba(255,255,255,0.9),
+                  inset 0 -2px 6px rgba(56,189,248,0.15),
+                  0 4px 14px rgba(2,132,199,0.15);
+    }
+    .media-video-elemento {
+      display: block;
+      width: 100%;
+      max-height: 360px;
+      border-radius: 12px;
+      background: #000;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .media-player-video-wrap .media-player {
+      box-shadow: none;
+      border: none;
+      padding: 8px 10px;
+      background: transparent;
+      backdrop-filter: none;
+      max-width: 100%;
+    }
+    .media-player-video-wrap .media-player.tocando { box-shadow: none; }
+
+    .media-play {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.95);
       cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      background: linear-gradient(180deg,
+        rgba(255,255,255,0.6) 0%,
+        var(--agua-1) 50%,
+        var(--agua-2) 100%);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,0.9),
+                  inset 0 -2px 4px rgba(0,0,0,0.15),
+                  0 4px 10px rgba(2,132,199,0.4);
+      flex-shrink: 0;
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+      padding: 0;
       min-width: auto;
     }
-    .msg-acoes button::before { display: none; }
-    .msg-acoes button:hover {
-      background: rgba(2, 132, 199, 0.15);
-      transform: none;
+    .media-play::before {
+      content: '';
+      position: absolute;
+      top: 4px; left: 22%; right: 22%; height: 32%;
+      background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0));
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .media-play:hover {
+      transform: scale(1.1);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,1),
+                  inset 0 -2px 4px rgba(0,0,0,0.15),
+                  0 6px 16px rgba(2,132,199,0.5),
+                  0 0 16px rgba(6,182,212,0.6);
+    }
+    .media-play:active { transform: scale(0.95); }
+    .media-play .media-play-icone { margin-left: 2px; line-height: 1; }
+    .media-player.tocando .media-play .media-play-icone { margin-left: 0; }
+
+    .media-progresso-wrap {
+      flex: 1;
+      min-width: 60px;
+      display: flex;
+      align-items: center;
+      padding: 8px 0;
+      cursor: pointer;
+      touch-action: none;
+    }
+    .media-progresso-track {
+      position: relative;
+      width: 100%;
+      height: 6px;
+      background: rgba(2, 132, 199, 0.18);
+      border-radius: 999px;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.15);
+      transition: height 0.15s;
+    }
+    .media-progresso-wrap:hover .media-progresso-track { height: 8px; }
+    .media-progresso-fill {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 0%;
+      background: linear-gradient(90deg, var(--agua-1), var(--agua-2));
+      border-radius: 999px;
+      box-shadow: 0 0 8px rgba(6,182,212,0.6);
+    }
+    .media-progresso-bolinha {
+      position: absolute;
+      top: 50%; left: 0%;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #ffffff, #bae6fd 60%, var(--agua-1));
+      border: 2px solid white;
+      box-shadow: 0 2px 6px rgba(2,132,199,0.5),
+                  0 0 10px rgba(6,182,212,0.5);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      transition: transform 0.15s;
+    }
+    .media-progresso-wrap:hover .media-progresso-bolinha {
+      transform: translate(-50%, -50%) scale(1.15);
+    }
+    .media-tempo {
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--texto-medio);
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-width: 76px;
+      text-align: center;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.8);
+    }
+    .media-volume-btn {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+      padding: 0;
+      min-width: auto;
+      flex-shrink: 0;
+      transition: transform 0.15s, background 0.15s;
+    }
+    .media-volume-btn::before { display: none; }
+    .media-volume-btn:hover {
+      background: rgba(255,255,255,0.7);
+      transform: scale(1.1);
       box-shadow: none;
     }
-    .msg-acoes button.perigo:hover {
-      background: rgba(220, 38, 38, 0.15);
-      color: #dc2626;
+    .media-volume-icone {
+      line-height: 1;
+      filter: drop-shadow(0 1px 1px rgba(0,0,0,0.15));
     }
-
-    .msg-editando {
+    .media-volume-wrap {
+      width: 0;
+      overflow: hidden;
+      transition: width 0.25s ease;
       display: flex;
-      gap: 6px;
       align-items: center;
+      padding: 8px 0;
+      cursor: pointer;
+      touch-action: none;
+    }
+    .media-player:hover .media-volume-wrap,
+    .media-volume-wrap:hover { width: 70px; }
+    .media-volume-track {
+      position: relative;
+      width: 70px;
+      height: 6px;
+      background: rgba(2, 132, 199, 0.18);
+      border-radius: 999px;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.15);
+      flex-shrink: 0;
+    }
+    .media-volume-fill {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
       width: 100%;
+      background: linear-gradient(90deg, var(--agua-1), var(--agua-2));
+      border-radius: 999px;
+      box-shadow: 0 0 6px rgba(6,182,212,0.5);
     }
-    .msg-editando input {
-      flex: 1;
-      padding: 8px 12px;
-      border-radius: 12px;
-      font-size: 14px;
-    }
-    .msg-editando button {
-      padding: 6px 12px;
-      font-size: 12px;
+    .media-fullscreen-btn {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      padding: 0;
       min-width: auto;
+      flex-shrink: 0;
+      color: var(--texto-medio);
+      transition: transform 0.15s, background 0.15s;
+    }
+    .media-fullscreen-btn::before { display: none; }
+    .media-fullscreen-btn:hover {
+      background: rgba(255,255,255,0.7);
+      transform: scale(1.1);
+      box-shadow: none;
+    }
+    .msg-anexo-media-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--texto-medio);
+      text-decoration: none;
+      font-weight: 700;
+      padding: 4px 6px;
+      margin-top: 4px;
+      border-radius: 6px;
+      transition: all 0.15s;
+      max-width: 100%;
+    }
+    .msg-anexo-media-download:hover {
+      background: rgba(2,132,199,0.1);
+      color: var(--agua-2);
+    }
+    .msg-anexo-media-download .media-dl-icone { font-size: 13px; }
+    .msg-anexo-media-download .media-dl-nome {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+    }
+    .msg-anexo-media-download .media-dl-tam {
+      font-family: 'Courier New', monospace;
+      color: var(--texto-medio);
+      opacity: 0.8;
+      flex-shrink: 0;
     }
 
-    .msg-editada {
-      color: rgba(3, 105, 161, 0.5);
-      font-size: 10px;
-      font-style: italic;
-      margin-left: 6px;
+    /* GRAVAÇÃO DE ÁUDIO */
+    .barra-gravacao {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.4), rgba(224,242,254,0.7));
+      border-top: 2px solid rgba(255,255,255,0.7);
+      flex-shrink: 0;
+      box-shadow: inset 0 2px 0 rgba(255,255,255,0.9);
+    }
+    .barra-gravacao.ativo { display: flex; }
+
+    .gravacao-btn {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.95);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      background: linear-gradient(180deg,
+        rgba(255,255,255,0.6) 0%,
+        #fb7185 50%,
+        #dc2626 100%);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,0.9),
+                  inset 0 -2px 4px rgba(0,0,0,0.15),
+                  0 4px 12px rgba(220,38,38,0.5);
+      flex-shrink: 0;
+      transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+      padding: 0;
+      min-width: auto;
+      touch-action: none;
+      user-select: none;
+    }
+    .gravacao-btn::before {
+      content: '';
+      position: absolute;
+      top: 4px; left: 22%; right: 22%; height: 32%;
+      background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0));
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .gravacao-btn:hover {
+      transform: scale(1.06);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,1),
+                  inset 0 -2px 4px rgba(0,0,0,0.15),
+                  0 6px 16px rgba(220,38,38,0.6),
+                  0 0 20px rgba(220,38,38,0.5);
+    }
+    .gravacao-btn.gravando {
+      animation: pulsoGravando 1.2s infinite ease-in-out;
+    }
+    @keyframes pulsoGravando {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: inset 0 2px 0 rgba(255,255,255,1),
+                    0 4px 12px rgba(220,38,38,0.6),
+                    0 0 0 0 rgba(220,38,38,0.6);
+      }
+      50% {
+        transform: scale(1.05);
+        box-shadow: inset 0 2px 0 rgba(255,255,255,1),
+                    0 4px 12px rgba(220,38,38,0.8),
+                    0 0 0 12px rgba(220,38,38,0);
+      }
+    }
+    .gravacao-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .gravacao-timer {
+      font-family: 'Courier New', monospace;
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--texto-escuro);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .gravacao-timer .gravacao-pontinho {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #dc2626;
+      box-shadow: 0 0 8px rgba(220,38,38,0.8);
+      animation: piscar 1s infinite;
+    }
+    @keyframes piscar {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .gravacao-dica {
+      font-size: 11px;
+      color: var(--texto-medio);
       font-weight: 600;
     }
+    .gravacao-bars {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+    .gravacao-bars span {
+      width: 3px;
+      border-radius: 2px;
+      background: linear-gradient(180deg, var(--agua-1), var(--agua-2));
+      transition: height 0.05s linear;
+      box-shadow: 0 0 6px rgba(6,182,212,0.5);
+    }
+    .gravacao-acoes {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .gravacao-acoes button {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.95);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      padding: 0;
+      min-width: auto;
+      flex-shrink: 0;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .gravacao-acoes button::before { display: none; }
+    .gravacao-acoes .btn-cancelar-grav {
+      background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(224,242,254,0.85));
+      color: var(--texto-medio);
+      text-shadow: none;
+    }
+    .gravacao-acoes .btn-cancelar-grav:hover {
+      background: white;
+      transform: scale(1.08);
+      box-shadow: 0 4px 12px rgba(2,132,199,0.3);
+    }
+    .gravacao-acoes .btn-enviar-grav {
+      background: linear-gradient(180deg, var(--verde-1), var(--verde-3));
+    }
+    .gravacao-acoes .btn-enviar-grav:hover {
+      transform: scale(1.08);
+      box-shadow: 0 4px 12px rgba(34,197,94,0.5),
+                  0 0 16px rgba(34,197,94,0.5);
+    }
+    .preview-gravacao {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+    }
+    .preview-gravacao audio { display: none; }
+    .preview-gravacao .preview-play {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.95);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      background: linear-gradient(180deg,
+        rgba(255,255,255,0.6) 0%,
+        var(--agua-1) 50%,
+        var(--agua-2) 100%);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,0.9),
+                  0 4px 10px rgba(2,132,199,0.4);
+      flex-shrink: 0;
+      padding: 0;
+      min-width: auto;
+    }
+    .preview-gravacao .preview-play::before { display: none; }
+    .preview-gravacao .preview-play:hover {
+      transform: scale(1.08);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,1),
+                  0 6px 14px rgba(2,132,199,0.5),
+                  0 0 14px rgba(6,182,212,0.5);
+    }
+    .preview-gravacao .preview-barra {
+      flex: 1;
+      height: 6px;
+      background: rgba(2, 132, 199, 0.18);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+      min-width: 40px;
+    }
+    .preview-gravacao .preview-barra-fill {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 0%;
+      background: linear-gradient(90deg, var(--agua-1), var(--agua-2));
+      border-radius: 999px;
+      box-shadow: 0 0 8px rgba(6,182,212,0.6);
+      transition: width 0.1s linear;
+    }
+    .preview-gravacao .preview-tempo {
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--texto-escuro);
+      flex-shrink: 0;
+      min-width: 44px;
+      text-align: center;
+    }
 
-    .emoji-btn {
+    /* CÂMERA */
+    #modal-camera {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(2, 20, 35, 0.95);
+      backdrop-filter: blur(12px);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #modal-camera.ativo { display: flex; animation: fadeIn 0.25s; }
+    .camera-card {
+      background: linear-gradient(160deg, rgba(255,255,255,0.9), rgba(186,230,253,0.8));
+      border: 2px solid rgba(255,255,255,0.95);
+      border-radius: 28px;
+      padding: 20px;
+      max-width: 640px;
+      width: 100%;
+      box-shadow: inset 0 2px 0 rgba(255,255,255,1),
+                  0 20px 60px rgba(2,132,199,0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-height: 92vh;
+      overflow-y: auto;
+    }
+    .camera-card h3 {
+      color: var(--agua-2);
+      font-size: 20px;
+      font-weight: 900;
+      text-align: center;
+      text-shadow: 0 2px 0 rgba(255,255,255,0.7);
+    }
+    .camera-preview-wrap {
+      position: relative;
+      background: #000;
+      border-radius: 18px;
+      overflow: hidden;
+      aspect-ratio: 4 / 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid rgba(255,255,255,0.95);
+      box-shadow: 0 8px 24px rgba(2,132,199,0.3);
+    }
+    #camera-video, #camera-canvas {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    #camera-canvas { display: none; }
+    .camera-preview-wrap.mostrando-foto #camera-video { display: none; }
+    .camera-preview-wrap.mostrando-foto #camera-canvas { display: block; }
+    .camera-controles {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .camera-controles button {
+      padding: 12px 22px;
+      font-size: 14px;
+      min-width: auto;
+    }
+    .camera-shutter {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      border: 4px solid white;
+      background: linear-gradient(180deg, var(--agua-1), var(--agua-2));
+      cursor: pointer;
+      padding: 0;
+      min-width: auto;
+      box-shadow: inset 0 2px 0 rgba(255,255,255,0.9),
+                  0 6px 16px rgba(2,132,199,0.5),
+                  0 0 0 4px rgba(255,255,255,0.3);
+      transition: all 0.15s;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+    .camera-shutter::before {
+      content: '';
+      position: absolute;
+      top: 8px; left: 22%; right: 22%; height: 32%;
+      background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0));
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .camera-shutter:hover {
+      transform: scale(1.06);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,1),
+                  0 8px 20px rgba(2,132,199,0.6),
+                  0 0 0 6px rgba(255,255,255,0.4),
+                  0 0 24px rgba(6,182,212,0.6);
+    }
+    .camera-shutter:active { transform: scale(0.94); }
+
+    /* BOTÕES DE ÍCONE */
+    .anexo-btn, .emoji-btn {
       background: transparent;
       border: none;
       box-shadow: none;
@@ -727,58 +1283,243 @@
       height: auto;
       line-height: 1;
     }
-    .emoji-btn::before { display: none; }
-    .emoji-btn:hover {
+    .anexo-btn::before, .emoji-btn::before { display: none; }
+    .anexo-btn:hover, .emoji-btn:hover {
       transform: scale(1.15);
       background: rgba(255, 255, 255, 0.6);
       box-shadow: none;
     }
 
-    .emoji-picker {
+    /* MENU DE ANEXO */
+    #menu-anexo {
       position: fixed;
-      width: 340px;
-      max-height: 320px;
-      overflow-y: auto;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
       background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(224,242,254,0.95));
       border: 2px solid rgba(255,255,255,0.95);
-      border-radius: 20px;
-      padding: 12px;
-      box-shadow: 0 8px 40px rgba(2,132,199,0.5);
-      z-index: 2500;
-      display: none;
+      border-radius: 18px;
+      padding: 6px;
+      box-shadow: 0 8px 30px rgba(2,132,199,0.5);
+      z-index: 9999;
       backdrop-filter: blur(20px);
+      min-width: 240px;
     }
-    .emoji-picker.ativo { display: block !important; animation: modalIn 0.25s; }
-
-    .emoji-picker .emoji-categoria {
+    #menu-anexo.ativo { display: flex !important; animation: fadeIn 0.15s; }
+    #menu-anexo button {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border: none;
+      background: transparent;
+      box-shadow: none;
+      color: var(--texto-escuro);
+      font-weight: 800;
+      font-size: 13px;
+      text-shadow: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: left;
+      width: 100%;
+      min-width: auto;
+    }
+    #menu-anexo button::before { display: none; }
+    #menu-anexo button:hover {
+      background: rgba(56, 189, 248, 0.25);
+      transform: none;
+      box-shadow: none;
+    }
+    #menu-anexo button .menu-emoji {
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+    }
+    #menu-anexo button .menu-desc {
+      display: block;
       font-size: 10px;
       color: var(--texto-medio);
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    /* UPLOAD PROGRESS */
+    .upload-barra {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 12px 16px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(224,242,254,0.85));
+      border: 2px solid rgba(255,255,255,0.95);
+      border-radius: 16px;
+      margin: 8px 0;
+      box-shadow: 0 4px 14px rgba(2,132,199,0.15);
+      max-width: 380px;
+    }
+    .upload-barra .upload-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--texto-escuro);
+      gap: 12px;
+    }
+    .upload-barra .upload-label > span:first-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .upload-barra .upload-label .upload-pct {
+      color: var(--agua-2);
+      font-family: 'Courier New', monospace;
+      flex-shrink: 0;
+    }
+    .upload-barra .upload-track {
+      height: 8px;
+      background: rgba(148, 163, 184, 0.3);
+      border-radius: 999px;
+      overflow: hidden;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .upload-barra .upload-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--agua-1), var(--agua-2));
+      border-radius: 999px;
+      transition: width 0.15s;
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.6);
+    }
+    .upload-barra.erro {
+      background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(254,226,226,0.85));
+      border-color: rgba(220,38,38,0.3);
+    }
+    .upload-barra.erro .upload-fill {
+      background: linear-gradient(90deg, #fb7185, #dc2626);
+    }
+
+    /* MODAL VER IMAGEM */
+    #modal-imagem {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(2, 20, 35, 0.92);
+      backdrop-filter: blur(8px);
+      z-index: 10000;
+      align-items: center; justify-content: center;
+      padding: 20px;
+      cursor: zoom-out;
+    }
+    #modal-imagem.ativo { display: flex; animation: fadeIn 0.2s; }
+    #modal-imagem img {
+      max-width: 100%;
+      max-height: 100%;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+      cursor: default;
+    }
+    #modal-imagem .fechar-img {
+      position: absolute;
+      top: 20px; right: 20px;
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.95);
+      border: none;
+      color: var(--texto-escuro);
+      font-size: 20px;
       font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin: 10px 0 6px 4px;
-    }
-    .emoji-picker .emoji-categoria:first-child { margin-top: 0; }
-
-    .emoji-grid {
-      display: grid;
-      grid-template-columns: repeat(8, 1fr);
-      gap: 2px;
-    }
-    .emoji-grid span {
-      font-size: 22px;
-      text-align: center;
-      padding: 4px 2px;
       cursor: pointer;
-      border-radius: 8px;
-      transition: all 0.15s;
-      user-select: none;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      transition: all 0.2s;
     }
-    .emoji-grid span:hover {
-      background: rgba(56, 189, 248, 0.25);
-      transform: scale(1.2);
+    .fechar-img::before { display: none; }
+    .fechar-img:hover {
+      background: white;
+      transform: scale(1.1);
     }
 
+    /* MODAL CONFIG */
+    .config-lista {
+      display: flex; flex-direction: column;
+      gap: 6px;
+      margin: 10px 0 20px;
+      position: relative; z-index: 1;
+    }
+    .config-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.5);
+      border: 2px solid rgba(255, 255, 255, 0.8);
+      border-radius: 16px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .config-item:hover {
+      background: rgba(255, 255, 255, 0.8);
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);
+    }
+    .config-label {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 800;
+      color: var(--texto-escuro);
+      font-size: 13px;
+    }
+    .config-label .config-icone {
+      font-size: 20px;
+      width: 26px;
+      text-align: center;
+    }
+    .config-desc {
+      display: block;
+      font-size: 11px;
+      color: var(--texto-medio);
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .toggle {
+      position: relative;
+      width: 48px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+    .toggle input {
+      opacity: 0;
+      width: 0; height: 0;
+      position: absolute;
+    }
+    .toggle .slider {
+      position: absolute;
+      inset: 0;
+      background: rgba(148, 163, 184, 0.5);
+      border: 2px solid rgba(255,255,255,0.9);
+      border-radius: 999px;
+      transition: 0.25s;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.15);
+    }
+    .toggle .slider::before {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      left: 2px; top: 2px;
+      border-radius: 50%;
+      background: white;
+      transition: 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    .toggle input:checked + .slider {
+      background: linear-gradient(180deg, var(--agua-1), var(--agua-2));
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.15),
+                  0 0 12px rgba(6, 182, 212, 0.5);
+    }
+    .toggle input:checked + .slider::before {
+      transform: translateX(22px);
+    }
+
+    /* REAÇÕES */
     .msg-reacoes {
       display: flex !important;
       flex-wrap: wrap;
@@ -817,18 +1558,13 @@
       border-color: var(--agua-1);
       box-shadow: 0 2px 8px rgba(2,132,199,0.3);
     }
-    .reacao-pill span {
-      font-size: 14px;
-      line-height: 1;
-      padding: 0;
-    }
+    .reacao-pill span { font-size: 14px; line-height: 1; padding: 0; }
     .reacao-pill .reacao-count {
       font-size: 11px !important;
       font-weight: 900;
       color: var(--texto-medio);
       padding: 0;
     }
-
     #reacao-picker-global {
       position: fixed;
       display: none;
@@ -856,6 +1592,115 @@
       transform: scale(1.3);
     }
 
+    /* AÇÕES DA MENSAGEM */
+    .msg-acoes {
+      position: absolute;
+      top: -8px; right: 0;
+      display: none;
+      gap: 4px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(224,242,254,0.9));
+      border: 1.5px solid rgba(255,255,255,0.95);
+      border-radius: 999px;
+      padding: 4px 8px;
+      box-shadow: 0 4px 12px rgba(2,132,199,0.3);
+      z-index: 5;
+    }
+    @media (hover: hover) and (pointer: fine) {
+      .msg-com-avatar:hover .msg-acoes { display: flex; }
+    }
+    .msg-com-avatar.mostrar-acoes .msg-acoes { display: flex; }
+    .msg-acoes button {
+      padding: 2px 6px;
+      font-size: 13px;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      color: var(--texto-medio);
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+      min-width: auto;
+    }
+    .msg-acoes button::before { display: none; }
+    .msg-acoes button:hover {
+      background: rgba(2, 132, 199, 0.15);
+      transform: none;
+      box-shadow: none;
+    }
+    .msg-acoes button.perigo:hover {
+      background: rgba(220, 38, 38, 0.15);
+      color: #dc2626;
+    }
+    .msg-editando {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      width: 100%;
+    }
+    .msg-editando input {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 14px;
+    }
+    .msg-editando button {
+      padding: 6px 12px;
+      font-size: 12px;
+      min-width: auto;
+    }
+    .msg-editada {
+      color: rgba(3, 105, 161, 0.5);
+      font-size: 10px;
+      font-style: italic;
+      margin-left: 6px;
+      font-weight: 600;
+    }
+
+    /* EMOJI PICKER */
+    .emoji-picker {
+      position: fixed;
+      width: 340px;
+      max-height: 320px;
+      overflow-y: auto;
+      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(224,242,254,0.95));
+      border: 2px solid rgba(255,255,255,0.95);
+      border-radius: 20px;
+      padding: 12px;
+      box-shadow: 0 8px 40px rgba(2,132,199,0.5);
+      z-index: 2500;
+      display: none;
+      backdrop-filter: blur(20px);
+    }
+    .emoji-picker.ativo { display: block !important; animation: modalIn 0.25s; }
+    .emoji-picker .emoji-categoria {
+      font-size: 10px;
+      color: var(--texto-medio);
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin: 10px 0 6px 4px;
+    }
+    .emoji-picker .emoji-categoria:first-child { margin-top: 0; }
+    .emoji-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 2px;
+    }
+    .emoji-grid span {
+      font-size: 22px;
+      text-align: center;
+      padding: 4px 2px;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .emoji-grid span:hover {
+      background: rgba(56, 189, 248, 0.25);
+      transform: scale(1.2);
+    }
+
+    /* REPLY */
     .msg-reply-hint {
       position: absolute;
       left: -50px;
@@ -875,7 +1720,6 @@
       color: var(--agua-2);
       text-shadow: 0 0 10px rgba(2,132,199,0.5);
     }
-
     .msg-reply-citacao {
       border-left: 3px solid var(--agua-1);
       padding: 4px 10px;
@@ -894,7 +1738,6 @@
       color: var(--agua-2);
       margin-right: 4px;
     }
-
     .barra-reply {
       display: none;
       align-items: center;
@@ -940,6 +1783,7 @@
       box-shadow: none;
     }
 
+    /* TELAS INTERNAS */
     .tela-main h3 {
       font-size: 24px; font-weight: 900;
       margin-bottom: 20px; color: white;
@@ -953,7 +1797,6 @@
       margin: 20px 0 10px; font-weight: 900;
       text-shadow: 0 1px 0 rgba(255,255,255,0.5);
     }
-
     .lista { padding: 0; margin: 8px 0; }
     .lista li {
       list-style: none;
@@ -977,7 +1820,6 @@
                   var(--glow-ciano);
     }
     .lista li.clicavel { cursor: pointer; }
-
     .info { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 3px; }
     .nome {
       font-weight: 800; color: var(--texto-escuro);
@@ -1011,42 +1853,34 @@
     }
     .status-dot.offline { background: rgba(148, 163, 184, 0.7); }
 
+    /* BARRA USUARIO */
     .barra-usuario {
       position: fixed;
       bottom: 14px;
       left: 14px;
-      width: 52px;
-      height: 52px;
+      width: 52px; height: 52px;
       border-radius: 50%;
-      background: linear-gradient(180deg,
-        rgba(255, 255, 255, 0.9),
-        rgba(186, 230, 253, 0.75)
-      );
+      background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(186,230,253,0.75));
       backdrop-filter: blur(20px) saturate(180%);
-      border: 3px solid rgba(255, 255, 255, 0.95);
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      border: 3px solid rgba(255,255,255,0.95);
+      display: flex; align-items: center; justify-content: center;
       cursor: pointer;
       z-index: 1000;
-      box-shadow:
-        inset 0 2px 0 rgba(255, 255, 255, 1),
-        0 6px 20px rgba(2, 132, 199, 0.4),
-        var(--glow-ciano);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,1),
+                  0 6px 20px rgba(2,132,199,0.4),
+                  var(--glow-ciano);
       transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
       padding: 0;
     }
     .barra-usuario::before { display: none; }
     .barra-usuario:hover {
       transform: scale(1.1) translateY(-3px);
-      box-shadow:
-        inset 0 2px 0 rgba(255, 255, 255, 1),
-        0 10px 30px rgba(2, 132, 199, 0.6),
-        var(--glow-ciano);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,1),
+                  0 10px 30px rgba(2,132,199,0.6),
+                  var(--glow-ciano);
     }
     .barra-usuario .avatar {
-      width: 42px;
-      height: 42px;
+      width: 42px; height: 42px;
       font-size: 16px;
       border: none;
       box-shadow: none;
@@ -1055,14 +1889,14 @@
       position: absolute;
       bottom: -1px;
       right: -1px;
-      width: 14px;
-      height: 14px;
+      width: 14px; height: 14px;
       border-radius: 50%;
       background: radial-gradient(circle at 30% 30%, #bbf7d0, var(--verde-2));
       border: 2px solid white;
       box-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
     }
 
+    /* MODAIS BASE */
     .modal-bg {
       display: none;
       position: fixed; inset: 0;
@@ -1074,7 +1908,6 @@
     }
     .modal-bg.ativo { display: flex; animation: fadeIn 0.25s; }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
     .modal {
       background: linear-gradient(160deg, rgba(255,255,255,0.85), rgba(186,230,253,0.75));
       backdrop-filter: blur(24px) saturate(180%);
@@ -1132,27 +1965,24 @@
       position: relative; z-index: 1;
     }
 
+    /* PERFIL */
     .modal-perfil {
       padding: 0 !important;
       overflow: hidden;
       max-width: 500px !important;
     }
     .modal-perfil::before { display: none; }
-
     .perfil-banner {
       position: relative;
-      width: 100%;
-      height: 150px;
+      width: 100%; height: 150px;
       overflow: hidden;
       background: linear-gradient(135deg,
         rgba(56, 189, 248, 0.5),
         rgba(163, 230, 53, 0.4),
-        rgba(6, 182, 212, 0.5)
-      );
+        rgba(6, 182, 212, 0.5));
     }
     .perfil-banner-img {
-      width: 100%;
-      height: 100%;
+      width: 100%; height: 100%;
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
@@ -1160,22 +1990,17 @@
       filter: none !important;
       opacity: 1 !important;
     }
-
     .modal-fechar {
       position: absolute;
-      top: 10px;
-      right: 10px;
-      width: 34px;
-      height: 34px;
+      top: 10px; right: 10px;
+      width: 34px; height: 34px;
       border-radius: 50%;
       background: rgba(255, 255, 255, 0.95);
       border: 2px solid rgba(255, 255, 255, 1);
       color: var(--texto-medio);
       font-size: 16px;
       line-height: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       cursor: pointer;
       z-index: 5;
       box-shadow: 0 2px 10px rgba(2, 132, 199, 0.3);
@@ -1188,27 +2013,19 @@
       transform: scale(1.1);
       box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
     }
-
     .perfil-banner.clicavel { cursor: pointer; }
-
     .perfil-banner-overlay {
       position: absolute;
       inset: 0;
       background: linear-gradient(180deg, rgba(2,132,199,0.0), rgba(2,132,199,0.45));
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
+      display: flex; align-items: flex-end; justify-content: center;
       padding-bottom: 10px;
-      color: white;
-      font-weight: 800;
-      font-size: 13px;
-      opacity: 0;
-      transition: opacity 0.2s;
+      color: white; font-weight: 800; font-size: 13px;
+      opacity: 0; transition: opacity 0.2s;
       pointer-events: none;
       text-shadow: 0 1px 3px rgba(0,0,0,0.4);
       z-index: 2;
     }
-
     .perfil-avatar-wrapper {
       margin-top: -55px;
       margin-left: 28px;
@@ -1221,7 +2038,6 @@
       position: relative;
       border-radius: 50%;
     }
-
     .avatar-overlay {
       position: absolute; inset: 0;
       border-radius: 50%;
@@ -1232,16 +2048,10 @@
       pointer-events: none;
       z-index: 2;
     }
-
     @media (hover: hover) and (pointer: fine) {
-      .perfil-avatar-wrapper .avatar-container:hover .avatar-overlay {
-        opacity: 1;
-      }
-      .perfil-banner.clicavel:hover .perfil-banner-overlay {
-        opacity: 1;
-      }
+      .perfil-avatar-wrapper .avatar-container:hover .avatar-overlay { opacity: 1; }
+      .perfil-banner.clicavel:hover .perfil-banner-overlay { opacity: 1; }
     }
-
     .perfil-info {
       padding: 14px 28px 8px;
       position: relative;
@@ -1282,20 +2092,15 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
-
     .modal-perfil .acoes {
       padding: 0 28px 24px !important;
       margin-top: 8px !important;
     }
 
-    .modal-editor {
-      max-width: 560px !important;
-    }
-
+    /* EDITOR */
+    .modal-editor { max-width: 560px !important; }
     .editor-preview-wrapper {
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       margin: 16px 0;
       padding: 16px;
       background: rgba(0, 0, 0, 0.05);
@@ -1305,7 +2110,6 @@
       z-index: 1;
       overflow: hidden;
     }
-
     #editor-canvas {
       cursor: grab;
       border-radius: 16px;
@@ -1318,11 +2122,7 @@
     }
     #editor-canvas:active { cursor: grabbing; }
     #editor-canvas.circular { border-radius: 50%; }
-
-    .editor-controles {
-      position: relative;
-      z-index: 1;
-    }
+    .editor-controles { position: relative; z-index: 1; }
     .editor-controles label {
       display: block;
       font-size: 11px;
@@ -1349,8 +2149,7 @@
     .editor-controles input[type="range"]::-webkit-slider-thumb {
       appearance: none;
       -webkit-appearance: none;
-      width: 24px;
-      height: 24px;
+      width: 24px; height: 24px;
       border-radius: 50%;
       background: linear-gradient(180deg, #ffffff, #bae6fd);
       border: 3px solid white;
@@ -1358,15 +2157,13 @@
       cursor: pointer;
     }
     .editor-controles input[type="range"]::-moz-range-thumb {
-      width: 24px;
-      height: 24px;
+      width: 24px; height: 24px;
       border-radius: 50%;
       background: linear-gradient(180deg, #ffffff, #bae6fd);
       border: 3px solid white;
       box-shadow: 0 2px 8px rgba(2, 132, 199, 0.5);
       cursor: pointer;
     }
-
     .editor-dica {
       font-size: 12px;
       color: var(--texto-medio);
@@ -1375,11 +2172,10 @@
       text-align: center;
     }
 
-    /* ============ NOTIFICAÇÕES ============ */
+    /* NOTIFICAÇÕES */
     #notif-stack {
       position: fixed;
-      top: 16px;
-      right: 16px;
+      top: 16px; right: 16px;
       z-index: 9000;
       display: flex;
       flex-direction: column;
@@ -1388,7 +2184,6 @@
       max-width: 340px;
       width: calc(100% - 32px);
     }
-
     .notif {
       pointer-events: auto;
       display: flex;
@@ -1413,24 +2208,15 @@
       user-select: none;
       will-change: transform, opacity;
     }
-    .notif.entrando {
-      animation: notifEntrando 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
+    .notif.entrando { animation: notifEntrando 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
     @keyframes notifEntrando {
       from { transform: translateX(120%); opacity: 0; }
       to   { transform: translateX(0);    opacity: 1; }
     }
-    .notif.saindo {
-      transform: translateX(120%);
-      opacity: 0;
-    }
-    .notif.fechando {
-      transition: transform 0.2s, opacity 0.2s;
-    }
-    .notif.dm {
-      border-left-color: var(--verde-2);
-    }
-
+    .notif.saindo { transform: translateX(120%); opacity: 0; }
+    .notif.fechando { transition: transform 0.2s, opacity 0.2s; }
+    .notif.dm { border-left-color: var(--verde-2); }
+    .notif.amizade { border-left-color: #a855f7; }
     .notif-avatar {
       width: 40px; height: 40px;
       border-radius: 50%;
@@ -1450,7 +2236,6 @@
       border-radius: 50%;
       display: block;
     }
-
     .notif-corpo {
       flex: 1;
       min-width: 0;
@@ -1506,20 +2291,38 @@
       transform: none;
       box-shadow: none;
     }
-
+    .notif-acoes {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .notif-acoes button {
+      padding: 5px 12px;
+      font-size: 11px;
+      border-radius: 999px;
+      font-weight: 800;
+      min-width: auto;
+    }
+    .notif-acoes .btn-aceitar {
+      background: linear-gradient(180deg, var(--verde-1), var(--verde-3));
+      color: white;
+      border-color: rgba(255,255,255,0.7);
+    }
+    .notif-acoes .btn-recusar {
+      background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(224,242,254,0.9));
+      color: var(--texto-medio);
+      text-shadow: none;
+    }
     @media (max-width: 500px) {
       #notif-stack {
-        top: 10px;
-        right: 10px;
-        left: 10px;
-        max-width: none;
-        width: auto;
+        top: 10px; right: 10px; left: 10px;
+        max-width: none; width: auto;
       }
       .notif { padding: 10px 12px; }
       .notif-avatar { width: 36px; height: 36px; font-size: 14px; }
     }
 
-    /* BOTÃO HAMBURGER */
     .btn-hamburger {
       display: none;
       background: rgba(255,255,255,0.7);
@@ -1538,9 +2341,7 @@
                   0 4px 12px rgba(2,132,199,0.3);
     }
     @media (max-width: 768px) {
-      #app.canal-ativo .btn-hamburger {
-        display: inline-flex;
-      }
+      #app.canal-ativo .btn-hamburger { display: inline-flex; }
     }
 
     @media (max-width: 768px) {
@@ -1572,27 +2373,15 @@
       .auth-card { padding: 28px 22px; border-radius: 24px; }
       .auth-logo h1 { font-size: 38px; }
       .avatar.gigante { width: 90px; height: 90px; font-size: 32px; }
-
-      .barra-usuario {
-        left: 10px;
-        bottom: 10px;
-        width: 48px;
-        height: 48px;
-      }
-      .barra-usuario .avatar {
-        width: 38px;
-        height: 38px;
-      }
-
+      .barra-usuario { left: 10px; bottom: 10px; width: 48px; height: 48px; }
+      .barra-usuario .avatar { width: 38px; height: 38px; }
       .modal-perfil { max-width: 100% !important; margin: 10px; }
       .perfil-banner { height: 110px; }
       .perfil-avatar-wrapper { margin-top: -45px; margin-left: 20px; }
-
       .editor-preview-wrapper { padding: 10px; margin: 10px 0; }
       .modal-editor { max-width: 100% !important; margin: 10px; }
-
-      .msg-acoes { top: -12px; right: 4px; }
-
+      .msg-acoes { top: -14px; right: 4px; padding: 6px 10px; }
+      .msg-acoes button { font-size: 16px; padding: 4px 8px; }
       .emoji-picker {
         width: calc(100% - 24px);
         max-width: calc(100% - 24px);
@@ -1600,18 +2389,29 @@
         border-radius: 16px;
         padding: 8px;
       }
-      .emoji-grid {
-        grid-template-columns: repeat(6, 1fr);
-      }
-      .emoji-grid span {
-        font-size: 20px;
-        padding: 3px 1px;
-      }
-
-      .barra-reply {
-        padding: 8px 12px;
-        font-size: 12px;
-      }
+      .emoji-grid { grid-template-columns: repeat(6, 1fr); }
+      .emoji-grid span { font-size: 20px; padding: 3px 1px; }
+      .barra-reply { padding: 8px 12px; font-size: 12px; }
+      .msg-anexo { max-width: 260px; }
+      .msg-anexo-imagem { max-width: 240px; max-height: 240px; }
+      .msg-anexo-arquivo .arquivo-nome { max-width: 140px; }
+      .media-player { padding: 8px 10px; gap: 8px; }
+      .media-play { width: 36px; height: 36px; font-size: 12px; }
+      .media-tempo { font-size: 10px; min-width: 66px; }
+      .media-volume-wrap,
+      .media-player:hover .media-volume-wrap { width: 0; }
+      .media-volume-btn { width: 28px; height: 28px; font-size: 14px; }
+      .media-volume-track { width: 60px; }
+      .msg-anexo-media-download .media-dl-nome { max-width: 130px; }
+      .media-video-elemento { max-height: 240px; }
+      .barra-gravacao { padding: 10px 12px; gap: 8px; }
+      .gravacao-btn { width: 42px; height: 42px; font-size: 20px; }
+      .gravacao-timer { font-size: 13px; }
+      .gravacao-acoes button { width: 36px; height: 36px; font-size: 15px; }
+      .gravacao-bars { height: 20px; }
+      .gravacao-bars span { width: 2px; }
+      .camera-shutter { width: 64px; height: 64px; font-size: 22px; }
+      .camera-card { padding: 16px; gap: 12px; }
     }
 
     .overlay-mobile {
@@ -1624,6 +2424,7 @@
     .overlay-mobile.ativo { display: block; }
   </style>
 </head>
+
 <body>
 
   <div class="bolhas" aria-hidden="true">
@@ -1635,7 +2436,6 @@
     <div class="bolha" style="width: 100px; height: 100px; top: 85%; left: 45%; animation-delay: 5s;"></div>
   </div>
 
-  <!-- 🔥 STACK DE NOTIFICAÇÕES -->
   <div id="notif-stack"></div>
 
   <!-- LOGIN -->
@@ -1645,12 +2445,10 @@
         <h1>Void</h1>
         <p>conecte-se com quem importa</p>
       </div>
-
       <div class="abas-auth">
         <div id="aba-login" class="aba-auth ativa" onclick="mudarAbaAuth('login')">Entrar</div>
         <div id="aba-cadastro" class="aba-auth" onclick="mudarAbaAuth('cadastro')">Criar conta</div>
       </div>
-
       <div id="form-login">
         <div class="form-grupo">
           <input id="login-email" type="email" placeholder="Email">
@@ -1661,7 +2459,6 @@
         <div class="erro" id="login-erro"></div>
         <button onclick="fazerLogin()" style="width:100%">Entrar</button>
       </div>
-
       <div id="form-cadastro" style="display:none">
         <div class="form-grupo">
           <input id="cad-nome" type="text" placeholder="Seu nome">
@@ -1688,13 +2485,11 @@
         <span class="nome" id="nome-servidor">Servidor</span>
         <span class="codigo" id="codigo-servidor"></span>
       </div>
-
       <div class="secao">
         <span>Canais de texto</span>
         <button onclick="criarCanalPrompt()" title="Novo canal">+</button>
       </div>
       <div class="lista-canais" id="lista-canais"></div>
-
       <div class="secao">Membros (<span id="num-membros">0</span>)</div>
       <div class="lista-membros" id="lista-membros"></div>
     </div>
@@ -1709,6 +2504,7 @@
           <button class="secundario mini" onclick="abrirDM()">💬 DMs</button>
           <button class="secundario mini" onclick="abrirAmigos()">👥 Amigos</button>
           <button class="secundario mini" onclick="abrirBuscar()">🔍 Buscar</button>
+          <button class="secundario mini" onclick="abrirConfig()">⚙️</button>
           <button class="secundario mini" onclick="fazerLogout()">Sair</button>
         </div>
       </div>
@@ -1716,7 +2512,6 @@
       <div id="tela-canal" class="tela-main">
         <div class="chat-area" id="chat-canal"></div>
 
-        <!-- 🔥 DIGITANDO (canal) -->
         <div class="digitando-bar" id="digitando-canal">
           <span id="digitando-canal-texto"></span>
           <span class="digitando-dots"><span></span><span></span><span></span></span>
@@ -1727,8 +2522,39 @@
           <button class="btn-cancelar-reply" onclick="cancelarReply('canal')" title="Cancelar">✖️</button>
         </div>
 
+        <div class="barra-gravacao" id="barra-gravacao">
+          <button class="gravacao-btn" id="gravacao-btn" title="Segure para gravar">
+            <span id="gravacao-btn-icone">🎙️</span>
+          </button>
+          <div class="gravacao-info" id="gravacao-info">
+            <div class="gravacao-timer" id="gravacao-timer">
+              <span class="gravacao-pontinho"></span>
+              <span id="gravacao-tempo">0:00</span>
+            </div>
+            <span class="gravacao-dica" id="gravacao-dica">Segure o botão pra gravar</span>
+          </div>
+          <div class="gravacao-bars" id="gravacao-bars">
+            <span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <div class="preview-gravacao" id="preview-gravacao" style="display:none">
+            <button class="preview-play" id="preview-play" title="Ouvir">▶</button>
+            <div class="preview-barra">
+              <div class="preview-barra-fill" id="preview-barra-fill"></div>
+            </div>
+            <span class="preview-tempo" id="preview-tempo">0:00</span>
+            <audio id="preview-audio"></audio>
+          </div>
+          <div class="gravacao-acoes" id="gravacao-acoes" style="display:none">
+            <button class="btn-cancelar-grav" onclick="cancelarGravacao()" title="Cancelar">✕</button>
+            <button class="btn-enviar-grav" onclick="enviarGravacao()" title="Enviar">✓</button>
+          </div>
+        </div>
+
         <div class="barra-msg">
           <button class="emoji-btn" onclick="toggleEmojiPicker('canal')" title="Emoji">😀</button>
+          <button class="anexo-btn" onclick="abrirMenuAnexo(event, this, 'canal')" title="Anexar">📎</button>
           <input id="input-canal" placeholder="Digite sua mensagem...">
           <button onclick="enviarMsgCanal()">Enviar</button>
         </div>
@@ -1752,7 +2578,6 @@
         </div>
         <div class="chat-area" id="chat-dm"></div>
 
-        <!-- 🔥 DIGITANDO (dm) -->
         <div class="digitando-bar" id="digitando-dm">
           <span id="digitando-dm-texto"></span>
           <span class="digitando-dots"><span></span><span></span><span></span></span>
@@ -1765,6 +2590,7 @@
 
         <div class="barra-msg">
           <button class="emoji-btn" onclick="toggleEmojiPicker('dm')" title="Emoji">😀</button>
+          <button class="anexo-btn" onclick="abrirMenuAnexo(event, this, 'dm')" title="Anexar">📎</button>
           <input id="input-dm" placeholder="Digite sua mensagem...">
           <button onclick="enviarMsgDM()">Enviar</button>
         </div>
@@ -1775,13 +2601,10 @@
           <h3 style="margin:0">👥 Amigos</h3>
           <button class="secundario mini" onclick="voltarParaServidor()">← Voltar</button>
         </div>
-
         <h4>Pedidos recebidos</h4>
         <ul id="lista-pedidos" class="lista"></ul>
-
         <h4>Meus amigos</h4>
         <ul id="lista-amigos" class="lista"></ul>
-
         <h4>Pedidos enviados</h4>
         <ul id="lista-enviados" class="lista"></ul>
       </div>
@@ -1806,18 +2629,14 @@
   <div id="modal-servidor" class="modal-bg">
     <div class="modal">
       <h3>Criar ou entrar em servidor</h3>
-
       <label>Criar novo</label>
       <input id="modal-nome-servidor" placeholder="Nome do servidor">
       <input id="modal-desc-servidor" placeholder="Descrição (opcional)">
       <button onclick="criarServidor()" style="width:100%; margin-top:8px;">Criar servidor</button>
-
       <hr>
-
       <label>Entrar com código</label>
       <input id="modal-codigo-servidor" placeholder="Ex: STZVZ5WR" style="text-transform:uppercase">
       <button class="verde" onclick="entrarServidor()" style="width:100%; margin-top:8px;">Entrar</button>
-
       <div class="erro" id="modal-servidor-erro"></div>
       <div class="acoes">
         <button class="secundario" onclick="fecharModalServidor()">Fechar</button>
@@ -1829,13 +2648,10 @@
   <div id="modal-editar-servidor" class="modal-bg">
     <div class="modal">
       <h3>Editar servidor</h3>
-
       <label>Nome do servidor</label>
       <input id="edit-servidor-nome" placeholder="Nome do servidor">
-
       <label>Descrição</label>
       <input id="edit-servidor-desc" placeholder="Descrição (opcional)">
-
       <div class="erro" id="edit-servidor-erro"></div>
       <div class="acoes">
         <button class="secundario" onclick="fecharModalEditarServidor()">Cancelar</button>
@@ -1850,13 +2666,10 @@
       <div class="perfil-banner clicavel" id="perfil-banner-container"
            onclick="document.getElementById('input-banner').click()">
         <div id="perfil-banner" class="perfil-banner-img"></div>
-        <div class="perfil-banner-overlay">
-          <span>📷 Trocar banner</span>
-        </div>
+        <div class="perfil-banner-overlay"><span>📷 Trocar banner</span></div>
       </div>
       <input type="file" id="input-banner" accept="image/*"
              style="display:none" onchange="uploadBanner(event)">
-
       <div class="perfil-avatar-wrapper">
         <div class="avatar-container" onclick="document.getElementById('input-avatar').click()">
           <div id="avatar-preview" class="avatar gigante"></div>
@@ -1865,16 +2678,13 @@
         <input type="file" id="input-avatar" accept="image/*"
                style="display:none" onchange="uploadAvatar(event)">
       </div>
-
       <div class="perfil-info">
         <h3 id="perfil-nome-display">...</h3>
         <p id="perfil-email-display">...</p>
-
         <label>Descrição</label>
         <textarea id="perfil-bio" placeholder="Conte um pouco sobre você..."
                   maxlength="200" onblur="salvarBio()"></textarea>
       </div>
-
       <div class="acoes">
         <button class="secundario" onclick="fecharModalPerfil()">Fechar</button>
       </div>
@@ -1885,23 +2695,19 @@
   <div id="modal-perfil-visita" class="modal-bg">
     <div class="modal modal-perfil">
       <button class="modal-fechar" onclick="fecharPerfilVisitado()">✕</button>
-
       <div class="perfil-banner">
         <div id="visita-banner" class="perfil-banner-img"></div>
       </div>
-
       <div class="perfil-avatar-wrapper">
         <div class="avatar-container">
           <div id="visita-avatar" class="avatar gigante"></div>
         </div>
       </div>
-
       <div class="perfil-info">
         <h3 id="visita-nome">...</h3>
         <p id="visita-email">...</p>
         <div id="visita-bio" class="perfil-bio-texto">Sem descrição.</div>
       </div>
-
       <div class="acoes">
         <button class="secundario" onclick="fecharPerfilVisitado()">Fechar</button>
       </div>
@@ -1912,22 +2718,122 @@
   <div id="modal-editor" class="modal-bg">
     <div class="modal modal-editor">
       <h3 id="editor-titulo">Ajustar imagem</h3>
-
       <div class="editor-preview-wrapper">
         <canvas id="editor-canvas"></canvas>
       </div>
-
       <div class="editor-controles">
         <label style="margin-top:0">Zoom</label>
         <input type="range" id="editor-zoom" min="0.5" max="3" step="0.01" value="1"
                oninput="atualizarZoom(this.value)">
-
         <p class="editor-dica">💡 Arraste a imagem pra ajustar. Use o slider ou o scroll pra dar zoom.</p>
       </div>
-
       <div class="acoes">
         <button class="secundario" onclick="descartarEdicao()">❌ Descartar</button>
         <button class="verde" onclick="salvarEdicao()">✅ Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CONFIGURAÇÕES -->
+  <div id="modal-config" class="modal-bg">
+    <div class="modal">
+      <h3>⚙️ Configurações</h3>
+      <div class="config-lista">
+        <label class="config-item">
+          <div class="config-label">
+            <span class="config-icone">🔊</span>
+            <div>
+              <div>Som de mensagens</div>
+              <span class="config-desc">Toca ao receber DM ou mensagem em canal</span>
+            </div>
+          </div>
+          <div class="toggle">
+            <input type="checkbox" id="cfg-som-msg">
+            <span class="slider"></span>
+          </div>
+        </label>
+        <label class="config-item">
+          <div class="config-label">
+            <span class="config-icone">😀</span>
+            <div>
+              <div>Som de reações</div>
+              <span class="config-desc">Toca quando alguém reage à sua mensagem</span>
+            </div>
+          </div>
+          <div class="toggle">
+            <input type="checkbox" id="cfg-som-reacao">
+            <span class="slider"></span>
+          </div>
+        </label>
+        <label class="config-item">
+          <div class="config-label">
+            <span class="config-icone">🔔</span>
+            <div>
+              <div>Notificações visuais</div>
+              <span class="config-desc">Card no canto com quem mandou</span>
+            </div>
+          </div>
+          <div class="toggle">
+            <input type="checkbox" id="cfg-notif-visual">
+            <span class="slider"></span>
+          </div>
+        </label>
+        <label class="config-item">
+          <div class="config-label">
+            <span class="config-icone">🖥️</span>
+            <div>
+              <div>Notificações do sistema</div>
+              <span class="config-desc">Bolha do Windows/Android quando aba em background</span>
+            </div>
+          </div>
+          <div class="toggle">
+            <input type="checkbox" id="cfg-notif-sistema">
+            <span class="slider"></span>
+          </div>
+        </label>
+        <label class="config-item">
+          <div class="config-label">
+            <span class="config-icone">⌨️</span>
+            <div>
+              <div>Mostrar "digitando"</div>
+              <span class="config-desc">Vê quando alguém está digitando</span>
+            </div>
+          </div>
+          <div class="toggle">
+            <input type="checkbox" id="cfg-digitando">
+            <span class="slider"></span>
+          </div>
+        </label>
+      </div>
+      <div class="acoes">
+        <button class="secundario" onclick="fecharConfig()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL VER IMAGEM -->
+  <div id="modal-imagem">
+    <button class="fechar-img" onclick="fecharImagem()">✕</button>
+    <img id="imagem-grande" src="" alt="" onclick="event.stopPropagation()">
+  </div>
+
+  <!-- MODAL CÂMERA -->
+  <div id="modal-camera">
+    <div class="camera-card">
+      <h3>📷 Tirar foto</h3>
+      <div class="camera-preview-wrap" id="camera-preview-wrap">
+        <video id="camera-video" autoplay playsinline muted></video>
+        <canvas id="camera-canvas"></canvas>
+      </div>
+      <div class="camera-controles" id="camera-controles">
+        <button class="camera-shutter" onclick="capturarFoto()" title="Tirar foto">📸</button>
+      </div>
+      <div class="camera-controles" id="camera-controles-foto" style="display:none">
+        <button class="secundario" onclick="tirarOutraFoto()">🔄 Tirar outra</button>
+        <button class="verde" onclick="enviarFotoCapturada()">✅ Enviar</button>
+      </div>
+      <div class="camera-controles">
+        <button class="secundario" onclick="fecharCamera()">Cancelar</button>
       </div>
     </div>
   </div>
@@ -1936,7 +2842,48 @@
   <div class="emoji-picker" id="emoji-picker-dm"></div>
   <div id="reacao-picker-global"></div>
 
+  <!-- MENU DE ANEXO -->
+  <div id="menu-anexo">
+    <button onclick="escolherTipoAnexo('foto')">
+      <span class="menu-emoji">🖼️</span>
+      <span>
+        Foto
+        <span class="menu-desc">Escolher do dispositivo · máx 10MB</span>
+      </span>
+    </button>
+    <button onclick="abrirCameraDoContexto()">
+      <span class="menu-emoji">📷</span>
+      <span>
+        Câmera
+        <span class="menu-desc">Tirar uma foto agora</span>
+      </span>
+    </button>
+    <button onclick="escolherTipoAnexo('video')">
+      <span class="menu-emoji">🎬</span>
+      <span>
+        Vídeo
+        <span class="menu-desc">MP4, WEBM · máx 100MB</span>
+      </span>
+    </button>
+    <button onclick="iniciarGravacaoAudioDoContexto()">
+      <span class="menu-emoji">🎙️</span>
+      <span>
+        Áudio
+        <span class="menu-desc">Gravar mensagem de voz</span>
+      </span>
+    </button>
+    <button onclick="escolherTipoAnexo('arquivo')">
+      <span class="menu-emoji">📎</span>
+      <span>
+        Arquivo
+        <span class="menu-desc">Qualquer tipo · máx 100MB</span>
+      </span>
+    </button>
+  </div>
+
+  <input type="file" id="input-anexo" style="display:none">
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="/app.js"></script>
 </body>
-</html>
+</html> 

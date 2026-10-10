@@ -1,7 +1,10 @@
 const express = require('express');
 const http = require('http');
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
+const multer = require('multer');
 const { Server } = require('socket.io');
 const db = require('./db');
 const auth = require('./auth');
@@ -10,9 +13,51 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// Pasta de uploads (cria se não existir)
+const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+// Configuração do multer
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase().slice(0, 10);
+    const nome = crypto.randomBytes(16).toString('hex') + ext;
+    cb(null, nome);
+  },
+});
+
+const TIPOS_PERMITIDOS = {
+  foto: {
+    mimes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'],
+    max: 10 * 1024 * 1024, // 10MB
+  },
+  video: {
+    mimes: ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-matroska'],
+    max: 100 * 1024 * 1024, // 100MB
+  },
+  arquivo: {
+    mimes: null, // qualquer um
+    max: 100 * 1024 * 1024, // 100MB
+  },
+};
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // limite global
+});
+
 app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Serve os uploads (com proteção básica)
+app.get('/uploads/:filename', (req, res) => {
+  const filename = path.basename(req.params.filename);
+  const filepath = path.join(UPLOADS_DIR, filename);
+  if (!fs.existsSync(filepath)) return res.status(404).send('Não encontrado');
+  res.sendFile(filepath);
+});
 
 // ========== AUTH HELPERS ==========
 
@@ -28,6 +73,44 @@ function exigirAuth(req, res, next) {
   req.usuario = u;
   next();
 }
+
+// ========== UPLOAD ==========
+
+app.post('/api/upload', exigirAuth, upload.single('arquivo'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
+
+    const tipoSolicitado = (req.body.tipo || 'arquivo').toLowerCase();
+    const regras = TIPOS_PERMITIDOS[tipoSolicitado] || TIPOS_PERMITIDOS.arquivo;
+
+    // Verifica tamanho
+    if (req.file.size > regras.max) {
+      fs.unlinkSync(req.file.path);
+      const mb = (regras.max / 1024 / 1024).toFixed(0);
+      return res.status(400).json({ erro: `Arquivo muito grande (máx ${mb}MB para ${tipoSolicitado})` });
+    }
+
+    // Verifica mime
+    if (regras.mimes && !regras.mimes.includes(req.file.mimetype)) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ erro: `Tipo não permitido para ${tipoSolicitado}` });
+    }
+
+    res.json({
+      ok: true,
+      anexo: {
+        tipo: tipoSolicitado,
+        url: '/uploads/' + req.file.filename,
+        nome: req.file.originalname,
+        tamanho: req.file.size,
+        mime: req.file.mimetype,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ erro: 'Erro ao processar upload' });
+  }
+});
 
 // ========== AUTH ==========
 
@@ -223,8 +306,8 @@ app.get('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
 
 app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
-  const { texto, replyId, replyAutor, replyTexto } = req.body;
-  if (!texto || !texto.trim()) return res.status(400).json({ erro: 'Texto vazio' });
+  const { texto, replyId, replyAutor, replyTexto, anexo } = req.body;
+  if ((!texto || !texto.trim()) && !anexo) return res.status(400).json({ erro: 'Mensagem vazia' });
   const conv = db.buscarConversaPorId(id);
   if (!conv) return res.status(404).json({ erro: 'Conversa não existe' });
   const ehParticipante = conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id;
@@ -233,10 +316,11 @@ app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const msg = db.salvarMensagem({
     conversaId: id,
     deId: req.usuario.id,
-    texto: texto.trim(),
+    texto: (texto || '').trim(),
     replyId: replyId || null,
     replyAutor: replyAutor || null,
     replyTexto: replyTexto || null,
+    anexo: anexo || null,
   });
 
   const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
@@ -470,8 +554,8 @@ app.get('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
 
 app.post('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
-  const { texto, replyId, replyAutor, replyTexto } = req.body;
-  if (!texto || !texto.trim()) return res.status(400).json({ erro: 'Texto vazio' });
+  const { texto, replyId, replyAutor, replyTexto, anexo } = req.body;
+  if ((!texto || !texto.trim()) && !anexo) return res.status(400).json({ erro: 'Mensagem vazia' });
   const c = db.buscarCanalPorId(id);
   if (!c) return res.status(404).json({ erro: 'Canal não existe' });
   if (!db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
@@ -479,10 +563,11 @@ app.post('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   const msg = db.salvarMensagemCanal({
     canalId: id,
     deId: req.usuario.id,
-    texto: texto.trim(),
+    texto: (texto || '').trim(),
     replyId: replyId || null,
     replyAutor: replyAutor || null,
     replyTexto: replyTexto || null,
+    anexo: anexo || null,
   });
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
 
@@ -532,6 +617,15 @@ app.delete('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) 
   const ehDono = s && s.dono_id === req.usuario.id;
   if (msg.de_id !== req.usuario.id && !ehDono) {
     return res.status(403).json({ erro: 'Sem permissão' });
+  }
+
+  // Remove o arquivo do disco, se houver
+  if (msg.anexo && msg.anexo.url && msg.anexo.url.startsWith('/uploads/')) {
+    const filename = path.basename(msg.anexo.url);
+    const filepath = path.join(UPLOADS_DIR, filename);
+    if (fs.existsSync(filepath)) {
+      try { fs.unlinkSync(filepath); } catch (e) {}
+    }
   }
 
   db.deletarMensagemCanal(idMensagem);
@@ -598,30 +692,23 @@ io.on('connection', (socket) => {
     socket.leave('canal-' + canalId);
   });
 
-  // 🔥 NOVO: digitando no canal
   socket.on('digitando-canal', ({ canalId, nome }) => {
     socket.to('canal-' + canalId).emit('alguem-digitando-canal', {
-      canalId,
-      nome,
-      usuarioId: socket.usuario.id,
+      canalId, nome, usuarioId: socket.usuario.id,
     });
   });
 
   socket.on('parou-digitando-canal', ({ canalId }) => {
     socket.to('canal-' + canalId).emit('alguem-parou-digitando-canal', {
-      canalId,
-      usuarioId: socket.usuario.id,
+      canalId, usuarioId: socket.usuario.id,
     });
   });
 
-  // 🔥 NOVO: digitando na DM
   socket.on('digitando-dm', ({ conversaId, paraUsuarioId, nome }) => {
     const socketOutro = [...online.values()].find((u) => u.id === paraUsuarioId);
     if (socketOutro) {
       io.to(socketOutro.socketId).emit('alguem-digitando-dm', {
-        conversaId,
-        nome,
-        usuarioId: socket.usuario.id,
+        conversaId, nome, usuarioId: socket.usuario.id,
       });
     }
   });
@@ -630,8 +717,7 @@ io.on('connection', (socket) => {
     const socketOutro = [...online.values()].find((u) => u.id === paraUsuarioId);
     if (socketOutro) {
       io.to(socketOutro.socketId).emit('alguem-parou-digitando-dm', {
-        conversaId,
-        usuarioId: socket.usuario.id,
+        conversaId, usuarioId: socket.usuario.id,
       });
     }
   });
@@ -645,4 +731,4 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
-});
+}); 
