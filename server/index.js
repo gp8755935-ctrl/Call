@@ -64,21 +64,17 @@ function exigirAuth(req, res, next) {
 app.post('/api/upload', exigirAuth, upload.single('arquivo'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
-
     const tipoSolicitado = (req.body.tipo || 'arquivo').toLowerCase();
     const regras = TIPOS_PERMITIDOS[tipoSolicitado] || TIPOS_PERMITIDOS.arquivo;
-
     if (req.file.size > regras.max) {
       fs.unlinkSync(req.file.path);
       const mb = (regras.max / 1024 / 1024).toFixed(0);
-      return res.status(400).json({ erro: `Arquivo muito grande (máx ${mb}MB para ${tipoSolicitado})` });
+      return res.status(400).json({ erro: `Arquivo muito grande (máx ${mb}MB)` });
     }
-
     if (regras.mimes && !regras.mimes.includes(req.file.mimetype)) {
       fs.unlinkSync(req.file.path);
-      return res.status(400).json({ erro: `Tipo não permitido para ${tipoSolicitado}` });
+      return res.status(400).json({ erro: `Tipo não permitido` });
     }
-
     res.json({
       ok: true,
       anexo: {
@@ -102,7 +98,6 @@ app.post('/api/cadastro', async (req, res) => {
   if (!nome || !email || !senha) return res.status(400).json({ erro: 'Preencha todos os campos' });
   if (senha.length < 6) return res.status(400).json({ erro: 'Senha precisa ter 6+ caracteres' });
   if (db.buscarUsuarioPorEmail(email)) return res.status(400).json({ erro: 'Email já cadastrado' });
-
   try {
     const senhaHash = await auth.hashearSenha(senha);
     const usuario = db.criarUsuario({ nome, email, senhaHash });
@@ -118,24 +113,17 @@ app.post('/api/cadastro', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   const { email, senha } = req.body;
   if (!email || !senha) return res.status(400).json({ erro: 'Preencha tudo' });
-
   const usuario = db.buscarUsuarioPorEmail(email);
   if (!usuario) return res.status(400).json({ erro: 'Email ou senha inválidos' });
-
   const ok = await auth.verificarSenha(senha, usuario.senha_hash);
   if (!ok) return res.status(400).json({ erro: 'Email ou senha inválidos' });
-
   const token = auth.gerarToken(usuario);
   res.cookie('token', token, { httpOnly: true, sameSite: 'lax', maxAge: 30 * 24 * 60 * 60 * 1000 });
   res.json({
     ok: true,
     usuario: {
-      id: usuario.id,
-      nome: usuario.nome,
-      email: usuario.email,
-      avatar: usuario.avatar || '',
-      banner: usuario.banner || '',
-      bio: usuario.bio || '',
+      id: usuario.id, nome: usuario.nome, email: usuario.email,
+      avatar: usuario.avatar || '', banner: usuario.banner || '', bio: usuario.bio || '',
     },
   });
 });
@@ -217,16 +205,24 @@ app.post('/api/amizades/pedir', exigirAuth, (req, res) => {
   }
 
   const pedido = db.criarPedidoAmizade(req.usuario.id, paraId);
-  io.emit('amizade-nova', {
-    paraId,
-    pedido: {
-      amizade_id: pedido.id,
-      id: req.usuario.id,
-      nome: req.usuario.nome,
-      email: req.usuario.email,
-      criado_em: Date.now(),
-    },
-  });
+
+  // 🔥 Notifica SÓ o destinatário
+  const socketDestino = [...online.values()].find((u) => u.id === paraId);
+  const meusDados = db.buscarUsuarioPorId(req.usuario.id);
+
+  if (socketDestino) {
+    io.to(socketDestino.socketId).emit('amizade-nova', {
+      paraId,
+      pedido: {
+        amizade_id: pedido.id,
+        id: req.usuario.id,
+        nome: req.usuario.nome,
+        email: req.usuario.email,
+        avatar: meusDados?.avatar || '',
+        criado_em: Date.now(),
+      },
+    });
+  }
   res.json({ ok: true, pedido });
 });
 
@@ -236,10 +232,21 @@ app.post('/api/amizades/aceitar', exigirAuth, (req, res) => {
   const pedido = db.listarPedidosRecebidos(req.usuario.id).find((p) => p.amizade_id === amizadeId);
   if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado' });
   db.atualizarStatusAmizade(amizadeId, 'aceita');
-  io.emit('amizade-aceita', {
-    paraId: pedido.id,
-    por: { id: req.usuario.id, nome: req.usuario.nome, email: req.usuario.email },
-  });
+
+  const meusDados = db.buscarUsuarioPorId(req.usuario.id);
+
+  // 🔥 Notifica SÓ o solicitante
+  const socketSolicitante = [...online.values()].find((u) => u.id === pedido.id);
+  if (socketSolicitante) {
+    io.to(socketSolicitante.socketId).emit('amizade-aceita', {
+      por: {
+        id: req.usuario.id,
+        nome: req.usuario.nome,
+        email: req.usuario.email,
+        avatar: meusDados?.avatar || '',
+      },
+    });
+  }
   res.json({ ok: true });
 });
 
@@ -273,13 +280,9 @@ app.post('/api/bloquear', exigirAuth, (req, res) => {
   if (alvoId === req.usuario.id) return res.status(400).json({ erro: 'Não pode se bloquear' });
   const alvo = db.buscarUsuarioPorId(alvoId);
   if (!alvo) return res.status(404).json({ erro: 'Usuário não existe' });
-
   db.bloquear(req.usuario.id, alvoId);
-
-  // Também remove amizade se houver
   const amz = db.buscarAmizadeEntre(req.usuario.id, alvoId);
   if (amz) db.deletarAmizade(amz.id);
-
   res.json({ ok: true });
 });
 
@@ -329,10 +332,8 @@ app.get('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const ehParticipante = conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id;
   if (!ehParticipante) return res.status(403).json({ erro: 'Sem permissão' });
   db.marcarComoLidas(id, req.usuario.id);
-
   const mensagens = db.listarMensagens(id);
   const reacoes = db.listarReacoesDeMensagens('dm', mensagens.map((m) => m.id));
-
   res.json({
     mensagens: mensagens.map((m) => ({ ...m, reacoes: reacoes[m.id] || {} })),
   });
@@ -348,22 +349,16 @@ app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   if (!ehParticipante) return res.status(403).json({ erro: 'Sem permissão' });
 
   const msg = db.salvarMensagem({
-    conversaId: id,
-    deId: req.usuario.id,
-    texto: (texto || '').trim(),
-    replyId: replyId || null,
-    replyAutor: replyAutor || null,
-    replyTexto: replyTexto || null,
-    anexo: anexo || null,
+    conversaId: id, deId: req.usuario.id, texto: (texto || '').trim(),
+    replyId: replyId || null, replyAutor: replyAutor || null,
+    replyTexto: replyTexto || null, anexo: anexo || null,
   });
 
   const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
   const socketOutro = [...online.values()].find((u) => u.id === outroId);
-
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
   const payload = { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '', reacoes: {} };
 
-  // 🔥 Só emite se o outro NÃO tiver bloqueado quem enviou
   if (socketOutro && !db.estaBloqueado(outroId, req.usuario.id)) {
     io.to(socketOutro.socketId).emit('dm-nova', { conversa_id: id, mensagem: payload });
   }
@@ -389,10 +384,8 @@ app.patch('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req, 
 
   const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
   const socketOutro = [...online.values()].find((u) => u.id === outroId);
-
   const payload = { id: idMensagem, conversa_id: idConversa, de_id: req.usuario.id, texto: texto.trim(), hora: msg.hora, editado: 1 };
   if (socketOutro) io.to(socketOutro.socketId).emit('dm-editada', { conversa_id: idConversa, mensagem: payload });
-
   res.json({ ok: true, mensagem: payload });
 });
 
@@ -413,7 +406,6 @@ app.delete('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req,
 
   const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
   const socketOutro = [...online.values()].find((u) => u.id === outroId);
-
   if (socketOutro) io.to(socketOutro.socketId).emit('dm-deletada', { conversa_id: idConversa, mensagem_id: idMensagem });
   res.json({ ok: true });
 });
@@ -474,7 +466,6 @@ app.post('/api/reacoes/toggle', exigirAuth, (req, res) => {
     const socketOutro = [...online.values()].find((u) => u.id === outroId);
     if (socketOutro) io.to(socketOutro.socketId).emit('reacao-atualizada', payload);
   }
-
   res.json({ ok: true, acao, reacoes: reacoes[alvoId] || {} });
 });
 
@@ -510,13 +501,10 @@ app.patch('/api/servidores/:id', exigirAuth, (req, res) => {
   const s = db.buscarServidorPorId(id);
   if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
   if (s.dono_id !== req.usuario.id) return res.status(403).json({ erro: 'Só o dono pode editar' });
-
   const { nome, descricao } = req.body;
   if (!nome || !nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
-
   db.atualizarServidor(id, { nome: nome.trim(), descricao: (descricao || '').trim() });
   const atualizado = db.buscarServidorPorId(id);
-
   io.emit('servidor-atualizado', { servidor: atualizado });
   res.json({ ok: true, servidor: atualizado });
 });
@@ -528,6 +516,19 @@ app.post('/api/servidores/entrar', exigirAuth, (req, res) => {
   if (!s) return res.status(404).json({ erro: 'Código inválido' });
   const entrou = db.adicionarMembro(s.id, req.usuario.id);
   if (!entrou) return res.status(400).json({ erro: 'Você já é membro' });
+
+  // 🔥 Notifica todos os membros do servidor que alguém entrou
+  const meusDados = db.buscarUsuarioPorId(req.usuario.id);
+  io.to('servidor-' + s.id).emit('membro-entrou', {
+    servidor_id: s.id,
+    membro: {
+      id: req.usuario.id,
+      nome: req.usuario.nome,
+      email: req.usuario.email,
+      avatar: meusDados?.avatar || '',
+    },
+  });
+
   res.json({ ok: true, servidor: s });
 });
 
@@ -537,6 +538,7 @@ app.post('/api/servidores/:id/sair', exigirAuth, (req, res) => {
   if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
   if (s.dono_id === req.usuario.id) return res.status(400).json({ erro: 'Dono não pode sair' });
   db.removerMembro(id, req.usuario.id);
+  io.to('servidor-' + id).emit('membro-removido', { servidor_id: id, usuario_id: req.usuario.id });
   res.json({ ok: true });
 });
 
@@ -548,7 +550,6 @@ app.delete('/api/servidores/:id', exigirAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// 🔥 Remover membro do servidor (só dono)
 app.post('/api/servidores/:id/remover-membro', exigirAuth, (req, res) => {
   const servidorId = Number(req.params.id);
   const { usuarioId } = req.body;
@@ -560,7 +561,19 @@ app.post('/api/servidores/:id/remover-membro', exigirAuth, (req, res) => {
   if (usuarioId === s.dono_id) return res.status(400).json({ erro: 'Dono não pode ser removido' });
 
   db.removerMembro(servidorId, usuarioId);
-  io.emit('membro-removido', { servidor_id: servidorId, usuario_id: usuarioId });
+
+  // 🔥 Notifica o servidor inteiro
+  io.to('servidor-' + servidorId).emit('membro-removido', { servidor_id: servidorId, usuario_id: usuarioId });
+
+  // 🔥 Notifica o membro removido individualmente
+  const socketRemovido = [...online.values()].find((u) => u.id === usuarioId);
+  if (socketRemovido) {
+    io.to(socketRemovido.socketId).emit('voce-foi-removido', {
+      servidor_id: servidorId,
+      servidor_nome: s.nome,
+    });
+  }
+
   res.json({ ok: true });
 });
 
@@ -571,13 +584,10 @@ app.post('/api/servidores/:id/canais', exigirAuth, (req, res) => {
   const s = db.buscarServidorPorId(servidorId);
   if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
   if (s.dono_id !== req.usuario.id) return res.status(403).json({ erro: 'Só o dono pode criar canais' });
-
   const { nome } = req.body;
   if (!nome || !nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
-
   const c = db.criarCanal(servidorId, nome.trim());
   if (!c) return res.status(400).json({ erro: 'Nome inválido ou já existe' });
-
   io.to('servidor-' + servidorId).emit('canal-criado', { canal: c });
   res.json({ ok: true, canal: c });
 });
@@ -595,10 +605,8 @@ app.get('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   const c = db.buscarCanalPorId(id);
   if (!c) return res.status(404).json({ erro: 'Canal não existe' });
   if (!db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
-
   const mensagens = db.listarMensagensCanal(id);
   const reacoes = db.listarReacoesDeMensagens('canal', mensagens.map((m) => m.id));
-
   res.json({
     mensagens: mensagens.map((m) => ({ ...m, reacoes: reacoes[m.id] || {} })),
   });
@@ -613,13 +621,9 @@ app.post('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   if (!db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
 
   const msg = db.salvarMensagemCanal({
-    canalId: id,
-    deId: req.usuario.id,
-    texto: (texto || '').trim(),
-    replyId: replyId || null,
-    replyAutor: replyAutor || null,
-    replyTexto: replyTexto || null,
-    anexo: anexo || null,
+    canalId: id, deId: req.usuario.id, texto: (texto || '').trim(),
+    replyId: replyId || null, replyAutor: replyAutor || null,
+    replyTexto: replyTexto || null, anexo: anexo || null,
   });
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
 
@@ -627,7 +631,6 @@ app.post('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
     canal_id: id,
     mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '', reacoes: {} },
   });
-
   res.json({ ok: true, mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '', reacoes: {} } });
 });
 

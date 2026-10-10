@@ -41,30 +41,19 @@ let naoLidasTotal = 0;
 let tituloOriginal = 'Void — Conecte-se';
 
 let telaAtual = 'home';
-
 let replyAtual = { canal: null, dm: null };
 let pickerReacaoEstado = { msgId: null, contexto: null };
 let notificacoesAbertas = new Set();
 let digitandoTimeout = { canal: null, dm: null };
 let ultimoEnvioDigitando = { canal: 0, dm: 0 };
 let timeoutAlguemDigitando = { canal: null, dm: null };
-
 let anexoContexto = null;
 let anexoTipo = null;
 let longPressTimer = null;
-let longPressTimerServidor = null;
-let longPressTimerDM = null;
-
-// Estado do menu contextual
 let menuContextoAberto = null;
-
-// Estado do painel de membros
 let painelMembrosAberto = false;
-
-// Estado de perfis visitados
 let perfilVisitadoAtual = null;
 
-// CONFIG
 const CONFIG_PADRAO = { somMsg: true, somReacao: true, notifVisual: true, notifSistema: true, digitando: true };
 let config = { ...CONFIG_PADRAO };
 
@@ -126,14 +115,8 @@ function mostrarNotificacaoSistema(titulo, corpo, icone) {
   if (!('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
   if (!document.hidden) return;
-
   try {
-    const n = new Notification(titulo, {
-      body: corpo,
-      icon: icone || undefined,
-      tag: 'void-msg',
-      renotify: true,
-    });
+    const n = new Notification(titulo, { body: corpo, icon: icone || undefined, tag: 'void-msg', renotify: true });
     n.onclick = () => { window.focus(); n.close(); };
     setTimeout(() => n.close(), 5000);
   } catch (e) {}
@@ -150,7 +133,6 @@ function mostrarNotificacaoVisual({
   acoes = null, silencioso = false,
 }) {
   if (!config.notifVisual) return;
-  // 🔥 Se silencioso (silenciado ou bloqueado), não mostra som
   if (!silencioso) tocarSomNotificacao();
 
   const stack = document.getElementById('notif-stack');
@@ -175,28 +157,16 @@ function mostrarNotificacaoVisual({
       <div class="notif-titulo">${escapeHtml(deNome || 'Alguém')}</div>
       <div class="notif-onde">${escapeHtml(ondeTexto || '')}</div>
       <div class="notif-texto">${escapeHtml(texto || '')}</div>
-      ${temAcoes ? `
-        <div class="notif-acoes">
-          ${acoes.map((a, i) => `<button class="${a.classe || ''}" data-acao-idx="${i}">${a.label}</button>`).join('')}
-        </div>
-      ` : ''}
+      ${temAcoes ? `<div class="notif-acoes">${acoes.map((a, i) => `<button class="${a.classe || ''}" data-acao-idx="${i}">${a.label}</button>`).join('')}</div>` : ''}
     </div>
     <button class="notif-close" title="Fechar">✕</button>
   `;
 
   let arrastando = false;
-  let startX = 0;
-  let startY = 0;
+  let startX = 0, startY = 0;
   let moveu = false;
 
-  const iniciar = (x, y) => {
-    arrastando = true;
-    startX = x;
-    startY = y;
-    moveu = false;
-    el.style.transition = 'none';
-  };
-
+  const iniciar = (x, y) => { arrastando = true; startX = x; startY = y; moveu = false; el.style.transition = 'none'; };
   const mover = (x, y) => {
     if (!arrastando) return;
     const dx = x - startX;
@@ -204,22 +174,16 @@ function mostrarNotificacaoVisual({
     if (Math.abs(dx) > 8 || Math.abs(dy) > 8) moveu = true;
     if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 15) return;
     el.style.transform = `translateX(${dx}px)`;
-    const opac = Math.max(0.2, 1 - Math.abs(dx) / 200);
-    el.style.opacity = opac;
+    el.style.opacity = Math.max(0.2, 1 - Math.abs(dx) / 200);
   };
-
   const terminar = () => {
     if (!arrastando) return;
     arrastando = false;
     el.style.transition = '';
     const match = (el.style.transform || '').match(/translateX\((-?\d+(?:\.\d+)?)px\)/);
     const dx = match ? parseFloat(match[1]) : 0;
-    if (Math.abs(dx) > 80) {
-      fecharNotif();
-    } else {
-      el.style.transform = 'translateX(0)';
-      el.style.opacity = '1';
-    }
+    if (Math.abs(dx) > 80) fecharNotif();
+    else { el.style.transform = 'translateX(0)'; el.style.opacity = '1'; }
   };
 
   el.addEventListener('mousedown', (e) => {
@@ -240,8 +204,7 @@ function mostrarNotificacaoVisual({
   el.addEventListener('touchend', terminar);
 
   el.addEventListener('click', (e) => {
-    if (e.target.closest('.notif-close')) return;
-    if (e.target.closest('.notif-acoes button')) return;
+    if (e.target.closest('.notif-close') || e.target.closest('.notif-acoes button')) return;
     if (moveu) return;
     if (typeof aoClicar === 'function') aoClicar();
     fecharNotif();
@@ -261,27 +224,17 @@ function mostrarNotificacaoVisual({
     });
   }
 
-  el.querySelector('.notif-close').addEventListener('click', (e) => {
-    e.stopPropagation();
-    fecharNotif();
-  });
+  el.querySelector('.notif-close').addEventListener('click', (e) => { e.stopPropagation(); fecharNotif(); });
 
   const fecharNotif = () => {
     el.classList.add('fechando');
     el.style.transform = 'translateX(120%)';
     el.style.opacity = '0';
-    setTimeout(() => {
-      el.remove();
-      notificacoesAbertas.delete(id);
-    }, 220);
+    setTimeout(() => { el.remove(); notificacoesAbertas.delete(id); }, 220);
   };
 
   stack.appendChild(el);
-
-  const tempo = temAcoes ? 8000 : 5000;
-  setTimeout(() => {
-    if (document.body.contains(el)) fecharNotif();
-  }, tempo);
+  setTimeout(() => { if (document.body.contains(el)) fecharNotif(); }, temAcoes ? 8000 : 5000);
 }
 
 // ============================================================
@@ -303,8 +256,7 @@ function tocarSom() {
     osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.15);
     gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.2);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.2);
   } catch (e) {}
 }
 
@@ -322,8 +274,7 @@ function tocarSomNotificacao() {
     osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.2);
     gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.25);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.25);
   } catch (e) {}
 }
 
@@ -373,7 +324,7 @@ function fecharImagem() {
 }
 
 // ============================================================
-// MENU CONTEXTUAL (long-press)
+// MENU CONTEXTUAL
 // ============================================================
 
 function abrirMenuContexto(event, opcoes) {
@@ -408,15 +359,12 @@ function abrirMenuContexto(event, opcoes) {
     const mRect = menu.getBoundingClientRect();
     const mW = mRect.width || 220;
     const mH = mRect.height || 200;
-
     let top = y;
     let left = x;
-
     if (left + mW > window.innerWidth - 10) left = window.innerWidth - mW - 10;
     if (left < 10) left = 10;
     if (top + mH > window.innerHeight - 10) top = y - mH;
     if (top < 10) top = 10;
-
     menu.style.top = top + 'px';
     menu.style.left = left + 'px';
   });
@@ -443,12 +391,7 @@ function abrirMenuAnexo(event, btn, contexto) {
   if (event) { event.stopPropagation(); event.preventDefault(); }
   const menu = document.getElementById('menu-anexo');
   if (!menu || !btn) return;
-
-  if (menu.classList.contains('ativo') && anexoContexto === contexto) {
-    fecharMenuAnexo();
-    return;
-  }
-
+  if (menu.classList.contains('ativo') && anexoContexto === contexto) { fecharMenuAnexo(); return; }
   anexoContexto = contexto;
   menu.classList.add('ativo');
 
@@ -457,14 +400,11 @@ function abrirMenuAnexo(event, btn, contexto) {
     const mRect = menu.getBoundingClientRect();
     const mW = mRect.width || 240;
     const mH = mRect.height || 320;
-
     let top = rect.top - mH - 8;
     let left = rect.left;
-
     if (left + mW > window.innerWidth - 10) left = window.innerWidth - mW - 10;
     if (left < 10) left = 10;
     if (top < 10) top = rect.bottom + 8;
-
     menu.style.top = top + 'px';
     menu.style.left = left + 'px';
   });
@@ -492,9 +432,7 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('scroll', (e) => {
-  if (e.target && e.target.closest && e.target.closest('.chat-area')) {
-    fecharMenuAnexo();
-  }
+  if (e.target && e.target.closest && e.target.closest('.chat-area')) fecharMenuAnexo();
 }, true);
 
 // ============================================================
@@ -521,9 +459,7 @@ function criarBarraUpload(nomeArquivo) {
       <span>📤 ${escapeHtml(nomeArquivo)}</span>
       <span class="upload-pct">0%</span>
     </div>
-    <div class="upload-track">
-      <div class="upload-fill"></div>
-    </div>
+    <div class="upload-track"><div class="upload-fill"></div></div>
   `;
   return el;
 }
@@ -533,10 +469,7 @@ function enviarComUpload(file, tipo, contexto) {
     const chatId = contexto === 'canal' ? 'chat-canal' : 'chat-dm';
     const chatEl = document.getElementById(chatId);
     const barra = criarBarraUpload(file.name);
-    if (chatEl) {
-      chatEl.appendChild(barra);
-      chatEl.scrollTop = chatEl.scrollHeight;
-    }
+    if (chatEl) { chatEl.appendChild(barra); chatEl.scrollTop = chatEl.scrollHeight; }
 
     const fill = barra.querySelector('.upload-fill');
     const pct = barra.querySelector('.upload-pct');
@@ -547,7 +480,6 @@ function enviarComUpload(file, tipo, contexto) {
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload');
-
     xhr.upload.onprogress = (ev) => {
       if (ev.lengthComputable) {
         const p = Math.round((ev.loaded / ev.total) * 100);
@@ -555,45 +487,33 @@ function enviarComUpload(file, tipo, contexto) {
         pct.textContent = p + '%';
       }
     };
-
     xhr.onload = async () => {
       if (xhr.status !== 200) {
         let msg = 'Erro no upload';
-        try {
-          const data = JSON.parse(xhr.responseText);
-          if (data.erro) msg = data.erro;
-        } catch (e2) {}
+        try { const data = JSON.parse(xhr.responseText); if (data.erro) msg = data.erro; } catch (e2) {}
         barra.classList.add('erro');
         pct.textContent = '❌ ' + msg;
         setTimeout(() => barra.remove(), 4000);
-        resolve(null);
-        return;
+        resolve(null); return;
       }
-
       let anexo;
-      try {
-        const data = JSON.parse(xhr.responseText);
-        anexo = data.anexo;
-      } catch (e2) {
+      try { const data = JSON.parse(xhr.responseText); anexo = data.anexo; }
+      catch (e2) {
         barra.classList.add('erro');
         pct.textContent = '❌ Resposta inválida';
         setTimeout(() => barra.remove(), 4000);
-        resolve(null);
-        return;
+        resolve(null); return;
       }
-
       barra.remove();
       await enviarMensagemComAnexo(contexto, anexo);
       resolve(anexo);
     };
-
     xhr.onerror = () => {
       barra.classList.add('erro');
       pct.textContent = '❌ Erro de conexão';
       setTimeout(() => barra.remove(), 4000);
       resolve(null);
     };
-
     xhr.send(formData);
   });
 }
@@ -607,26 +527,20 @@ async function enviarMensagemComAnexo(contexto, anexo) {
   if (contexto === 'canal') {
     if (!canalAtivo) return;
     const r = await fetch(`/api/canais/${canalAtivo.id}/mensagens`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ texto, anexo }),
     });
-    if (!r.ok) {
-      const data = await r.json().catch(() => ({}));
-      alert(data.erro || 'Erro ao enviar anexo');
-      return;
-    }
+    if (!r.ok) { alert('Erro ao enviar anexo'); return; }
     const el = document.getElementById('chat-canal');
     setTimeout(() => { el.scrollTop = el.scrollHeight; }, 100);
   } else if (contexto === 'dm') {
     if (!conversaAtual) return;
     const r = await fetch(`/api/conversas/${conversaAtual.conversa_id}/mensagens`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ texto, anexo }),
     });
     const data = await r.json();
-    if (!r.ok) { alert(data.erro || 'Erro ao enviar anexo'); return; }
+    if (!r.ok) { alert(data.erro || 'Erro'); return; }
     adicionarMsgDM(data.mensagem);
   }
 }
@@ -667,9 +581,7 @@ function renderAnexoHTML(anexo) {
               <span class="media-volume-icone">🔊</span>
             </button>
             <div class="media-volume-wrap">
-              <div class="media-volume-track">
-                <div class="media-volume-fill"></div>
-              </div>
+              <div class="media-volume-track"><div class="media-volume-fill"></div></div>
             </div>
             <button class="media-fullscreen-btn" type="button" title="Tela cheia">⛶</button>
           </div>
@@ -700,9 +612,7 @@ function renderAnexoHTML(anexo) {
             <span class="media-volume-icone">🔊</span>
           </button>
           <div class="media-volume-wrap">
-            <div class="media-volume-track">
-              <div class="media-volume-fill"></div>
-            </div>
+            <div class="media-volume-track"><div class="media-volume-fill"></div></div>
           </div>
           <audio class="media-audio-elemento" src="${a.url}" preload="metadata"></audio>
         </div>
@@ -725,9 +635,7 @@ function renderAnexoHTML(anexo) {
         </a>
       </div>`;
     }
-  } catch (e) {
-    return '';
-  }
+  } catch (e) { return ''; }
   return '';
 }
 
@@ -826,8 +734,7 @@ function inicializarMediaPlayers(container) {
 
     const calcularPct = (clientX) => {
       const rect = track.getBoundingClientRect();
-      let pct = (clientX - rect.left) / rect.width;
-      return Math.max(0, Math.min(1, pct));
+      return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     };
 
     const aplicarProgresso = (clientX) => {
@@ -838,26 +745,15 @@ function inicializarMediaPlayers(container) {
       bolinha.style.left = (pct * 100) + '%';
     };
 
-    track.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      arrastandoProgresso = true;
-      aplicarProgresso(e.clientX);
-    });
-    window.addEventListener('mousemove', (e) => {
-      if (arrastandoProgresso) aplicarProgresso(e.clientX);
-    });
+    track.addEventListener('mousedown', (e) => { e.preventDefault(); arrastandoProgresso = true; aplicarProgresso(e.clientX); });
+    window.addEventListener('mousemove', (e) => { if (arrastandoProgresso) aplicarProgresso(e.clientX); });
     window.addEventListener('mouseup', () => { arrastandoProgresso = false; });
 
     track.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 1) {
-        arrastandoProgresso = true;
-        aplicarProgresso(e.touches[0].clientX);
-      }
+      if (e.touches.length === 1) { arrastandoProgresso = true; aplicarProgresso(e.touches[0].clientX); }
     }, { passive: true });
     track.addEventListener('touchmove', (e) => {
-      if (arrastandoProgresso && e.touches.length === 1) {
-        aplicarProgresso(e.touches[0].clientX);
-      }
+      if (arrastandoProgresso && e.touches.length === 1) aplicarProgresso(e.touches[0].clientX);
     }, { passive: true });
     track.addEventListener('touchend', () => { arrastandoProgresso = false; });
 
@@ -886,8 +782,7 @@ function inicializarMediaPlayers(container) {
 
     const calcVolPct = (clientX) => {
       const rect = volTrack.getBoundingClientRect();
-      let pct = (clientX - rect.left) / rect.width;
-      return Math.max(0, Math.min(1, pct));
+      return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     };
 
     const aplicarVolume = (clientX) => {
@@ -897,26 +792,15 @@ function inicializarMediaPlayers(container) {
       atualizarVisualVolume();
     };
 
-    volTrack.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      arrastandoVolume = true;
-      aplicarVolume(e.clientX);
-    });
-    window.addEventListener('mousemove', (e) => {
-      if (arrastandoVolume) aplicarVolume(e.clientX);
-    });
+    volTrack.addEventListener('mousedown', (e) => { e.preventDefault(); arrastandoVolume = true; aplicarVolume(e.clientX); });
+    window.addEventListener('mousemove', (e) => { if (arrastandoVolume) aplicarVolume(e.clientX); });
     window.addEventListener('mouseup', () => { arrastandoVolume = false; });
 
     volTrack.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 1) {
-        arrastandoVolume = true;
-        aplicarVolume(e.touches[0].clientX);
-      }
+      if (e.touches.length === 1) { arrastandoVolume = true; aplicarVolume(e.touches[0].clientX); }
     }, { passive: true });
     volTrack.addEventListener('touchmove', (e) => {
-      if (arrastandoVolume && e.touches.length === 1) {
-        aplicarVolume(e.touches[0].clientX);
-      }
+      if (arrastandoVolume && e.touches.length === 1) aplicarVolume(e.touches[0].clientX);
     }, { passive: true });
     volTrack.addEventListener('touchend', () => { arrastandoVolume = false; });
 
@@ -961,8 +845,7 @@ async function fazerLogin() {
   if (!email || !senha) { erroEl.textContent = 'Preencha tudo'; return; }
   try {
     const r = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, senha }),
     });
     const data = await r.json();
@@ -980,8 +863,7 @@ async function fazerCadastro() {
   if (!nome || !email || !senha) { erroEl.textContent = 'Preencha tudo'; return; }
   try {
     const r = await fetch('/api/cadastro', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nome, email, senha }),
     });
     const data = await r.json();
@@ -1040,6 +922,7 @@ function conectarSocket() {
     carregarAmizades();
   });
 
+  // ============ AMIZADE ============
   socket.on('amizade-nova', (payload) => {
     const paraId = payload?.paraId;
     const pedido = payload?.pedido;
@@ -1087,6 +970,7 @@ function conectarSocket() {
     });
   });
 
+  // ============ PERFIL ============
   socket.on('perfil-atualizado', ({ usuario_id, avatar, banner, bio }) => {
     if (usuario_id === meuUsuario.id) {
       if (avatar !== undefined) meuUsuario.avatar = avatar;
@@ -1099,20 +983,16 @@ function conectarSocket() {
     }
     if (servidorAtivo) {
       fetch('/api/servidores/' + servidorAtivo.servidor.id).then(async (r) => {
-        if (r.ok) {
-          servidorAtivo = await r.json();
-          renderizarMembros();
-        }
+        if (r.ok) { servidorAtivo = await r.json(); renderizarMembros(); }
       });
     }
     carregarConversas();
+    carregarAmizades();
   });
 
-  // DM NOVA
+  // ============ DM ============
   socket.on('dm-nova', ({ conversa_id, mensagem }) => {
-    // 🔥 Se estou bloqueado pelo remetente, nem chega (servidor não emite), mas por segurança:
     if (estaBloqueadoLocal(mensagem.de_id)) return;
-
     const silenciado = estaSilenciadoLocal('usuario', mensagem.de_id);
 
     if (estouNaConversa(conversa_id)) {
@@ -1139,12 +1019,9 @@ function conectarSocket() {
 
     mostrarNotificacaoVisual({
       tipo: 'dm',
-      deNome: nomeAmigo,
-      deAvatar: avatarAmigo,
-      deId: amigoId,
+      deNome: nomeAmigo, deAvatar: avatarAmigo, deId: amigoId,
       ondeTexto: 'Mensagem direta',
-      texto: previewTexto,
-      silencioso: silenciado,
+      texto: previewTexto, silencioso: silenciado,
       aoClicar: async () => {
         const amigo = { id: amigoId, nome: nomeAmigo, avatar: avatarAmigo };
         await abrirConversa(amigo);
@@ -1174,19 +1051,15 @@ function conectarSocket() {
     }
   });
 
-  // CANAL NOVA MSG
+  // ============ CANAL ============
   socket.on('canal-nova-msg', ({ canal_id, mensagem }) => {
-    // 🔥 Descobre se canal tá silenciado (por usuário ou por servidor)
     let silenciado = estaSilenciadoLocal('usuario', mensagem.de_id);
     if (!silenciado && servidorAtivo) {
       const c = servidorAtivo.canais.find((x) => x.id === canal_id);
       if (c && estaSilenciadoLocal('servidor', c.servidor_id)) silenciado = true;
     }
 
-    if (estouNoCanal(canal_id)) {
-      adicionarMsgCanal(mensagem);
-      return;
-    }
+    if (estouNoCanal(canal_id)) { adicionarMsgCanal(mensagem); return; }
 
     let nomeCanal = 'canal';
     if (servidorAtivo) {
@@ -1205,12 +1078,9 @@ function conectarSocket() {
 
     mostrarNotificacaoVisual({
       tipo: 'canal',
-      deNome: mensagem.de_nome,
-      deAvatar: mensagem.de_avatar,
-      deId: mensagem.de_id,
+      deNome: mensagem.de_nome, deAvatar: mensagem.de_avatar, deId: mensagem.de_id,
       ondeTexto: nomeCanal,
-      texto: previewTexto,
-      silencioso: silenciado,
+      texto: previewTexto, silencioso: silenciado,
       aoClicar: async () => {
         if (servidorAtivo) {
           const c = servidorAtivo.canais.find((x) => x.id === canal_id);
@@ -1229,9 +1099,7 @@ function conectarSocket() {
   });
 
   socket.on('canal-msg-deletada', ({ canal_id, mensagem_id }) => {
-    if (canalAtivo && canalAtivo.id === canal_id) {
-      removerMsgDaTela('chat-canal', mensagem_id);
-    }
+    if (canalAtivo && canalAtivo.id === canal_id) removerMsgDaTela('chat-canal', mensagem_id);
   });
 
   socket.on('reacao-atualizada', ({ tipo, alvoId, reacoes }) => {
@@ -1239,6 +1107,7 @@ function conectarSocket() {
     atualizarReacoesNaTela(chatId, alvoId, reacoes);
   });
 
+  // ============ CANAL/SERVIDOR ============
   socket.on('canal-criado', ({ canal }) => {
     if (servidorAtivo && servidorAtivo.servidor.id === canal.servidor_id) {
       servidorAtivo.canais.push(canal);
@@ -1276,23 +1145,41 @@ function conectarSocket() {
     renderizarServidores();
   });
 
-  socket.on('membro-removido', ({ servidor_id, usuario_id }) => {
-    if (meuUsuario && usuario_id === meuUsuario.id) {
-      alert('Você foi removido de um servidor.');
-      servidores = servidores.filter((s) => s.id !== servidor_id);
-      if (servidorAtivo && servidorAtivo.servidor.id === servidor_id) {
-        servidorAtivo = null;
-        document.getElementById('sidebar-canais').style.display = 'none';
+  // 🔥 NOVOS EVENTOS DE MEMBROS
+  socket.on('membro-entrou', ({ servidor_id, membro }) => {
+    if (servidorAtivo && servidorAtivo.servidor.id === servidor_id) {
+      if (!servidorAtivo.membros.some((m) => m.id === membro.id)) {
+        servidorAtivo.membros.push(membro);
+        servidorAtivo.membros.sort((a, b) => a.nome.localeCompare(b.nome));
+        renderizarMembros();
       }
-      renderizarServidores();
-      return;
     }
+  });
+
+  socket.on('membro-removido', ({ servidor_id, usuario_id }) => {
     if (servidorAtivo && servidorAtivo.servidor.id === servidor_id) {
       servidorAtivo.membros = servidorAtivo.membros.filter((m) => m.id !== usuario_id);
       renderizarMembros();
     }
   });
 
+  socket.on('voce-foi-removido', ({ servidor_id, servidor_nome }) => {
+    servidores = servidores.filter((s) => s.id !== servidor_id);
+    if (servidorAtivo && servidorAtivo.servidor.id === servidor_id) {
+      servidorAtivo = null;
+      document.getElementById('sidebar-canais').style.display = 'none';
+    }
+    renderizarServidores();
+    mostrarNotificacaoVisual({
+      tipo: 'amizade',
+      deNome: 'Sistema',
+      ondeTexto: '⚠️ Removido',
+      texto: `Você foi removido de "${servidor_nome}"`,
+      silencioso: false,
+    });
+  });
+
+  // ============ DIGITANDO ============
   socket.on('alguem-digitando-canal', ({ canalId, nome, usuarioId }) => {
     if (!config.digitando) return;
     if (!estouNoCanal(canalId)) return;
@@ -1342,7 +1229,6 @@ async function carregarBloqueiosESilenciados() {
       const d1 = await r1.json();
       bloqueadosLocal = new Set((d1.bloqueados || []).map((b) => b.id));
     }
-    // Silenciados vêm embutidos nos servidores e conversas agora
   } catch (e) {}
 }
 
@@ -1420,8 +1306,7 @@ function montarEmojiPicker() {
 
     let html = '';
     for (const [categoria, emojis] of Object.entries(EMOJIS)) {
-      html += `<div class="emoji-categoria">${categoria}</div>`;
-      html += `<div class="emoji-grid">`;
+      html += `<div class="emoji-categoria">${categoria}</div><div class="emoji-grid">`;
       emojis.forEach((e) => { html += `<span data-emoji="${e}">${e}</span>`; });
       html += `</div>`;
     }
@@ -1524,7 +1409,6 @@ document.addEventListener('keydown', (e) => {
 function montarPickerReacao() {
   const el = document.getElementById('reacao-picker-global');
   if (!el) return;
-
   let html = '';
   EMOJIS_RAPIDOS.forEach((e) => { html += `<span data-emoji="${e}">${e}</span>`; });
   el.innerHTML = html;
@@ -1545,13 +1429,9 @@ function abrirPickerReacao(event, btn, contexto, msgId) {
   if (event) { event.stopPropagation(); event.preventDefault(); }
   const picker = document.getElementById('reacao-picker-global');
   if (!picker || !btn) return;
-
-  if (picker.classList.contains('ativo') &&
-      pickerReacaoEstado.msgId === msgId &&
-      pickerReacaoEstado.contexto === contexto) {
+  if (picker.classList.contains('ativo') && pickerReacaoEstado.msgId === msgId && pickerReacaoEstado.contexto === contexto) {
     fecharPickerReacao(); return;
   }
-
   pickerReacaoEstado = { msgId, contexto };
   picker.classList.add('ativo');
 
@@ -1583,9 +1463,7 @@ document.addEventListener('click', (e) => {
 }, true);
 
 document.addEventListener('scroll', (e) => {
-  if (e.target && e.target.closest && e.target.closest('.chat-area')) {
-    fecharPickerReacao();
-  }
+  if (e.target && e.target.closest && e.target.closest('.chat-area')) fecharPickerReacao();
 }, true);
 
 // ============================================================
@@ -1601,9 +1479,7 @@ function iniciarLongPress(e, msgEl) {
 
   clearTimeout(longPressTimer);
   longPressTimer = setTimeout(() => {
-    document.querySelectorAll('.msg-com-avatar.mostrar-acoes').forEach((el) => {
-      el.classList.remove('mostrar-acoes');
-    });
+    document.querySelectorAll('.msg-com-avatar.mostrar-acoes').forEach((el) => el.classList.remove('mostrar-acoes'));
     msgEl.classList.add('mostrar-acoes');
     if (navigator.vibrate) navigator.vibrate(20);
   }, 450);
@@ -1623,9 +1499,7 @@ document.addEventListener('touchcancel', cancelarLongPress);
 document.addEventListener('click', (e) => {
   if (e.target.closest('.msg-com-avatar')) return;
   if (e.target.closest('.msg-acoes')) return;
-  document.querySelectorAll('.msg-com-avatar.mostrar-acoes').forEach((el) => {
-    el.classList.remove('mostrar-acoes');
-  });
+  document.querySelectorAll('.msg-com-avatar.mostrar-acoes').forEach((el) => el.classList.remove('mostrar-acoes'));
 });
 
 // ============================================================
@@ -1655,10 +1529,7 @@ function cancelarReply(contexto) {
 // SWIPE TO REPLY
 // ============================================================
 
-let swipeEstado = {
-  ativo: false, x: 0, y: 0, msgEl: null,
-  startX: 0, startY: 0, tipo: null,
-};
+let swipeEstado = { ativo: false, x: 0, y: 0, msgEl: null, startX: 0, startY: 0, tipo: null };
 
 function ativarSwipe(msgEl) {
   const chatId = msgEl.parentElement.id;
@@ -1680,12 +1551,7 @@ function iniciarSwipe(e, msgEl) {
   const isTouch = e.type.startsWith('touch');
   const clientX = isTouch ? e.touches[0].clientX : e.clientX;
   const clientY = isTouch ? e.touches[0].clientY : e.clientY;
-
-  swipeEstado = {
-    ativo: true, x: clientX, y: clientY, msgEl,
-    startX: clientX, startY: clientY,
-    tipo: isTouch ? 'touch' : 'mouse',
-  };
+  swipeEstado = { ativo: true, x: clientX, y: clientY, msgEl, startX: clientX, startY: clientY, tipo: isTouch ? 'touch' : 'mouse' };
   msgEl.classList.add('arrastando');
 }
 
@@ -1749,7 +1615,6 @@ document.addEventListener('touchstart', (e) => {
 }, { passive: true });
 document.addEventListener('touchmove', (e) => moverSwipe(e), { passive: false });
 document.addEventListener('touchend', terminarSwipe);
-
 // ============================================================
 // SERVIDORES
 // ============================================================
@@ -1777,12 +1642,8 @@ function renderizarServidores() {
     d.title = s.nome;
 
     d.onclick = () => abrirServidor(s.id);
-    d.oncontextmenu = (e) => {
-      e.preventDefault();
-      abrirMenuServidor(e, s);
-    };
+    d.oncontextmenu = (e) => { e.preventDefault(); abrirMenuServidor(e, s); };
 
-    // Long press mobile
     let timer;
     d.addEventListener('touchstart', (e) => {
       timer = setTimeout(() => {
@@ -1819,17 +1680,17 @@ function abrirMenuServidor(event, s) {
         onClick: async () => {
           const endpoint = silenciado ? '/api/dessilenciar' : '/api/silenciar';
           await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tipo: 'servidor', alvoId: s.id }),
           });
+          if (silenciado) silenciadosServidorLocal.delete(s.id);
+          else silenciadosServidorLocal.add(s.id);
           await carregarServidores();
           if (servidorAtivo && servidorAtivo.servidor.id === s.id) {
             servidorAtivo.silenciado = !silenciado;
           }
         },
       },
-      // Excluir (só dono)
       ...(ehDono ? [{
         emoji: '🗑️',
         label: 'Excluir servidor',
@@ -1876,6 +1737,10 @@ async function abrirServidor(id) {
     document.getElementById('nome-servidor').textContent = data.servidor.nome;
     document.getElementById('codigo-servidor').textContent = 'convite: ' + data.servidor.codigo_convite;
 
+    // 🔥 Guarda silenciado local
+    if (data.silenciado) silenciadosServidorLocal.add(data.servidor.id);
+    else silenciadosServidorLocal.delete(data.servidor.id);
+
     renderizarServidores();
     socket.emit('entrar-servidores');
     renderizarCanais();
@@ -1920,7 +1785,6 @@ function renderizarCanais() {
 }
 
 function renderizarMembros() {
-  // Atualiza painel lateral
   const lista = document.getElementById('painel-membros-lista');
   const num = document.getElementById('painel-num-membros');
   if (!lista || !servidorAtivo) return;
@@ -1974,6 +1838,15 @@ function fecharPainelMembros() {
   painelMembrosAberto = false;
 }
 
+// Fecha painel clicando fora
+document.addEventListener('click', (e) => {
+  const painel = document.getElementById('painel-membros');
+  if (!painel.classList.contains('aberto')) return;
+  if (e.target.closest('#painel-membros')) return;
+  if (e.target.closest('.btn-membros-servidor')) return;
+  fecharPainelMembros();
+});
+
 // ============================================================
 // CANAIS E MENSAGENS
 // ============================================================
@@ -2013,8 +1886,7 @@ async function criarCanalPrompt() {
   const nome = prompt('Nome do canal (ex: memes):');
   if (!nome || !nome.trim()) return;
   const r = await fetch(`/api/servidores/${servidorAtivo.servidor.id}/canais`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nome: nome.trim() }),
   });
   const data = await r.json();
@@ -2045,8 +1917,7 @@ function enviarMsgCanal() {
   pararDigitando('canal');
 
   fetch(`/api/canais/${canalAtivo.id}/mensagens`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }).then(async (r) => {
     if (!r.ok) { alert('Erro ao enviar'); return; }
@@ -2098,7 +1969,6 @@ function criarElMsg(m, chatId, contexto) {
 
   const usuarioMsg = { nome: m.de_nome, avatar: m.de_avatar, id: m.de_id };
   const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(usuarioMsg).replace(/"/g, '&quot;')})`;
-
   const textoHTML = m.texto ? `<div class="msg-texto">${escapeHtml(m.texto)}</div>` : '';
 
   div.innerHTML = `
@@ -2179,8 +2049,7 @@ async function toggleReacao(contexto, msgId, emoji) {
   fecharPickerReacao();
   try {
     const r = await fetch('/api/reacoes/toggle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipo: contexto, alvoId: msgId, emoji }),
     });
     if (!r.ok) { alert('Erro ao reagir'); return; }
@@ -2238,8 +2107,7 @@ function iniciarEdicao(chatId, msgId, contexto) {
     if (contexto === 'canal') url = `/api/canais/${canalAtivo.id}/mensagens/${msgId}`;
     else url = `/api/conversas/${conversaAtual.conversa_id}/mensagens/${msgId}`;
     const r = await fetch(url, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ texto: novoTexto }),
     });
     if (!r.ok) { alert('Erro ao editar'); return cancelar(); }
@@ -2289,8 +2157,7 @@ async function criarServidor() {
   erroEl.textContent = '';
   if (!nome) { erroEl.textContent = 'Informe o nome'; return; }
   const r = await fetch('/api/servidores', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nome, descricao }),
   });
   const data = await r.json();
@@ -2307,8 +2174,7 @@ async function entrarServidor() {
   erroEl.textContent = '';
   if (!codigo) { erroEl.textContent = 'Informe o código'; return; }
   const r = await fetch('/api/servidores/entrar', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ codigo }),
   });
   const data = await r.json();
@@ -2342,8 +2208,7 @@ async function salvarServidor() {
   erroEl.textContent = '';
   if (!nome) { erroEl.textContent = 'Informe o nome'; return; }
   const r = await fetch('/api/servidores/' + servidorAtivo.servidor.id, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ nome, descricao }),
   });
   const data = await r.json();
@@ -2639,11 +2504,7 @@ async function carregarConversas() {
       abrirConversa(c.amigo);
     };
 
-    // 🔥 Long-press / right-click = menu contextual
-    li.oncontextmenu = (e) => {
-      e.preventDefault();
-      abrirMenuAmigo(e, c.amigo, c.silenciado);
-    };
+    li.oncontextmenu = (e) => { e.preventDefault(); abrirMenuAmigo(e, c.amigo, c.silenciado); };
     let timer;
     li.addEventListener('touchstart', (e) => {
       timer = setTimeout(() => {
@@ -2762,7 +2623,7 @@ async function enviarMsgDM() {
 // ============================================================
 
 async function bloquearUsuario(id, nome) {
-  if (!confirm(`Bloquear ${nome}?\nEle não vai mais conseguir te mandar mensagens nem pedidos.`)) return;
+  if (!confirm(`Bloquear ${nome}?`)) return;
   const r = await fetch('/api/bloquear', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ alvoId: id }),
@@ -2771,10 +2632,7 @@ async function bloquearUsuario(id, nome) {
   bloqueadosLocal.add(id);
   carregarConversas();
   carregarAmizades();
-  // Se tá no perfil, atualiza
-  if (perfilVisitadoAtual && perfilVisitadoAtual.id === id) {
-    abrirPerfilVisitado(perfilVisitadoAtual);
-  }
+  if (perfilVisitadoAtual && perfilVisitadoAtual.id === id) abrirPerfilVisitado(perfilVisitadoAtual);
 }
 
 async function desbloquearUsuario(id) {
@@ -2787,9 +2645,7 @@ async function desbloquearUsuario(id) {
   carregarConversas();
   carregarAmizades();
   carregarListaBloqueados();
-  if (perfilVisitadoAtual && perfilVisitadoAtual.id === id) {
-    abrirPerfilVisitado(perfilVisitadoAtual);
-  }
+  if (perfilVisitadoAtual && perfilVisitadoAtual.id === id) abrirPerfilVisitado(perfilVisitadoAtual);
 }
 
 async function abrirBloqueados() {
@@ -2895,7 +2751,7 @@ function atualizarAvataresNaUI() {
 }
 
 // ============================================================
-// PERFIL — VISITA (com ações)
+// PERFIL — VISITA
 // ============================================================
 
 function abrirPerfilVisitado(usuario) {
@@ -2925,19 +2781,15 @@ function abrirPerfilVisitado(usuario) {
   document.getElementById('visita-bio').textContent =
     (usuario.bio && usuario.bio.trim()) ? usuario.bio : 'Sem descrição.';
 
-  // 🔥 Monta ações
   montarAcoesPerfil(usuario);
-
   document.getElementById('modal-perfil-visita').classList.add('ativo');
 }
 
 function montarAcoesPerfil(usuario) {
   const acoesEl = document.getElementById('visita-acoes');
   acoesEl.innerHTML = '';
-
   const bloqueado = estaBloqueadoLocal(usuario.id);
 
-  // Bloqueado → só Desbloquear
   if (bloqueado) {
     const btn = document.createElement('button');
     btn.className = 'desbloquear';
@@ -2947,15 +2799,11 @@ function montarAcoesPerfil(usuario) {
     return;
   }
 
-  // Verifica se é amigo
-  const amigosIds = [...document.querySelectorAll('#lista-amigos .nome')]; // hack rápido
-  // Faz fetch direto pra ser confiável
   fetch('/api/amizades').then((r) => r.json()).then((amz) => {
     const ehAmigo = amz.amigos.some((a) => a.id === usuario.id);
     const pedidoEnviado = amz.pedidosEnviados.some((p) => p.id === usuario.id);
     const pedidoRecebido = amz.pedidosRecebidos.some((p) => p.id === usuario.id);
 
-    // Amizade
     if (!ehAmigo && !pedidoEnviado && !pedidoRecebido) {
       const btn = document.createElement('button');
       btn.className = 'amizade';
@@ -2973,7 +2821,6 @@ function montarAcoesPerfil(usuario) {
       btn.className = 'amizade';
       btn.textContent = '✅ Aceitar pedido';
       btn.onclick = () => {
-        // busca amizade_id
         fetch('/api/amizades').then((r) => r.json()).then((d) => {
           const ped = d.pedidosRecebidos.find((p) => p.id === usuario.id);
           if (ped) aceitarPedido(ped.amizade_id);
@@ -2983,7 +2830,6 @@ function montarAcoesPerfil(usuario) {
       acoesEl.appendChild(btn);
     }
 
-    // Silenciar / Dessilenciar
     const silenciado = estaSilenciadoLocal('usuario', usuario.id);
     const btnSil = document.createElement('button');
     btnSil.className = 'silenciar';
@@ -3001,7 +2847,6 @@ function montarAcoesPerfil(usuario) {
     };
     acoesEl.appendChild(btnSil);
 
-    // Remover do servidor (só dono)
     if (servidorAtivo && servidorAtivo.ehDono && usuario.id !== meuUsuario.id) {
       const estaNoServidor = servidorAtivo.membros.some((m) => m.id === usuario.id);
       if (estaNoServidor) {
@@ -3023,11 +2868,10 @@ function montarAcoesPerfil(usuario) {
       }
     }
 
-    // Bloquear
     const btnBl = document.createElement('button');
     btnBl.className = 'bloquear';
     btnBl.textContent = '🚫 Bloquear';
-    btnBl.onclick = () => { bloquearUsuario(usuario.id, usuario.nome); };
+    btnBl.onclick = () => bloquearUsuario(usuario.id, usuario.nome);
     acoesEl.appendChild(btnBl);
   }).catch(() => {});
 }
@@ -3087,17 +2931,13 @@ function abrirEditor(file, tipo) {
       const canvas = document.getElementById('editor-canvas');
 
       if (tipo === 'avatar') {
-        editorEstado.canvasW = 320;
-        editorEstado.canvasH = 320;
-        canvas.width = 320;
-        canvas.height = 320;
+        editorEstado.canvasW = 320; editorEstado.canvasH = 320;
+        canvas.width = 320; canvas.height = 320;
         canvas.classList.add('circular');
         document.getElementById('editor-titulo').textContent = 'Ajustar avatar';
       } else {
-        editorEstado.canvasW = 480;
-        editorEstado.canvasH = 180;
-        canvas.width = 480;
-        canvas.height = 180;
+        editorEstado.canvasW = 480; editorEstado.canvasH = 180;
+        canvas.width = 480; canvas.height = 180;
         canvas.classList.remove('circular');
         document.getElementById('editor-titulo').textContent = 'Ajustar banner';
       }
@@ -3105,7 +2945,6 @@ function abrirEditor(file, tipo) {
       const escalaW = editorEstado.canvasW / img.width;
       const escalaH = editorEstado.canvasH / img.height;
       editorEstado.baseScale = Math.max(escalaW, escalaH);
-
       document.getElementById('editor-zoom').value = 1;
 
       const escalaTotal = editorEstado.baseScale * editorEstado.zoom;
@@ -3248,12 +3087,8 @@ async function salvarEdicao() {
   if (!r.ok) { alert('Erro ao salvar'); return; }
 
   meuUsuario[chave] = base64;
-  if (tipo === 'avatar') {
-    atualizarPreviewAvatar(meuUsuario);
-    atualizarAvataresNaUI();
-  } else {
-    atualizarPreviewBanner(meuUsuario);
-  }
+  if (tipo === 'avatar') { atualizarPreviewAvatar(meuUsuario); atualizarAvataresNaUI(); }
+  else { atualizarPreviewBanner(meuUsuario); }
   tocarSom();
   fecharEditor();
   document.getElementById('modal-perfil').classList.add('ativo');
@@ -3295,12 +3130,8 @@ async function iniciarGravacaoAudio(contexto) {
   if (contexto !== 'canal' && contexto !== 'dm') return;
 
   let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  } catch (e) {
-    alert('Não foi possível acessar o microfone.');
-    return;
-  }
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { alert('Não foi possível acessar o microfone.'); return; }
 
   const barra = document.getElementById('barra-gravacao');
   const timer = document.getElementById('gravacao-timer');
@@ -3331,7 +3162,6 @@ async function iniciarGravacaoAudio(contexto) {
   btnGrav.classList.remove('gravando');
 
   barra.classList.add('ativo');
-
   if (contexto === 'canal') document.getElementById('input-canal').disabled = true;
   else document.getElementById('input-dm').disabled = true;
 
@@ -3366,22 +3196,18 @@ async function comecarAGravar() {
 
   const tipoMime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
     ? 'audio/webm;codecs=opus'
-    : MediaRecorder.isTypeSupported('audio/webm')
-      ? 'audio/webm' : '';
+    : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
 
   let mr;
-  try {
-    mr = tipoMime ? new MediaRecorder(stream, { mimeType: tipoMime }) : new MediaRecorder(stream);
-  } catch (e) { alert('Seu navegador não suporta gravação de áudio.'); return; }
+  try { mr = tipoMime ? new MediaRecorder(stream, { mimeType: tipoMime }) : new MediaRecorder(stream); }
+  catch (e) { alert('Seu navegador não suporta gravação.'); return; }
 
   gravacaoEstado.mediaRecorder = mr;
   gravacaoEstado.chunks = [];
   gravacaoEstado.gravando = true;
   gravacaoEstado.inicio = Date.now();
 
-  mr.ondataavailable = (ev) => {
-    if (ev.data && ev.data.size > 0) gravacaoEstado.chunks.push(ev.data);
-  };
+  mr.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) gravacaoEstado.chunks.push(ev.data); };
   mr.onstop = () => {
     const blob = new Blob(gravacaoEstado.chunks, { type: mr.mimeType || 'audio/webm' });
     gravacaoEstado.blob = blob;
@@ -3389,7 +3215,6 @@ async function comecarAGravar() {
     gravacaoEstado.duracao = (Date.now() - gravacaoEstado.inicio) / 1000;
     mostrarPreviewGravacao();
   };
-
   mr.start();
 
   const btnGrav = document.getElementById('gravacao-btn');
@@ -3506,19 +3331,13 @@ function mostrarPreviewGravacao() {
   playBtn.onclick = (e) => {
     e.stopPropagation();
     if (audio.paused) {
-      document.querySelectorAll('audio, video').forEach((el) => {
-        if (el !== audio && !el.paused) el.pause();
-      });
+      document.querySelectorAll('audio, video').forEach((el) => { if (el !== audio && !el.paused) el.pause(); });
       audio.play().catch(() => {});
     } else audio.pause();
   };
   audio.onplay = () => { playBtn.textContent = '⏸'; };
   audio.onpause = () => { playBtn.textContent = '▶'; };
-  audio.onended = () => {
-    playBtn.textContent = '▶';
-    audio.currentTime = 0;
-    barra.style.width = '0%';
-  };
+  audio.onended = () => { playBtn.textContent = '▶'; audio.currentTime = 0; barra.style.width = '0%'; };
   audio.ontimeupdate = () => {
     if (!audio.duration || !isFinite(audio.duration)) return;
     barra.style.width = ((audio.currentTime / audio.duration) * 100) + '%';
@@ -3628,24 +3447,17 @@ async function abrirCamera(contexto) {
   let stream = null;
   let ultimoErro = null;
   for (const constraints of tentativas) {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log('✅ Câmera:', JSON.stringify(constraints));
-      break;
-    } catch (e) {
-      ultimoErro = e;
-      console.warn('❌ Falhou:', JSON.stringify(constraints), e.name);
-    }
+    try { stream = await navigator.mediaDevices.getUserMedia(constraints); break; }
+    catch (e) { ultimoErro = e; }
   }
 
   if (!stream) {
     let msg = 'Não foi possível acessar a câmera.\n\n';
     if (ultimoErro) {
       msg += 'Erro: ' + ultimoErro.name + '\n';
-      if (ultimoErro.name === 'NotAllowedError') msg += 'Permita o acesso à câmera nas configurações do navegador.';
+      if (ultimoErro.name === 'NotAllowedError') msg += 'Permita o acesso nas configurações.';
       else if (ultimoErro.name === 'NotFoundError') msg += 'Nenhuma câmera encontrada.';
-      else if (ultimoErro.name === 'NotReadableError') msg += 'A câmera está em uso por outro programa.';
-      else if (ultimoErro.name === 'OverconstrainedError') msg += 'Sua câmera não suporta as configurações.';
+      else if (ultimoErro.name === 'NotReadableError') msg += 'Câmera em uso por outro programa.';
       else msg += ultimoErro.message || 'Erro desconhecido';
     }
     alert(msg);
@@ -3664,7 +3476,6 @@ function capturarFoto() {
   const wrap = document.getElementById('camera-preview-wrap');
   const controlesCamera = document.getElementById('camera-controles');
   const controlesFoto = document.getElementById('camera-controles-foto');
-
   if (!video.videoWidth || !video.videoHeight) return;
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -3672,7 +3483,6 @@ function capturarFoto() {
   ctx.translate(canvas.width, 0);
   ctx.scale(-1, 1);
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
   cameraEstado.fotoBase64 = canvas.toDataURL('image/jpeg', 0.92);
   wrap.classList.add('mostrando-foto');
   controlesCamera.style.display = 'none';
@@ -3797,13 +3607,4 @@ window.addEventListener('load', async () => {
 
   montarEmojiPicker();
   montarPickerReacao();
-
-  // Fecha painel de membros ao clicar fora
-  document.addEventListener('click', (e) => {
-    const painel = document.getElementById('painel-membros');
-    if (!painel.classList.contains('aberto')) return;
-    if (e.target.closest('#painel-membros')) return;
-    if (e.target.closest('.topo-main .acoes button[title="Membros"]')) return;
-    fecharPainelMembros();
-  });
 });
