@@ -43,28 +43,29 @@ let tituloOriginal = 'Void — Conecte-se';
 let telaAtual = 'home';
 
 let replyAtual = { canal: null, dm: null };
-
 let pickerReacaoEstado = { msgId: null, contexto: null };
-
 let notificacoesAbertas = new Set();
-
 let digitandoTimeout = { canal: null, dm: null };
 let ultimoEnvioDigitando = { canal: 0, dm: 0 };
 let timeoutAlguemDigitando = { canal: null, dm: null };
 
 let anexoContexto = null;
 let anexoTipo = null;
-
 let longPressTimer = null;
+let longPressTimerServidor = null;
+let longPressTimerDM = null;
 
-const CONFIG_PADRAO = {
-  somMsg: true,
-  somReacao: true,
-  notifVisual: true,
-  notifSistema: true,
-  digitando: true,
-};
+// Estado do menu contextual
+let menuContextoAberto = null;
 
+// Estado do painel de membros
+let painelMembrosAberto = false;
+
+// Estado de perfis visitados
+let perfilVisitadoAtual = null;
+
+// CONFIG
+const CONFIG_PADRAO = { somMsg: true, somReacao: true, notifVisual: true, notifSistema: true, digitando: true };
 let config = { ...CONFIG_PADRAO };
 
 function carregarConfig() {
@@ -80,13 +81,7 @@ function salvarConfig() {
 }
 
 function aplicarConfigNaUI() {
-  const ids = {
-    somMsg: 'cfg-som-msg',
-    somReacao: 'cfg-som-reacao',
-    notifVisual: 'cfg-notif-visual',
-    notifSistema: 'cfg-notif-sistema',
-    digitando: 'cfg-digitando',
-  };
+  const ids = { somMsg: 'cfg-som-msg', somReacao: 'cfg-som-reacao', notifVisual: 'cfg-notif-visual', notifSistema: 'cfg-notif-sistema', digitando: 'cfg-digitando' };
   for (const [chave, id] of Object.entries(ids)) {
     const el = document.getElementById(id);
     if (el) el.checked = !!config[chave];
@@ -103,13 +98,7 @@ function fecharConfig() {
 }
 
 function bindConfig() {
-  const ids = {
-    somMsg: 'cfg-som-msg',
-    somReacao: 'cfg-som-reacao',
-    notifVisual: 'cfg-notif-visual',
-    notifSistema: 'cfg-notif-sistema',
-    digitando: 'cfg-digitando',
-  };
+  const ids = { somMsg: 'cfg-som-msg', somReacao: 'cfg-som-reacao', notifVisual: 'cfg-notif-visual', notifSistema: 'cfg-notif-sistema', digitando: 'cfg-digitando' };
   for (const [chave, id] of Object.entries(ids)) {
     const el = document.getElementById(id);
     if (!el) continue;
@@ -158,9 +147,11 @@ let idNotifCounter = 0;
 
 function mostrarNotificacaoVisual({
   tipo, deNome, deAvatar, deId, ondeTexto, texto, aoClicar,
-  acoes = null,
+  acoes = null, silencioso = false,
 }) {
   if (!config.notifVisual) return;
+  // 🔥 Se silencioso (silenciado ou bloqueado), não mostra som
+  if (!silencioso) tocarSomNotificacao();
 
   const stack = document.getElementById('notif-stack');
   if (!stack) return;
@@ -382,15 +373,74 @@ function fecharImagem() {
 }
 
 // ============================================================
+// MENU CONTEXTUAL (long-press)
+// ============================================================
+
+function abrirMenuContexto(event, opcoes) {
+  if (event) { event.stopPropagation(); event.preventDefault(); }
+  const menu = document.getElementById('menu-contexto');
+  if (!menu) return;
+
+  menu.innerHTML = '';
+  if (opcoes.titulo) {
+    const t = document.createElement('div');
+    t.className = 'menu-titulo';
+    t.textContent = opcoes.titulo;
+    menu.appendChild(t);
+  }
+  opcoes.acoes.forEach((acao) => {
+    const btn = document.createElement('button');
+    if (acao.perigo) btn.className = 'perigo';
+    btn.innerHTML = `<span class="menu-emoji">${acao.emoji || ''}</span><span>${escapeHtml(acao.label)}</span>`;
+    btn.onclick = () => {
+      fecharMenuContexto();
+      if (typeof acao.onClick === 'function') acao.onClick();
+    };
+    menu.appendChild(btn);
+  });
+
+  menu.classList.add('ativo');
+
+  const x = event?.clientX || event?.touches?.[0]?.clientX || 100;
+  const y = event?.clientY || event?.touches?.[0]?.clientY || 100;
+
+  requestAnimationFrame(() => {
+    const mRect = menu.getBoundingClientRect();
+    const mW = mRect.width || 220;
+    const mH = mRect.height || 200;
+
+    let top = y;
+    let left = x;
+
+    if (left + mW > window.innerWidth - 10) left = window.innerWidth - mW - 10;
+    if (left < 10) left = 10;
+    if (top + mH > window.innerHeight - 10) top = y - mH;
+    if (top < 10) top = 10;
+
+    menu.style.top = top + 'px';
+    menu.style.left = left + 'px';
+  });
+
+  menuContextoAberto = menu;
+}
+
+function fecharMenuContexto() {
+  const menu = document.getElementById('menu-contexto');
+  if (menu) menu.classList.remove('ativo');
+  menuContextoAberto = null;
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#menu-contexto')) return;
+  fecharMenuContexto();
+});
+
+// ============================================================
 // ANEXOS — menu popover
 // ============================================================
 
 function abrirMenuAnexo(event, btn, contexto) {
-  if (event) {
-    event.stopPropagation();
-    event.preventDefault();
-  }
-
+  if (event) { event.stopPropagation(); event.preventDefault(); }
   const menu = document.getElementById('menu-anexo');
   if (!menu || !btn) return;
 
@@ -428,7 +478,6 @@ function fecharMenuAnexo() {
 function escolherTipoAnexo(tipo) {
   anexoTipo = tipo;
   fecharMenuAnexo();
-
   const input = document.getElementById('input-anexo');
   if (!input) return;
   input.value = '';
@@ -461,7 +510,6 @@ document.addEventListener('change', async (e) => {
   anexoContexto = null;
   anexoTipo = null;
   if (!contexto || !tipo) return;
-
   await enviarComUpload(file, tipo, contexto);
 });
 
@@ -604,35 +652,28 @@ function renderAnexoHTML(anexo) {
       return `<div class="msg-anexo">
         <div class="media-player-video-wrap">
           <video class="media-video-elemento" src="${a.url}" preload="metadata"></video>
-
           <div class="media-player" data-media-id="${idUnico}" data-media-tipo="video">
             <button class="media-play" type="button" title="Play/Pause">
               <span class="media-play-icone">▶</span>
             </button>
-
             <div class="media-progresso-wrap">
               <div class="media-progresso-track">
                 <div class="media-progresso-fill"></div>
                 <div class="media-progresso-bolinha"></div>
               </div>
             </div>
-
             <span class="media-tempo">0:00 / 0:00</span>
-
             <button class="media-volume-btn" type="button" title="Volume">
               <span class="media-volume-icone">🔊</span>
             </button>
-
             <div class="media-volume-wrap">
               <div class="media-volume-track">
                 <div class="media-volume-fill"></div>
               </div>
             </div>
-
             <button class="media-fullscreen-btn" type="button" title="Tela cheia">⛶</button>
           </div>
         </div>
-
         <a class="msg-anexo-media-download" href="${a.url}" download="${escapeHtml(a.nome || 'video')}">
           <span class="media-dl-icone">📥</span>
           <span class="media-dl-nome">${escapeHtml(a.nome || 'video')}</span>
@@ -648,33 +689,23 @@ function renderAnexoHTML(anexo) {
           <button class="media-play" type="button" title="Play/Pause">
             <span class="media-play-icone">▶</span>
           </button>
-
           <div class="media-progresso-wrap">
             <div class="media-progresso-track">
               <div class="media-progresso-fill"></div>
               <div class="media-progresso-bolinha"></div>
             </div>
           </div>
-
           <span class="media-tempo">0:00 / 0:00</span>
-
           <button class="media-volume-btn" type="button" title="Volume">
             <span class="media-volume-icone">🔊</span>
           </button>
-
           <div class="media-volume-wrap">
             <div class="media-volume-track">
               <div class="media-volume-fill"></div>
             </div>
           </div>
-
-          <audio
-            class="media-audio-elemento"
-            src="${a.url}"
-            preload="metadata"
-          ></audio>
+          <audio class="media-audio-elemento" src="${a.url}" preload="metadata"></audio>
         </div>
-
         <a class="msg-anexo-media-download" href="${a.url}" download="${escapeHtml(a.nome || 'audio')}">
           <span class="media-dl-icone">📥</span>
           <span class="media-dl-nome">${escapeHtml(a.nome || 'audio')}</span>
@@ -701,7 +732,7 @@ function renderAnexoHTML(anexo) {
 }
 
 // ============================================================
-// MEDIA PLAYER (áudio + vídeo)
+// MEDIA PLAYER
 // ============================================================
 
 let mediaAtual = null;
@@ -717,7 +748,6 @@ function inicializarMediaPlayers(container) {
     const mediaEl = tipo === 'video'
       ? player.parentElement.querySelector('.media-video-elemento')
       : player.querySelector('.media-audio-elemento');
-
     if (!mediaEl) return;
 
     const btnPlay = player.querySelector('.media-play');
@@ -816,9 +846,7 @@ function inicializarMediaPlayers(container) {
     window.addEventListener('mousemove', (e) => {
       if (arrastandoProgresso) aplicarProgresso(e.clientX);
     });
-    window.addEventListener('mouseup', () => {
-      arrastandoProgresso = false;
-    });
+    window.addEventListener('mouseup', () => { arrastandoProgresso = false; });
 
     track.addEventListener('touchstart', (e) => {
       if (e.touches.length === 1) {
@@ -831,9 +859,7 @@ function inicializarMediaPlayers(container) {
         aplicarProgresso(e.touches[0].clientX);
       }
     }, { passive: true });
-    track.addEventListener('touchend', () => {
-      arrastandoProgresso = false;
-    });
+    track.addEventListener('touchend', () => { arrastandoProgresso = false; });
 
     function atualizarVisualVolume() {
       const v = mediaEl.volume;
@@ -879,9 +905,7 @@ function inicializarMediaPlayers(container) {
     window.addEventListener('mousemove', (e) => {
       if (arrastandoVolume) aplicarVolume(e.clientX);
     });
-    window.addEventListener('mouseup', () => {
-      arrastandoVolume = false;
-    });
+    window.addEventListener('mouseup', () => { arrastandoVolume = false; });
 
     volTrack.addEventListener('touchstart', (e) => {
       if (e.touches.length === 1) {
@@ -894,18 +918,13 @@ function inicializarMediaPlayers(container) {
         aplicarVolume(e.touches[0].clientX);
       }
     }, { passive: true });
-    volTrack.addEventListener('touchend', () => {
-      arrastandoVolume = false;
-    });
+    volTrack.addEventListener('touchend', () => { arrastandoVolume = false; });
 
     if (btnFullscreen && tipo === 'video') {
       btnFullscreen.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (mediaEl.requestFullscreen) {
-          mediaEl.requestFullscreen().catch(() => {});
-        } else if (mediaEl.webkitEnterFullscreen) {
-          mediaEl.webkitEnterFullscreen();
-        }
+        if (mediaEl.requestFullscreen) mediaEl.requestFullscreen().catch(() => {});
+        else if (mediaEl.webkitEnterFullscreen) mediaEl.webkitEnterFullscreen();
       });
     }
   });
@@ -981,13 +1000,10 @@ function entrarNoApp(usuario) {
   meuUsuario = usuario;
   document.getElementById('tela-auth').style.display = 'none';
   document.getElementById('app').classList.add('ativo');
-
   atualizarAvataresNaUI();
-
   conectarSocket();
   carregarServidores();
   carregarAmizades();
-
   pedirPermissaoNotificacoes();
 }
 
@@ -1029,8 +1045,6 @@ function conectarSocket() {
     const pedido = payload?.pedido;
     if (!pedido || paraId !== meuUsuario?.id) return;
 
-    tocarSomNotificacao();
-
     mostrarNotificacaoVisual({
       tipo: 'amizade',
       deNome: pedido.nome,
@@ -1039,30 +1053,20 @@ function conectarSocket() {
       ondeTexto: '👥 Pedido de amizade',
       texto: pedido.email || 'quer ser seu amigo',
       acoes: [
-        {
-          label: '✅ Aceitar',
-          classe: 'btn-aceitar',
-          onClick: async () => {
-            await fetch('/api/amizades/aceitar', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ amizadeId: pedido.amizade_id }),
-            });
-            carregarAmizades();
-          },
-        },
-        {
-          label: '❌ Recusar',
-          classe: 'btn-recusar',
-          onClick: async () => {
-            await fetch('/api/amizades/recusar', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ amizadeId: pedido.amizade_id }),
-            });
-            carregarAmizades();
-          },
-        },
+        { label: '✅ Aceitar', classe: 'btn-aceitar', onClick: async () => {
+          await fetch('/api/amizades/aceitar', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amizadeId: pedido.amizade_id }),
+          });
+          carregarAmizades();
+        }},
+        { label: '❌ Recusar', classe: 'btn-recusar', onClick: async () => {
+          await fetch('/api/amizades/recusar', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amizadeId: pedido.amizade_id }),
+          });
+          carregarAmizades();
+        }},
       ],
       aoClicar: () => abrirAmigos(),
     });
@@ -1071,7 +1075,6 @@ function conectarSocket() {
   });
 
   socket.on('amizade-aceita', ({ por }) => {
-    tocarSomNotificacao();
     carregarAmizades();
     mostrarNotificacaoVisual({
       tipo: 'amizade',
@@ -1105,7 +1108,13 @@ function conectarSocket() {
     carregarConversas();
   });
 
+  // DM NOVA
   socket.on('dm-nova', ({ conversa_id, mensagem }) => {
+    // 🔥 Se estou bloqueado pelo remetente, nem chega (servidor não emite), mas por segurança:
+    if (estaBloqueadoLocal(mensagem.de_id)) return;
+
+    const silenciado = estaSilenciadoLocal('usuario', mensagem.de_id);
+
     if (estouNaConversa(conversa_id)) {
       adicionarMsgDM(mensagem);
       fetch(`/api/conversas/${conversa_id}/mensagens`);
@@ -1114,7 +1123,6 @@ function conectarSocket() {
 
     naoLidasTotal++;
     atualizarTitulo();
-    tocarSomNotificacao();
 
     const nomeAmigo = mensagem.de_nome;
     const avatarAmigo = mensagem.de_avatar;
@@ -1136,16 +1144,15 @@ function conectarSocket() {
       deId: amigoId,
       ondeTexto: 'Mensagem direta',
       texto: previewTexto,
+      silencioso: silenciado,
       aoClicar: async () => {
         const amigo = { id: amigoId, nome: nomeAmigo, avatar: avatarAmigo };
         await abrirConversa(amigo);
-        setTimeout(() => {
-          fetch(`/api/conversas/${conversa_id}/mensagens`);
-        }, 100);
+        setTimeout(() => { fetch(`/api/conversas/${conversa_id}/mensagens`); }, 100);
       },
     });
 
-    mostrarNotificacaoSistema(`💬 ${nomeAmigo}`, previewTexto, avatarAmigo || undefined);
+    if (!silenciado) mostrarNotificacaoSistema(`💬 ${nomeAmigo}`, previewTexto, avatarAmigo || undefined);
     carregarConversas();
   });
 
@@ -1167,13 +1174,19 @@ function conectarSocket() {
     }
   });
 
+  // CANAL NOVA MSG
   socket.on('canal-nova-msg', ({ canal_id, mensagem }) => {
+    // 🔥 Descobre se canal tá silenciado (por usuário ou por servidor)
+    let silenciado = estaSilenciadoLocal('usuario', mensagem.de_id);
+    if (!silenciado && servidorAtivo) {
+      const c = servidorAtivo.canais.find((x) => x.id === canal_id);
+      if (c && estaSilenciadoLocal('servidor', c.servidor_id)) silenciado = true;
+    }
+
     if (estouNoCanal(canal_id)) {
       adicionarMsgCanal(mensagem);
       return;
     }
-
-    tocarSomNotificacao();
 
     let nomeCanal = 'canal';
     if (servidorAtivo) {
@@ -1197,6 +1210,7 @@ function conectarSocket() {
       deId: mensagem.de_id,
       ondeTexto: nomeCanal,
       texto: previewTexto,
+      silencioso: silenciado,
       aoClicar: async () => {
         if (servidorAtivo) {
           const c = servidorAtivo.canais.find((x) => x.id === canal_id);
@@ -1205,7 +1219,7 @@ function conectarSocket() {
       },
     });
 
-    mostrarNotificacaoSistema(`💬 ${mensagem.de_nome} em ${nomeCanal}`, previewTexto, mensagem.de_avatar || undefined);
+    if (!silenciado) mostrarNotificacaoSistema(`💬 ${mensagem.de_nome} em ${nomeCanal}`, previewTexto, mensagem.de_avatar || undefined);
   });
 
   socket.on('canal-msg-editada', ({ canal_id, mensagem }) => {
@@ -1262,6 +1276,23 @@ function conectarSocket() {
     renderizarServidores();
   });
 
+  socket.on('membro-removido', ({ servidor_id, usuario_id }) => {
+    if (meuUsuario && usuario_id === meuUsuario.id) {
+      alert('Você foi removido de um servidor.');
+      servidores = servidores.filter((s) => s.id !== servidor_id);
+      if (servidorAtivo && servidorAtivo.servidor.id === servidor_id) {
+        servidorAtivo = null;
+        document.getElementById('sidebar-canais').style.display = 'none';
+      }
+      renderizarServidores();
+      return;
+    }
+    if (servidorAtivo && servidorAtivo.servidor.id === servidor_id) {
+      servidorAtivo.membros = servidorAtivo.membros.filter((m) => m.id !== usuario_id);
+      renderizarMembros();
+    }
+  });
+
   socket.on('alguem-digitando-canal', ({ canalId, nome, usuarioId }) => {
     if (!config.digitando) return;
     if (!estouNoCanal(canalId)) return;
@@ -1290,13 +1321,38 @@ function conectarSocket() {
 }
 
 // ============================================================
+// BLOQUEIOS E SILENCIADOS (estado local)
+// ============================================================
+
+let bloqueadosLocal = new Set();
+let silenciadosUsuarioLocal = new Set();
+let silenciadosServidorLocal = new Set();
+
+function estaBloqueadoLocal(id) { return bloqueadosLocal.has(id); }
+function estaSilenciadoLocal(tipo, id) {
+  if (tipo === 'usuario') return silenciadosUsuarioLocal.has(id);
+  if (tipo === 'servidor') return silenciadosServidorLocal.has(id);
+  return false;
+}
+
+async function carregarBloqueiosESilenciados() {
+  try {
+    const r1 = await fetch('/api/bloqueados');
+    if (r1.ok) {
+      const d1 = await r1.json();
+      bloqueadosLocal = new Set((d1.bloqueados || []).map((b) => b.id));
+    }
+    // Silenciados vêm embutidos nos servidores e conversas agora
+  } catch (e) {}
+}
+
+// ============================================================
 // DIGITANDO
 // ============================================================
 
 function emitirDigitando(contexto) {
   if (!config.digitando) return;
   if (!socket) return;
-
   const agora = Date.now();
   if (agora - ultimoEnvioDigitando[contexto] < 800) return;
   ultimoEnvioDigitando[contexto] = agora;
@@ -1314,9 +1370,7 @@ function emitirDigitando(contexto) {
   }
 
   clearTimeout(digitandoTimeout[contexto]);
-  digitandoTimeout[contexto] = setTimeout(() => {
-    pararDigitando(contexto);
-  }, 1500);
+  digitandoTimeout[contexto] = setTimeout(() => { pararDigitando(contexto); }, 1500);
 }
 
 function pararDigitando(contexto) {
@@ -1342,14 +1396,10 @@ function mostrarDigitando(contexto, nome) {
   const bar = document.getElementById(barId);
   const texto = document.getElementById(textoId);
   if (!bar || !texto) return;
-
   texto.textContent = `${nome} está digitando`;
   bar.classList.add('ativo');
-
   clearTimeout(timeoutAlguemDigitando[contexto]);
-  timeoutAlguemDigitando[contexto] = setTimeout(() => {
-    esconderDigitando(contexto);
-  }, 3000);
+  timeoutAlguemDigitando[contexto] = setTimeout(() => { esconderDigitando(contexto); }, 3000);
 }
 
 function esconderDigitando(contexto) {
@@ -1372,9 +1422,7 @@ function montarEmojiPicker() {
     for (const [categoria, emojis] of Object.entries(EMOJIS)) {
       html += `<div class="emoji-categoria">${categoria}</div>`;
       html += `<div class="emoji-grid">`;
-      emojis.forEach((e) => {
-        html += `<span data-emoji="${e}">${e}</span>`;
-      });
+      emojis.forEach((e) => { html += `<span data-emoji="${e}">${e}</span>`; });
       html += `</div>`;
     }
     el.innerHTML = html;
@@ -1383,8 +1431,7 @@ function montarEmojiPicker() {
       const span = e.target.closest('span[data-emoji]');
       if (!span) return;
       e.stopPropagation();
-      const emoji = span.getAttribute('data-emoji');
-      inserirEmoji(id, emoji);
+      inserirEmoji(id, span.getAttribute('data-emoji'));
     });
   });
 }
@@ -1408,18 +1455,13 @@ function toggleEmojiPicker(contexto) {
   const outros = ['emoji-picker-canal', 'emoji-picker-dm'].filter((x) => x !== id);
   outros.forEach((x) => document.getElementById(x)?.classList.remove('ativo'));
 
-  if (el.classList.contains('ativo')) {
-    el.classList.remove('ativo');
-    return;
-  }
-
+  if (el.classList.contains('ativo')) { el.classList.remove('ativo'); return; }
   el.classList.add('ativo');
 
   const windowWidth = window.innerWidth;
   const isMobile = windowWidth <= 768;
   const margem = 12;
   const larguraMax = isMobile ? (windowWidth - margem * 2) : 340;
-
   el.style.width = larguraMax + 'px';
   el.style.maxWidth = larguraMax + 'px';
 
@@ -1429,18 +1471,13 @@ function toggleEmojiPicker(contexto) {
   const espacoAbaixo = window.innerHeight - rect.bottom;
 
   let top;
-  if (espacoAcima >= altura + 20) {
-    top = rect.top - altura - 8;
-  } else if (espacoAbaixo >= altura + 20) {
-    top = rect.bottom + 8;
-  } else {
-    top = espacoAcima > espacoAbaixo ? 10 : window.innerHeight - altura - 10;
-  }
+  if (espacoAcima >= altura + 20) top = rect.top - altura - 8;
+  else if (espacoAbaixo >= altura + 20) top = rect.bottom + 8;
+  else top = espacoAcima > espacoAbaixo ? 10 : window.innerHeight - altura - 10;
 
   let left;
-  if (isMobile) {
-    left = margem;
-  } else {
+  if (isMobile) left = margem;
+  else {
     left = rect.left;
     if (left + larguraMax > windowWidth - 10) left = windowWidth - larguraMax - 10;
     if (left < 10) left = 10;
@@ -1473,10 +1510,9 @@ document.addEventListener('keydown', (e) => {
     fecharPickerReacao();
     fecharImagem();
     fecharMenuAnexo();
-
+    fecharMenuContexto();
     const modalCamera = document.getElementById('modal-camera');
     if (modalCamera && modalCamera.classList.contains('ativo')) fecharCamera();
-
     if (gravacaoEstado.ativo) cancelarGravacao();
   }
 });
@@ -1490,9 +1526,7 @@ function montarPickerReacao() {
   if (!el) return;
 
   let html = '';
-  EMOJIS_RAPIDOS.forEach((e) => {
-    html += `<span data-emoji="${e}">${e}</span>`;
-  });
+  EMOJIS_RAPIDOS.forEach((e) => { html += `<span data-emoji="${e}">${e}</span>`; });
   el.innerHTML = html;
 
   el.addEventListener('click', (ev) => {
@@ -1515,8 +1549,7 @@ function abrirPickerReacao(event, btn, contexto, msgId) {
   if (picker.classList.contains('ativo') &&
       pickerReacaoEstado.msgId === msgId &&
       pickerReacaoEstado.contexto === contexto) {
-    fecharPickerReacao();
-    return;
+    fecharPickerReacao(); return;
   }
 
   pickerReacaoEstado = { msgId, contexto };
@@ -1527,14 +1560,11 @@ function abrirPickerReacao(event, btn, contexto, msgId) {
     const pRect = picker.getBoundingClientRect();
     const pW = pRect.width || 300;
     const pH = pRect.height || 44;
-
     let top = rect.top - pH - 8;
     let left = rect.left;
-
     if (left + pW > window.innerWidth - 10) left = window.innerWidth - pW - 10;
     if (left < 10) left = 10;
     if (top < 10) top = rect.bottom + 8;
-
     picker.style.top = top + 'px';
     picker.style.left = left + 'px';
   });
@@ -1559,7 +1589,7 @@ document.addEventListener('scroll', (e) => {
 }, true);
 
 // ============================================================
-// LONG PRESS
+// LONG PRESS (mensagens)
 // ============================================================
 
 function iniciarLongPress(e, msgEl) {
@@ -1570,7 +1600,6 @@ function iniciarLongPress(e, msgEl) {
   if (e.target.closest('.msg-anexo-media-download')) return;
 
   clearTimeout(longPressTimer);
-
   longPressTimer = setTimeout(() => {
     document.querySelectorAll('.msg-com-avatar.mostrar-acoes').forEach((el) => {
       el.classList.remove('mostrar-acoes');
@@ -1580,16 +1609,13 @@ function iniciarLongPress(e, msgEl) {
   }, 450);
 }
 
-function cancelarLongPress() {
-  clearTimeout(longPressTimer);
-}
+function cancelarLongPress() { clearTimeout(longPressTimer); }
 
 document.addEventListener('touchstart', (e) => {
   const msgEl = e.target.closest('.msg-com-avatar');
   if (!msgEl) return;
   iniciarLongPress(e, msgEl);
 }, { passive: true });
-
 document.addEventListener('touchend', cancelarLongPress);
 document.addEventListener('touchmove', cancelarLongPress);
 document.addEventListener('touchcancel', cancelarLongPress);
@@ -1608,18 +1634,14 @@ document.addEventListener('click', (e) => {
 
 function ativarReply(contexto, msgId, autor, texto) {
   replyAtual[contexto] = { msgId, autor, texto };
-
   const barraId = contexto === 'canal' ? 'barra-reply-canal' : 'barra-reply-dm';
   const infoId = contexto === 'canal' ? 'reply-info-canal' : 'reply-info-dm';
   const inputId = contexto === 'canal' ? 'input-canal' : 'input-dm';
-
   const barra = document.getElementById(barraId);
   const info = document.getElementById(infoId);
-
   const trecho = texto.length > 50 ? texto.slice(0, 50) + '...' : texto;
   info.innerHTML = `Respondendo a <strong>${escapeHtml(autor)}</strong>: ${escapeHtml(trecho)}`;
   barra.classList.add('ativo');
-
   document.getElementById(inputId).focus();
 }
 
@@ -1669,42 +1691,31 @@ function iniciarSwipe(e, msgEl) {
 
 function moverSwipe(e) {
   if (!swipeEstado.ativo || !swipeEstado.msgEl) return;
-
   const isTouch = e.type.startsWith('touch');
   const clientX = isTouch ? e.touches[0].clientX : e.clientX;
   const clientY = isTouch ? e.touches[0].clientY : e.clientY;
-
   const dx = clientX - swipeEstado.startX;
   const dy = clientY - swipeEstado.startY;
 
-  if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) {
-    cancelarSwipe();
-    return;
-  }
-
+  if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) { cancelarSwipe(); return; }
   if (dx < 0) {
     swipeEstado.msgEl.style.transform = '';
     swipeEstado.msgEl.classList.remove('arrastando-ativo');
     return;
   }
-
   const deslocamento = Math.min(dx, 100);
   swipeEstado.msgEl.style.transform = `translateX(${deslocamento}px)`;
-
   if (deslocamento >= 60) swipeEstado.msgEl.classList.add('arrastando-ativo');
   else swipeEstado.msgEl.classList.remove('arrastando-ativo');
-
   if (isTouch && Math.abs(dx) > 10 && e.cancelable) e.preventDefault();
 }
 
-function terminarSwipe(e) {
+function terminarSwipe() {
   if (!swipeEstado.ativo || !swipeEstado.msgEl) return;
-
   const msgEl = swipeEstado.msgEl;
   const transform = msgEl.style.transform;
   const match = transform.match(/translateX\((-?\d+(?:\.\d+)?)px\)/);
   const deslocamento = match ? parseFloat(match[1]) : 0;
-
   msgEl.classList.remove('arrastando');
   if (deslocamento >= 60) {
     ativarSwipe(msgEl);
@@ -1712,7 +1723,6 @@ function terminarSwipe(e) {
   }
   msgEl.style.transform = '';
   setTimeout(() => msgEl.classList.remove('arrastando-ativo'), 200);
-
   swipeEstado = { ativo: false, x: 0, y: 0, msgEl: null, startX: 0, startY: 0, tipo: null };
 }
 
@@ -1730,7 +1740,7 @@ document.addEventListener('mousedown', (e) => {
   iniciarSwipe(e, msgEl);
 });
 document.addEventListener('mousemove', (e) => moverSwipe(e));
-document.addEventListener('mouseup', (e) => terminarSwipe(e));
+document.addEventListener('mouseup', terminarSwipe);
 
 document.addEventListener('touchstart', (e) => {
   const msgEl = e.target.closest('.msg-com-avatar');
@@ -1738,7 +1748,7 @@ document.addEventListener('touchstart', (e) => {
   iniciarSwipe(e, msgEl);
 }, { passive: true });
 document.addEventListener('touchmove', (e) => moverSwipe(e), { passive: false });
-document.addEventListener('touchend', (e) => terminarSwipe(e));
+document.addEventListener('touchend', terminarSwipe);
 
 // ============================================================
 // SERVIDORES
@@ -1750,10 +1760,7 @@ async function carregarServidores() {
     const data = await r.json();
     servidores = data.servidores || [];
     renderizarServidores();
-
-    if (servidores.length > 0 && !servidorAtivo) {
-      abrirServidor(servidores[0].id);
-    }
+    if (servidores.length > 0 && !servidorAtivo) abrirServidor(servidores[0].id);
   } catch (e) { console.warn(e); }
 }
 
@@ -1765,9 +1772,28 @@ function renderizarServidores() {
     const d = document.createElement('div');
     d.className = 'servidor-icon';
     if (servidorAtivo && servidorAtivo.servidor.id === s.id) d.classList.add('ativo');
+    if (s.silenciado) d.classList.add('silenciado');
     d.textContent = s.nome.charAt(0).toUpperCase();
     d.title = s.nome;
+
     d.onclick = () => abrirServidor(s.id);
+    d.oncontextmenu = (e) => {
+      e.preventDefault();
+      abrirMenuServidor(e, s);
+    };
+
+    // Long press mobile
+    let timer;
+    d.addEventListener('touchstart', (e) => {
+      timer = setTimeout(() => {
+        e.preventDefault();
+        const t = e.touches[0];
+        abrirMenuServidor({ clientX: t.clientX, clientY: t.clientY, preventDefault: () => {}, stopPropagation: () => {} }, s);
+      }, 500);
+    }, { passive: true });
+    d.addEventListener('touchend', () => clearTimeout(timer));
+    d.addEventListener('touchmove', () => clearTimeout(timer));
+
     el.appendChild(d);
   });
 
@@ -1777,6 +1803,66 @@ function renderizarServidores() {
   add.title = 'Criar ou entrar em servidor';
   add.onclick = abrirModalServidor;
   el.appendChild(add);
+}
+
+function abrirMenuServidor(event, s) {
+  if (event) { event.preventDefault(); event.stopPropagation(); }
+  const ehDono = servidorAtivo && servidorAtivo.servidor.id === s.id && servidorAtivo.ehDono;
+  const silenciado = !!s.silenciado;
+
+  abrirMenuContexto(event, {
+    titulo: s.nome,
+    acoes: [
+      {
+        emoji: silenciado ? '🔊' : '🔇',
+        label: silenciado ? 'Dessilenciar servidor' : 'Silenciar servidor',
+        onClick: async () => {
+          const endpoint = silenciado ? '/api/dessilenciar' : '/api/silenciar';
+          await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tipo: 'servidor', alvoId: s.id }),
+          });
+          await carregarServidores();
+          if (servidorAtivo && servidorAtivo.servidor.id === s.id) {
+            servidorAtivo.silenciado = !silenciado;
+          }
+        },
+      },
+      // Excluir (só dono)
+      ...(ehDono ? [{
+        emoji: '🗑️',
+        label: 'Excluir servidor',
+        perigo: true,
+        onClick: async () => {
+          if (!confirm(`EXCLUIR "${s.nome}"? Todos os canais e mensagens serão apagados pra sempre.`)) return;
+          const r = await fetch('/api/servidores/' + s.id, { method: 'DELETE' });
+          if (!r.ok) { alert('Erro ao excluir'); return; }
+          servidores = servidores.filter((x) => x.id !== s.id);
+          if (servidorAtivo && servidorAtivo.servidor.id === s.id) {
+            servidorAtivo = null;
+            document.getElementById('sidebar-canais').style.display = 'none';
+          }
+          renderizarServidores();
+        },
+      }] : [{
+        emoji: '🚪',
+        label: 'Sair do servidor',
+        perigo: true,
+        onClick: async () => {
+          if (!confirm(`Realmente deseja sair de "${s.nome}"?`)) return;
+          const r = await fetch(`/api/servidores/${s.id}/sair`, { method: 'POST' });
+          if (!r.ok) { alert('Erro ao sair'); return; }
+          servidores = servidores.filter((x) => x.id !== s.id);
+          if (servidorAtivo && servidorAtivo.servidor.id === s.id) {
+            servidorAtivo = null;
+            document.getElementById('sidebar-canais').style.display = 'none';
+          }
+          renderizarServidores();
+        },
+      }]),
+    ],
+  });
 }
 
 async function abrirServidor(id) {
@@ -1796,12 +1882,8 @@ async function abrirServidor(id) {
     renderizarMembros();
 
     if (data.canais.length > 0) {
-      if (telaAtual === 'canal') {
-        abrirCanal(data.canais[0]);
-      } else {
-        canalAtivo = data.canais[0];
-        renderizarCanais();
-      }
+      if (telaAtual === 'canal') abrirCanal(data.canais[0]);
+      else { canalAtivo = data.canais[0]; renderizarCanais(); }
     } else {
       canalAtivo = null;
       document.getElementById('chat-canal').innerHTML = '<div class="vazio">Sem canais neste servidor.</div>';
@@ -1838,25 +1920,31 @@ function renderizarCanais() {
 }
 
 function renderizarMembros() {
-  const el = document.getElementById('lista-membros');
-  el.innerHTML = '';
-  if (!servidorAtivo) return;
+  // Atualiza painel lateral
+  const lista = document.getElementById('painel-membros-lista');
+  const num = document.getElementById('painel-num-membros');
+  if (!lista || !servidorAtivo) return;
+  num.textContent = servidorAtivo.membros.length;
 
-  document.getElementById('num-membros').textContent = servidorAtivo.membros.length;
-
+  lista.innerHTML = '';
   servidorAtivo.membros.forEach((m) => {
     const d = document.createElement('div');
     d.className = 'membro-item';
     const estaOnline = onlineIds.has(m.id);
+    const dono = servidorAtivo.servidor.dono_id === m.id;
 
-    const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(m).replace(/"/g, '&quot;')})`;
     d.innerHTML = `
-      ${avatarHTML(m, 'mini', onclickAttr)}
+      ${avatarHTML(m, 'mini')}
       <span class="dot ${estaOnline ? 'online' : 'offline'}"></span>
       <span>${escapeHtml(m.nome)}</span>
-      ${m.id === servidorAtivo.servidor.dono_id ? '<span class="dono">dono</span>' : ''}
+      ${dono ? '<span class="dono">dono</span>' : ''}
     `;
-    el.appendChild(d);
+
+    d.onclick = (e) => {
+      if (e.target.closest('.dono')) return;
+      abrirPerfilVisitado(m);
+    };
+    lista.appendChild(d);
   });
 }
 
@@ -1864,10 +1952,33 @@ function atualizarMembrosOnline() {
   if (servidorAtivo) renderizarMembros();
 }
 
-async function abrirCanal(canal) {
-  // 🔥 NÃO emite mais 'sair-canal' — o socket fica em todos os rooms.
-  // Assim continua recebendo notificações de canais visitados anteriormente.
+// ============================================================
+// PAINEL DE MEMBROS
+// ============================================================
 
+function togglePainelMembros() {
+  const painel = document.getElementById('painel-membros');
+  painel.classList.toggle('aberto');
+  painelMembrosAberto = painel.classList.contains('aberto');
+  if (painelMembrosAberto) renderizarMembros();
+}
+
+function abrirPainelMembros() {
+  document.getElementById('painel-membros').classList.add('aberto');
+  painelMembrosAberto = true;
+  renderizarMembros();
+}
+
+function fecharPainelMembros() {
+  document.getElementById('painel-membros').classList.remove('aberto');
+  painelMembrosAberto = false;
+}
+
+// ============================================================
+// CANAIS E MENSAGENS
+// ============================================================
+
+async function abrirCanal(canal) {
   pararDigitando('canal');
   esconderDigitando('canal');
 
@@ -1901,7 +2012,6 @@ async function abrirCanal(canal) {
 async function criarCanalPrompt() {
   const nome = prompt('Nome do canal (ex: memes):');
   if (!nome || !nome.trim()) return;
-
   const r = await fetch(`/api/servidores/${servidorAtivo.servidor.id}/canais`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1968,8 +2078,7 @@ function reacoesHTML(msgId, reacoes, contexto) {
 function replyHTML(msg) {
   if (!msg.reply_id || !msg.reply_autor) return '';
   const trecho = (msg.reply_texto || '').length > 80
-    ? msg.reply_texto.slice(0, 80) + '...'
-    : (msg.reply_texto || '');
+    ? msg.reply_texto.slice(0, 80) + '...' : (msg.reply_texto || '');
   return `<div class="msg-reply-citacao">
     <span class="reply-autor">${escapeHtml(msg.reply_autor)}</span>
     ${escapeHtml(trecho)}
@@ -1990,9 +2099,7 @@ function criarElMsg(m, chatId, contexto) {
   const usuarioMsg = { nome: m.de_nome, avatar: m.de_avatar, id: m.de_id };
   const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(usuarioMsg).replace(/"/g, '&quot;')})`;
 
-  const textoHTML = m.texto
-    ? `<div class="msg-texto">${escapeHtml(m.texto)}</div>`
-    : '';
+  const textoHTML = m.texto ? `<div class="msg-texto">${escapeHtml(m.texto)}</div>` : '';
 
   div.innerHTML = `
     <div class="msg-reply-hint">↩️</div>
@@ -2009,9 +2116,7 @@ function criarElMsg(m, chatId, contexto) {
       ${reacoesHTML(m.id, reacoes, contexto)}
     </div>
     <div class="msg-acoes">
-      <button class="btn-reagir"
-        onclick="abrirPickerReacao(event, this, '${contexto}', ${m.id})"
-        title="Reagir">😀</button>
+      <button class="btn-reagir" onclick="abrirPickerReacao(event, this, '${contexto}', ${m.id})" title="Reagir">😀</button>
       ${ehMinha ? `
         <button onclick="iniciarEdicao('${chatId}', ${m.id}, '${contexto}')" title="Editar">✏️</button>
         <button class="perigo" onclick="deletarMsg('${chatId}', ${m.id}, '${contexto}')" title="Deletar">🗑️</button>
@@ -2044,7 +2149,6 @@ function atualizarMsgNaTela(chatId, msgId, novoTexto, editado) {
   if (!msgEl) return;
   const textoEl = msgEl.querySelector('.msg-texto');
   if (textoEl) textoEl.textContent = novoTexto;
-
   if (editado) {
     const linha = msgEl.querySelector('.msg-linha');
     if (linha && !linha.querySelector('.msg-editada')) {
@@ -2073,38 +2177,26 @@ function removerMsgDaTela(chatId, msgId) {
 
 async function toggleReacao(contexto, msgId, emoji) {
   fecharPickerReacao();
-
   try {
     const r = await fetch('/api/reacoes/toggle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipo: contexto, alvoId: msgId, emoji }),
     });
-
-    if (!r.ok) {
-      const data = await r.json();
-      alert(data.erro || 'Erro ao reagir');
-      return;
-    }
-
+    if (!r.ok) { alert('Erro ao reagir'); return; }
     const data = await r.json();
     const chatId = contexto === 'canal' ? 'chat-canal' : 'chat-dm';
     atualizarReacoesNaTela(chatId, msgId, data.reacoes);
     tocarSom();
-  } catch (e) {
-    console.error('Erro ao reagir:', e);
-    alert('Erro de conexão ao reagir');
-  }
+  } catch (e) { alert('Erro de conexão'); }
 }
 
 function atualizarReacoesNaTela(chatId, msgId, reacoes) {
   const el = document.getElementById(chatId);
   const msgEl = el.querySelector(`[data-msg-id="${msgId}"]`);
   if (!msgEl) return;
-
   const antigo = msgEl.querySelector('.msg-reacoes');
   if (antigo) antigo.remove();
-
   const contexto = chatId === 'chat-canal' ? 'canal' : 'dm';
   const html = reacoesHTML(msgId, reacoes, contexto);
   if (html) {
@@ -2121,7 +2213,6 @@ function iniciarEdicao(chatId, msgId, contexto) {
   const el = document.getElementById(chatId);
   const msgEl = el.querySelector(`[data-msg-id="${msgId}"]`);
   if (!msgEl) return;
-
   const textoEl = msgEl.querySelector('.msg-texto');
   if (!textoEl) return;
   const textoAtual = textoEl.textContent;
@@ -2143,35 +2234,20 @@ function iniciarEdicao(chatId, msgId, contexto) {
   const salvar = async () => {
     const novoTexto = input.value.trim();
     if (!novoTexto || novoTexto === textoAtual) return cancelar();
-
     let url;
-    if (contexto === 'canal') {
-      url = `/api/canais/${canalAtivo.id}/mensagens/${msgId}`;
-    } else {
-      url = `/api/conversas/${conversaAtual.conversa_id}/mensagens/${msgId}`;
-    }
-
+    if (contexto === 'canal') url = `/api/canais/${canalAtivo.id}/mensagens/${msgId}`;
+    else url = `/api/conversas/${conversaAtual.conversa_id}/mensagens/${msgId}`;
     const r = await fetch(url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ texto: novoTexto }),
     });
-
-    if (!r.ok) {
-      const data = await r.json();
-      alert(data.erro || 'Erro ao editar');
-      return cancelar();
-    }
-
+    if (!r.ok) { alert('Erro ao editar'); return cancelar(); }
     atualizarMsgNaTela(chatId, msgId, novoTexto, true);
     cancelar();
   };
 
-  const cancelar = () => {
-    wrap.remove();
-    textoEl.style.display = '';
-  };
-
+  const cancelar = () => { wrap.remove(); textoEl.style.display = ''; };
   wrap.querySelector('button.verde').onclick = salvar;
   wrap.querySelector('button.secundario').onclick = cancelar;
   input.addEventListener('keydown', (e) => {
@@ -2182,26 +2258,16 @@ function iniciarEdicao(chatId, msgId, contexto) {
 
 async function deletarMsg(chatId, msgId, contexto) {
   if (!confirm('Deletar esta mensagem?')) return;
-
   let url;
-  if (contexto === 'canal') {
-    url = `/api/canais/${canalAtivo.id}/mensagens/${msgId}`;
-  } else {
-    url = `/api/conversas/${conversaAtual.conversa_id}/mensagens/${msgId}`;
-  }
-
+  if (contexto === 'canal') url = `/api/canais/${canalAtivo.id}/mensagens/${msgId}`;
+  else url = `/api/conversas/${conversaAtual.conversa_id}/mensagens/${msgId}`;
   const r = await fetch(url, { method: 'DELETE' });
-  if (!r.ok) {
-    const data = await r.json();
-    alert(data.erro || 'Erro ao deletar');
-    return;
-  }
-
+  if (!r.ok) { alert('Erro ao deletar'); return; }
   removerMsgDaTela(chatId, msgId);
 }
 
 // ============================================================
-// MODAL SERVIDOR
+// MODAIS SERVIDOR
 // ============================================================
 
 function abrirModalServidor() {
@@ -2222,7 +2288,6 @@ async function criarServidor() {
   const erroEl = document.getElementById('modal-servidor-erro');
   erroEl.textContent = '';
   if (!nome) { erroEl.textContent = 'Informe o nome'; return; }
-
   const r = await fetch('/api/servidores', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2230,7 +2295,6 @@ async function criarServidor() {
   });
   const data = await r.json();
   if (!r.ok) { erroEl.textContent = data.erro || 'Erro'; return; }
-
   fecharModalServidor();
   await carregarServidores();
   telaAtual = 'canal';
@@ -2242,7 +2306,6 @@ async function entrarServidor() {
   const erroEl = document.getElementById('modal-servidor-erro');
   erroEl.textContent = '';
   if (!codigo) { erroEl.textContent = 'Informe o código'; return; }
-
   const r = await fetch('/api/servidores/entrar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2250,7 +2313,6 @@ async function entrarServidor() {
   });
   const data = await r.json();
   if (!r.ok) { erroEl.textContent = data.erro || 'Erro'; return; }
-
   fecharModalServidor();
   await carregarServidores();
   telaAtual = 'canal';
@@ -2262,10 +2324,7 @@ async function entrarServidor() {
 // ============================================================
 
 function abrirModalEditarServidor() {
-  if (!servidorAtivo || !servidorAtivo.ehDono) {
-    alert('Só o dono pode editar o servidor');
-    return;
-  }
+  if (!servidorAtivo || !servidorAtivo.ehDono) { alert('Só o dono pode editar'); return; }
   document.getElementById('edit-servidor-erro').textContent = '';
   document.getElementById('edit-servidor-nome').value = servidorAtivo.servidor.nome;
   document.getElementById('edit-servidor-desc').value = servidorAtivo.servidor.descricao || '';
@@ -2282,7 +2341,6 @@ async function salvarServidor() {
   const erroEl = document.getElementById('edit-servidor-erro');
   erroEl.textContent = '';
   if (!nome) { erroEl.textContent = 'Informe o nome'; return; }
-
   const r = await fetch('/api/servidores/' + servidorAtivo.servidor.id, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -2290,7 +2348,6 @@ async function salvarServidor() {
   });
   const data = await r.json();
   if (!r.ok) { erroEl.textContent = data.erro || 'Erro'; return; }
-
   tocarSom();
   fecharModalEditarServidor();
 }
@@ -2300,36 +2357,19 @@ async function salvarServidor() {
 // ============================================================
 
 function esconderTelasMain() {
-  document.querySelectorAll('.tela-main').forEach((el) => {
-    el.classList.remove('ativa');
-  });
-}
-
-function mostrarTelaCanal() {
-  telaAtual = 'canal';
-  esconderTelasMain();
-  const telaCanal = document.getElementById('tela-canal');
-  telaCanal.classList.add('ativa');
-  telaCanal.classList.add('tem-canal');
-  document.getElementById('app').classList.add('canal-ativo');
-  if (canalAtivo) {
-    document.getElementById('titulo-main').textContent = '# ' + canalAtivo.nome;
-  }
+  document.querySelectorAll('.tela-main').forEach((el) => el.classList.remove('ativa'));
 }
 
 function mostrarTelaHome() {
   telaAtual = 'home';
   canalAtivo = null;
-
   esconderTelasMain();
   const telaCanal = document.getElementById('tela-canal');
   telaCanal.classList.add('ativa');
   telaCanal.classList.remove('tem-canal');
   document.getElementById('app').classList.remove('canal-ativo');
-
   document.getElementById('titulo-main').textContent = 'Selecione um canal';
   document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
-
   renderizarCanais();
 }
 
@@ -2360,9 +2400,7 @@ function abrirBuscar() {
   setTimeout(() => document.getElementById('busca-input').focus(), 50);
 }
 
-function voltarParaServidor() {
-  mostrarTelaHome();
-}
+function voltarParaServidor() { mostrarTelaHome(); }
 
 function voltarDMs() {
   conversaAtual = null;
@@ -2391,10 +2429,7 @@ async function carregarAmizades() {
 function renderizarPedidos(pedidos) {
   const ul = document.getElementById('lista-pedidos');
   ul.innerHTML = '';
-  if (pedidos.length === 0) {
-    ul.innerHTML = '<div class="vazio">Sem pedidos</div>';
-    return;
-  }
+  if (pedidos.length === 0) { ul.innerHTML = '<div class="vazio">Sem pedidos</div>'; return; }
   pedidos.forEach((p) => {
     const li = document.createElement('li');
     const info = document.createElement('div');
@@ -2404,17 +2439,14 @@ function renderizarPedidos(pedidos) {
       <span class="nome">${avatarHTML(p, 'mini', onclickAttr)} ${p.nome}</span>
       <span class="email">${p.email}</span>`;
     const acoes = document.createElement('div');
-
     const btnA = document.createElement('button');
     btnA.className = 'mini verde';
     btnA.textContent = '✅ Aceitar';
     btnA.onclick = () => aceitarPedido(p.amizade_id);
-
     const btnR = document.createElement('button');
     btnR.className = 'secundario mini';
     btnR.textContent = '❌ Recusar';
     btnR.onclick = () => recusarPedido(p.amizade_id);
-
     acoes.appendChild(btnA);
     acoes.appendChild(btnR);
     li.appendChild(info);
@@ -2426,14 +2458,10 @@ function renderizarPedidos(pedidos) {
 function renderizarAmigos(amigos) {
   const ul = document.getElementById('lista-amigos');
   ul.innerHTML = '';
-  if (amigos.length === 0) {
-    ul.innerHTML = '<div class="vazio">Sem amigos ainda</div>';
-    return;
-  }
+  if (amigos.length === 0) { ul.innerHTML = '<div class="vazio">Sem amigos ainda</div>'; return; }
   amigos.forEach((a) => {
     const estaOnline = onlineIds.has(a.id);
     const li = document.createElement('li');
-
     const info = document.createElement('div');
     info.className = 'info';
     const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(a).replace(/"/g, '&quot;')})`;
@@ -2444,19 +2472,15 @@ function renderizarAmigos(amigos) {
         ${a.nome}
       </span>
       <span class="email">${estaOnline ? '🟢 online' : '⚫ offline'}</span>`;
-
     const acoes = document.createElement('div');
-
     const btnConv = document.createElement('button');
     btnConv.className = 'mini';
     btnConv.textContent = '💬 Conversar';
     btnConv.onclick = () => abrirConversa(a);
-
     const btnRem = document.createElement('button');
     btnRem.className = 'secundario mini';
     btnRem.textContent = '🗑️';
     btnRem.onclick = () => removerAmigo(a.amizade_id, a.nome);
-
     acoes.appendChild(btnConv);
     acoes.appendChild(btnRem);
     li.appendChild(info);
@@ -2468,10 +2492,7 @@ function renderizarAmigos(amigos) {
 function renderizarEnviados(enviados) {
   const ul = document.getElementById('lista-enviados');
   ul.innerHTML = '';
-  if (enviados.length === 0) {
-    ul.innerHTML = '<div class="vazio">Sem pedidos enviados</div>';
-    return;
-  }
+  if (enviados.length === 0) { ul.innerHTML = '<div class="vazio">Sem pedidos enviados</div>'; return; }
   enviados.forEach((p) => {
     const li = document.createElement('li');
     const info = document.createElement('div');
@@ -2491,8 +2512,7 @@ function renderizarEnviados(enviados) {
 
 async function aceitarPedido(id) {
   await fetch('/api/amizades/aceitar', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ amizadeId: id }),
   });
   carregarAmizades();
@@ -2500,8 +2520,7 @@ async function aceitarPedido(id) {
 
 async function recusarPedido(id) {
   await fetch('/api/amizades/recusar', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ amizadeId: id }),
   });
   carregarAmizades();
@@ -2519,7 +2538,6 @@ function buscarUsuarios() {
     const q = document.getElementById('busca-input').value.trim();
     const ul = document.getElementById('lista-busca');
     if (q.length < 1) { ul.innerHTML = '<div class="vazio">Digite pra buscar</div>'; return; }
-
     const r = await fetch('/api/usuarios/buscar?q=' + encodeURIComponent(q));
     const data = await r.json();
     ul.innerHTML = '';
@@ -2561,8 +2579,7 @@ function buscarUsuarios() {
 
 async function pedirAmizade(paraId) {
   const r = await fetch('/api/amizades/pedir', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ paraId }),
   });
   const data = await r.json();
@@ -2580,7 +2597,6 @@ async function carregarConversas() {
   const data = await r.json();
   const ul = document.getElementById('lista-conversas');
   ul.innerHTML = '';
-
   if (!data.conversas || data.conversas.length === 0) {
     ul.innerHTML = '<div class="vazio">Nenhuma conversa. Vá em Amigos e clique em Conversar.</div>';
     return;
@@ -2600,11 +2616,13 @@ async function carregarConversas() {
       preview = '(sem mensagens)';
     }
     const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(c.amigo).replace(/"/g, '&quot;')})`;
+    const badgeSile = c.silenciado ? '<span class="badge-silenciado">🔇</span>' : '';
     info.innerHTML = `
       <span class="nome">
         ${avatarHTML(c.amigo, 'mini', onclickAttr)}
         <span class="status-dot ${estaOnline ? 'online' : 'offline'}"></span>
         ${c.amigo.nome}
+        ${badgeSile}
       </span>
       <span class="preview">${escapeHtml(preview)}</span>
     `;
@@ -2615,18 +2633,75 @@ async function carregarConversas() {
       b.textContent = c.nao_lidas;
       li.appendChild(b);
     }
+
     li.onclick = (e) => {
       if (e.target.closest('.avatar')) return;
       abrirConversa(c.amigo);
     };
+
+    // 🔥 Long-press / right-click = menu contextual
+    li.oncontextmenu = (e) => {
+      e.preventDefault();
+      abrirMenuAmigo(e, c.amigo, c.silenciado);
+    };
+    let timer;
+    li.addEventListener('touchstart', (e) => {
+      timer = setTimeout(() => {
+        e.preventDefault();
+        const t = e.touches[0];
+        abrirMenuAmigo({ clientX: t.clientX, clientY: t.clientY, preventDefault: () => {}, stopPropagation: () => {} }, c.amigo, c.silenciado);
+      }, 500);
+    }, { passive: true });
+    li.addEventListener('touchend', () => clearTimeout(timer));
+    li.addEventListener('touchmove', () => clearTimeout(timer));
+
     ul.appendChild(li);
+  });
+}
+
+function abrirMenuAmigo(event, amigo, silenciado) {
+  if (event) { event.preventDefault(); event.stopPropagation(); }
+  const bloqueado = estaBloqueadoLocal(amigo.id);
+
+  abrirMenuContexto(event, {
+    titulo: amigo.nome,
+    acoes: [
+      {
+        emoji: silenciado ? '🔊' : '🔇',
+        label: silenciado ? 'Dessilenciar' : 'Silenciar',
+        onClick: async () => {
+          const endpoint = silenciado ? '/api/dessilenciar' : '/api/silenciar';
+          await fetch(endpoint, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tipo: 'usuario', alvoId: amigo.id }),
+          });
+          if (silenciado) silenciadosUsuarioLocal.delete(amigo.id);
+          else silenciadosUsuarioLocal.add(amigo.id);
+          carregarConversas();
+        },
+      },
+      bloqueado ? {
+        emoji: '🔓',
+        label: 'Desbloquear',
+        onClick: () => desbloquearUsuario(amigo.id),
+      } : {
+        emoji: '🚫',
+        label: 'Bloquear',
+        perigo: true,
+        onClick: () => bloquearUsuario(amigo.id, amigo.nome),
+      },
+      {
+        emoji: '👤',
+        label: 'Ver perfil',
+        onClick: () => abrirPerfilVisitado(amigo),
+      },
+    ],
   });
 }
 
 async function abrirConversa(amigo) {
   const r = await fetch('/api/conversas/abrir', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ amigoId: amigo.id }),
   });
   const data = await r.json();
@@ -2650,7 +2725,6 @@ async function abrirConversa(amigo) {
   const el = document.getElementById('chat-dm');
   el.innerHTML = '';
   (d2.mensagens || []).forEach(adicionarMsgDM);
-
   document.getElementById('input-dm').focus();
 }
 
@@ -2672,8 +2746,7 @@ async function enviarMsgDM() {
   pararDigitando('dm');
 
   const r = await fetch(`/api/conversas/${conversaAtual.conversa_id}/mensagens`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const data = await r.json();
@@ -2682,6 +2755,79 @@ async function enviarMsgDM() {
 
   const el = document.getElementById('chat-dm');
   setTimeout(() => { el.scrollTop = el.scrollHeight; }, 100);
+}
+
+// ============================================================
+// BLOQUEIOS
+// ============================================================
+
+async function bloquearUsuario(id, nome) {
+  if (!confirm(`Bloquear ${nome}?\nEle não vai mais conseguir te mandar mensagens nem pedidos.`)) return;
+  const r = await fetch('/api/bloquear', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ alvoId: id }),
+  });
+  if (!r.ok) { alert('Erro ao bloquear'); return; }
+  bloqueadosLocal.add(id);
+  carregarConversas();
+  carregarAmizades();
+  // Se tá no perfil, atualiza
+  if (perfilVisitadoAtual && perfilVisitadoAtual.id === id) {
+    abrirPerfilVisitado(perfilVisitadoAtual);
+  }
+}
+
+async function desbloquearUsuario(id) {
+  const r = await fetch('/api/desbloquear', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ alvoId: id }),
+  });
+  if (!r.ok) { alert('Erro ao desbloquear'); return; }
+  bloqueadosLocal.delete(id);
+  carregarConversas();
+  carregarAmizades();
+  carregarListaBloqueados();
+  if (perfilVisitadoAtual && perfilVisitadoAtual.id === id) {
+    abrirPerfilVisitado(perfilVisitadoAtual);
+  }
+}
+
+async function abrirBloqueados() {
+  fecharModalPerfil();
+  await carregarListaBloqueados();
+  document.getElementById('modal-bloqueados').classList.add('ativo');
+}
+
+function fecharBloqueados() {
+  document.getElementById('modal-bloqueados').classList.remove('ativo');
+}
+
+async function carregarListaBloqueados() {
+  const ul = document.getElementById('lista-bloqueados');
+  ul.innerHTML = '<div class="vazio">Carregando...</div>';
+  const r = await fetch('/api/bloqueados');
+  const data = await r.json();
+  const bloqueados = data.bloqueados || [];
+  ul.innerHTML = '';
+  if (bloqueados.length === 0) {
+    ul.innerHTML = '<div class="vazio">Você não bloqueou ninguém.</div>';
+    return;
+  }
+  bloqueados.forEach((b) => {
+    const li = document.createElement('li');
+    const info = document.createElement('div');
+    info.className = 'info';
+    info.innerHTML = `
+      <span class="nome">${avatarHTML(b, 'mini')} ${b.nome}</span>
+      <span class="email">${b.email}</span>`;
+    const btn = document.createElement('button');
+    btn.className = 'mini verde';
+    btn.textContent = '🔓 Desbloquear';
+    btn.onclick = () => desbloquearUsuario(b.id);
+    li.appendChild(info);
+    li.appendChild(btn);
+    ul.appendChild(li);
+  });
 }
 
 // ============================================================
@@ -2716,25 +2862,18 @@ function atualizarPreviewAvatar(usuario) {
 
 function atualizarPreviewBanner(usuario) {
   const el = document.getElementById('perfil-banner');
-  if (usuario.banner) {
-    el.style.backgroundImage = `url(${usuario.banner})`;
-  } else {
-    el.style.backgroundImage = '';
-  }
+  if (usuario.banner) el.style.backgroundImage = `url(${usuario.banner})`;
+  else el.style.backgroundImage = '';
 }
 
 async function salvarBio() {
   const bio = document.getElementById('perfil-bio').value.trim();
   if (bio === (meuUsuario.bio || '')) return;
-
   const r = await fetch('/api/bio', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ bio }),
   });
-
   if (!r.ok) { alert('Erro ao salvar bio'); return; }
-
   meuUsuario.bio = bio;
   tocarSom();
 }
@@ -2756,16 +2895,14 @@ function atualizarAvataresNaUI() {
 }
 
 // ============================================================
-// PERFIL — VISITA
+// PERFIL — VISITA (com ações)
 // ============================================================
 
 function abrirPerfilVisitado(usuario) {
   if (!usuario || !usuario.nome) return;
+  if (meuUsuario && usuario.id === meuUsuario.id) { abrirModalPerfil(); return; }
 
-  if (meuUsuario && usuario.id === meuUsuario.id) {
-    abrirModalPerfil();
-    return;
-  }
+  perfilVisitadoAtual = usuario;
 
   document.getElementById('visita-nome').textContent = usuario.nome;
   document.getElementById('visita-email').textContent = usuario.email || '';
@@ -2782,26 +2919,129 @@ function abrirPerfilVisitado(usuario) {
   }
 
   const bannerEl = document.getElementById('visita-banner');
-  if (usuario.banner) {
-    bannerEl.style.backgroundImage = `url(${usuario.banner})`;
-  } else {
-    bannerEl.style.backgroundImage = '';
-  }
+  if (usuario.banner) bannerEl.style.backgroundImage = `url(${usuario.banner})`;
+  else bannerEl.style.backgroundImage = '';
 
   document.getElementById('visita-bio').textContent =
     (usuario.bio && usuario.bio.trim()) ? usuario.bio : 'Sem descrição.';
 
+  // 🔥 Monta ações
+  montarAcoesPerfil(usuario);
+
   document.getElementById('modal-perfil-visita').classList.add('ativo');
+}
+
+function montarAcoesPerfil(usuario) {
+  const acoesEl = document.getElementById('visita-acoes');
+  acoesEl.innerHTML = '';
+
+  const bloqueado = estaBloqueadoLocal(usuario.id);
+
+  // Bloqueado → só Desbloquear
+  if (bloqueado) {
+    const btn = document.createElement('button');
+    btn.className = 'desbloquear';
+    btn.textContent = '🔓 Desbloquear';
+    btn.onclick = () => desbloquearUsuario(usuario.id);
+    acoesEl.appendChild(btn);
+    return;
+  }
+
+  // Verifica se é amigo
+  const amigosIds = [...document.querySelectorAll('#lista-amigos .nome')]; // hack rápido
+  // Faz fetch direto pra ser confiável
+  fetch('/api/amizades').then((r) => r.json()).then((amz) => {
+    const ehAmigo = amz.amigos.some((a) => a.id === usuario.id);
+    const pedidoEnviado = amz.pedidosEnviados.some((p) => p.id === usuario.id);
+    const pedidoRecebido = amz.pedidosRecebidos.some((p) => p.id === usuario.id);
+
+    // Amizade
+    if (!ehAmigo && !pedidoEnviado && !pedidoRecebido) {
+      const btn = document.createElement('button');
+      btn.className = 'amizade';
+      btn.textContent = '➕ Mandar pedido de amizade';
+      btn.onclick = () => { pedirAmizade(usuario.id); fecharPerfilVisitado(); };
+      acoesEl.appendChild(btn);
+    } else if (pedidoEnviado) {
+      const btn = document.createElement('button');
+      btn.className = 'silenciar';
+      btn.textContent = '⏳ Pedido enviado';
+      btn.disabled = true;
+      acoesEl.appendChild(btn);
+    } else if (pedidoRecebido) {
+      const btn = document.createElement('button');
+      btn.className = 'amizade';
+      btn.textContent = '✅ Aceitar pedido';
+      btn.onclick = () => {
+        // busca amizade_id
+        fetch('/api/amizades').then((r) => r.json()).then((d) => {
+          const ped = d.pedidosRecebidos.find((p) => p.id === usuario.id);
+          if (ped) aceitarPedido(ped.amizade_id);
+          fecharPerfilVisitado();
+        });
+      };
+      acoesEl.appendChild(btn);
+    }
+
+    // Silenciar / Dessilenciar
+    const silenciado = estaSilenciadoLocal('usuario', usuario.id);
+    const btnSil = document.createElement('button');
+    btnSil.className = 'silenciar';
+    btnSil.textContent = silenciado ? '🔊 Dessilenciar' : '🔇 Silenciar';
+    btnSil.onclick = async () => {
+      const endpoint = silenciado ? '/api/dessilenciar' : '/api/silenciar';
+      await fetch(endpoint, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'usuario', alvoId: usuario.id }),
+      });
+      if (silenciado) silenciadosUsuarioLocal.delete(usuario.id);
+      else silenciadosUsuarioLocal.add(usuario.id);
+      montarAcoesPerfil(usuario);
+      carregarConversas();
+    };
+    acoesEl.appendChild(btnSil);
+
+    // Remover do servidor (só dono)
+    if (servidorAtivo && servidorAtivo.ehDono && usuario.id !== meuUsuario.id) {
+      const estaNoServidor = servidorAtivo.membros.some((m) => m.id === usuario.id);
+      if (estaNoServidor) {
+        const btnRem = document.createElement('button');
+        btnRem.className = 'remover';
+        btnRem.textContent = '👢 Remover do servidor';
+        btnRem.onclick = async () => {
+          if (!confirm(`Remover ${usuario.nome} do servidor?`)) return;
+          const r = await fetch(`/api/servidores/${servidorAtivo.servidor.id}/remover-membro`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usuarioId: usuario.id }),
+          });
+          if (!r.ok) { alert('Erro ao remover'); return; }
+          servidorAtivo.membros = servidorAtivo.membros.filter((m) => m.id !== usuario.id);
+          renderizarMembros();
+          fecharPerfilVisitado();
+        };
+        acoesEl.appendChild(btnRem);
+      }
+    }
+
+    // Bloquear
+    const btnBl = document.createElement('button');
+    btnBl.className = 'bloquear';
+    btnBl.textContent = '🚫 Bloquear';
+    btnBl.onclick = () => { bloquearUsuario(usuario.id, usuario.nome); };
+    acoesEl.appendChild(btnBl);
+  }).catch(() => {});
 }
 
 function fecharPerfilVisitado() {
   document.getElementById('modal-perfil-visita').classList.remove('ativo');
+  perfilVisitadoAtual = null;
 }
 
 document.addEventListener('click', (e) => {
   if (e.target.id === 'modal-perfil-visita') fecharPerfilVisitado();
   if (e.target.id === 'modal-perfil') fecharModalPerfil();
   if (e.target.id === 'modal-config') fecharConfig();
+  if (e.target.id === 'modal-bloqueados') fecharBloqueados();
 });
 
 // ============================================================
@@ -2825,7 +3065,7 @@ function uploadBanner(event) {
 }
 
 // ============================================================
-// EDITOR DE IMAGEM (avatar/banner)
+// EDITOR DE IMAGEM
 // ============================================================
 
 let editorEstado = {
@@ -2844,7 +3084,6 @@ function abrirEditor(file, tipo) {
       editorEstado.zoom = 1;
       editorEstado.offsetX = 0;
       editorEstado.offsetY = 0;
-
       const canvas = document.getElementById('editor-canvas');
 
       if (tipo === 'avatar') {
@@ -2902,7 +3141,6 @@ function desenharEditor() {
   const escalaTotal = baseScale * zoom;
   const w = imagem.width * escalaTotal;
   const h = imagem.height * escalaTotal;
-
   ctx.drawImage(imagem, offsetX, offsetY, w, h);
 
   if (tipo === 'avatar') {
@@ -2940,17 +3178,14 @@ function moverArrasto(x, y) {
   const dy = y - editorEstado.startY;
   let novoX = editorEstado.startOffsetX + dx;
   let novoY = editorEstado.startOffsetY + dy;
-
   const { imagem, baseScale, zoom, canvasW, canvasH } = editorEstado;
   const escalaTotal = baseScale * zoom;
   const w = imagem.width * escalaTotal;
   const h = imagem.height * escalaTotal;
   const minX = canvasW - w;
   const minY = canvasH - h;
-
   novoX = Math.min(0, Math.max(minX, novoX));
   novoY = Math.min(0, Math.max(minY, novoY));
-
   editorEstado.offsetX = novoX;
   editorEstado.offsetY = novoY;
   desenharEditor();
@@ -2998,33 +3233,27 @@ async function salvarEdicao() {
   outputCanvas.width = outputW;
   outputCanvas.height = outputH;
   const outCtx = outputCanvas.getContext('2d');
-
   outCtx.fillStyle = '#ffffff';
   outCtx.fillRect(0, 0, outputW, outputH);
   outCtx.drawImage(canvas, 0, 0, canvasW, canvasH, 0, 0, outputW, outputH);
 
   const base64 = outputCanvas.toDataURL('image/jpeg', 0.92);
-
   const endpoint = tipo === 'avatar' ? '/api/avatar' : '/api/banner';
   const chave = tipo === 'avatar' ? 'avatar' : 'banner';
 
   const r = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ [chave]: base64 }),
   });
-
   if (!r.ok) { alert('Erro ao salvar'); return; }
 
   meuUsuario[chave] = base64;
-
   if (tipo === 'avatar') {
     atualizarPreviewAvatar(meuUsuario);
     atualizarAvataresNaUI();
   } else {
     atualizarPreviewBanner(meuUsuario);
   }
-
   tocarSom();
   fecharEditor();
   document.getElementById('modal-perfil').classList.add('ativo');
@@ -3069,7 +3298,7 @@ async function iniciarGravacaoAudio(contexto) {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (e) {
-    alert('Não foi possível acessar o microfone.\nVerifique as permissões do navegador.');
+    alert('Não foi possível acessar o microfone.');
     return;
   }
 
@@ -3103,11 +3332,8 @@ async function iniciarGravacaoAudio(contexto) {
 
   barra.classList.add('ativo');
 
-  if (contexto === 'canal') {
-    document.getElementById('input-canal').disabled = true;
-  } else {
-    document.getElementById('input-dm').disabled = true;
-  }
+  if (contexto === 'canal') document.getElementById('input-canal').disabled = true;
+  else document.getElementById('input-dm').disabled = true;
 
   const iniciarGrav = async (e) => {
     if (e) e.preventDefault();
@@ -3115,7 +3341,6 @@ async function iniciarGravacaoAudio(contexto) {
     if (gravacaoEstado.blob) return;
     await comecarAGravar();
   };
-
   const pararGrav = (e) => {
     if (e) e.preventDefault();
     if (!gravacaoEstado.gravando) return;
@@ -3142,16 +3367,12 @@ async function comecarAGravar() {
   const tipoMime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
     ? 'audio/webm;codecs=opus'
     : MediaRecorder.isTypeSupported('audio/webm')
-      ? 'audio/webm'
-      : '';
+      ? 'audio/webm' : '';
 
   let mr;
   try {
     mr = tipoMime ? new MediaRecorder(stream, { mimeType: tipoMime }) : new MediaRecorder(stream);
-  } catch (e) {
-    alert('Seu navegador não suporta gravação de áudio.');
-    return;
-  }
+  } catch (e) { alert('Seu navegador não suporta gravação de áudio.'); return; }
 
   gravacaoEstado.mediaRecorder = mr;
   gravacaoEstado.chunks = [];
@@ -3161,7 +3382,6 @@ async function comecarAGravar() {
   mr.ondataavailable = (ev) => {
     if (ev.data && ev.data.size > 0) gravacaoEstado.chunks.push(ev.data);
   };
-
   mr.onstop = () => {
     const blob = new Blob(gravacaoEstado.chunks, { type: mr.mimeType || 'audio/webm' });
     gravacaoEstado.blob = blob;
@@ -3213,7 +3433,6 @@ function pararTimerGravacao() {
 function iniciarBarsGravacao() {
   const bars = document.querySelectorAll('#gravacao-bars span');
   if (!bars.length) return;
-
   let analyser = null;
   try {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -3227,7 +3446,6 @@ function iniciarBarsGravacao() {
   } catch (e) { analyser = null; }
 
   const dataArray = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
-
   pararBarsGravacao();
   gravacaoEstado.barsInterval = setInterval(() => {
     bars.forEach((bar, i) => {
@@ -3236,9 +3454,7 @@ function iniciarBarsGravacao() {
         analyser.getByteFrequencyData(dataArray);
         const valor = dataArray[i % dataArray.length] || 0;
         h = 6 + (valor / 255) * 22;
-      } else {
-        h = 6 + Math.random() * 18;
-      }
+      } else h = 6 + Math.random() * 18;
       bar.style.height = h + 'px';
     });
   }, 60);
@@ -3261,14 +3477,12 @@ function mostrarPreviewGravacao() {
   const preview = document.getElementById('preview-gravacao');
   const btnGrav = document.getElementById('gravacao-btn');
   const timer = document.getElementById('gravacao-timer');
-
   if (!gravacaoEstado.blob) return;
 
   btnGrav.style.display = 'none';
   info.style.display = 'none';
   bars.style.display = 'none';
   timer.style.display = 'none';
-
   preview.style.display = 'flex';
   acoes.style.display = 'flex';
 
@@ -3287,7 +3501,6 @@ function mostrarPreviewGravacao() {
     const seg = Math.floor(s % 60);
     return `${m}:${seg.toString().padStart(2, '0')}`;
   };
-
   tempoEl.textContent = formatarTempo(gravacaoEstado.duracao);
 
   playBtn.onclick = (e) => {
@@ -3297,11 +3510,8 @@ function mostrarPreviewGravacao() {
         if (el !== audio && !el.paused) el.pause();
       });
       audio.play().catch(() => {});
-    } else {
-      audio.pause();
-    }
+    } else audio.pause();
   };
-
   audio.onplay = () => { playBtn.textContent = '⏸'; };
   audio.onpause = () => { playBtn.textContent = '▶'; };
   audio.onended = () => {
@@ -3311,8 +3521,7 @@ function mostrarPreviewGravacao() {
   };
   audio.ontimeupdate = () => {
     if (!audio.duration || !isFinite(audio.duration)) return;
-    const pct = (audio.currentTime / audio.duration) * 100;
-    barra.style.width = pct + '%';
+    barra.style.width = ((audio.currentTime / audio.duration) * 100) + '%';
   };
 }
 
@@ -3320,32 +3529,24 @@ async function enviarGravacao() {
   if (!gravacaoEstado.blob) return;
   const contexto = gravacaoEstado.contexto;
   const blob = gravacaoEstado.blob;
-
   const ext = blob.type.includes('webm') ? 'webm' : 'ogg';
   const nome = `audio-${Date.now()}.${ext}`;
   const file = new File([blob], nome, { type: blob.type });
-
   finalizarGravacaoEstado();
-
   await enviarComUpload(file, 'arquivo', contexto);
 }
 
-function cancelarGravacao() {
-  finalizarGravacaoEstado();
-}
+function cancelarGravacao() { finalizarGravacaoEstado(); }
 
 function finalizarGravacaoEstado() {
   if (gravacaoEstado.mediaRecorder && gravacaoEstado.mediaRecorder.state !== 'inactive') {
     try { gravacaoEstado.mediaRecorder.stop(); } catch (e) {}
   }
-  if (gravacaoEstado.stream) {
-    gravacaoEstado.stream.getTracks().forEach((t) => t.stop());
-  }
+  if (gravacaoEstado.stream) gravacaoEstado.stream.getTracks().forEach((t) => t.stop());
   pararTimerGravacao();
   pararBarsGravacao();
 
-  const barra = document.getElementById('barra-gravacao');
-  barra.classList.remove('ativo');
+  document.getElementById('barra-gravacao').classList.remove('ativo');
 
   const btnGrav = document.getElementById('gravacao-btn');
   const info = document.getElementById('gravacao-info');
@@ -3389,14 +3590,10 @@ function finalizarGravacaoEstado() {
 }
 
 // ============================================================
-// CÂMERA — TIRAR FOTO
+// CÂMERA
 // ============================================================
 
-let cameraEstado = {
-  stream: null,
-  fotoBase64: null,
-  contexto: null,
-};
+let cameraEstado = { stream: null, fotoBase64: null, contexto: null };
 
 function abrirCameraDoContexto() {
   const contexto = anexoContexto || (telaAtual === 'canal' ? 'canal' : 'dm');
@@ -3406,7 +3603,6 @@ function abrirCameraDoContexto() {
 
 async function abrirCamera(contexto) {
   if (contexto !== 'canal' && contexto !== 'dm') return;
-
   const modal = document.getElementById('modal-camera');
   const video = document.getElementById('camera-video');
   const wrap = document.getElementById('camera-preview-wrap');
@@ -3421,7 +3617,6 @@ async function abrirCamera(contexto) {
   controlesFoto.style.display = 'none';
   canvas.style.display = 'none';
 
-  // 🔥 Lista de tentativas de constraints — da mais específica pra mais genérica
   const tentativas = [
     { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
     { video: { facingMode: 'user' }, audio: false },
@@ -3432,15 +3627,14 @@ async function abrirCamera(contexto) {
 
   let stream = null;
   let ultimoErro = null;
-
   for (const constraints of tentativas) {
     try {
       stream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log('✅ Câmera aberta com:', JSON.stringify(constraints));
+      console.log('✅ Câmera:', JSON.stringify(constraints));
       break;
     } catch (e) {
       ultimoErro = e;
-      console.warn('❌ Falhou:', JSON.stringify(constraints), '→', e.name, e.message);
+      console.warn('❌ Falhou:', JSON.stringify(constraints), e.name);
     }
   }
 
@@ -3448,19 +3642,11 @@ async function abrirCamera(contexto) {
     let msg = 'Não foi possível acessar a câmera.\n\n';
     if (ultimoErro) {
       msg += 'Erro: ' + ultimoErro.name + '\n';
-      if (ultimoErro.name === 'NotAllowedError') {
-        msg += 'Você precisa permitir o acesso à câmera nas configurações do navegador.';
-      } else if (ultimoErro.name === 'NotFoundError') {
-        msg += 'Nenhuma câmera foi encontrada no seu dispositivo.';
-      } else if (ultimoErro.name === 'NotReadableError') {
-        msg += 'A câmera está sendo usada por outro programa (Zoom, Teams, OBS, etc). Feche ele e tente de novo.';
-      } else if (ultimoErro.name === 'OverconstrainedError') {
-        msg += 'Sua câmera não suporta as configurações solicitadas.';
-      } else if (ultimoErro.name === 'SecurityError') {
-        msg += 'Acesso bloqueado por segurança. Use HTTPS ou localhost.';
-      } else {
-        msg += ultimoErro.message || 'Erro desconhecido.';
-      }
+      if (ultimoErro.name === 'NotAllowedError') msg += 'Permita o acesso à câmera nas configurações do navegador.';
+      else if (ultimoErro.name === 'NotFoundError') msg += 'Nenhuma câmera encontrada.';
+      else if (ultimoErro.name === 'NotReadableError') msg += 'A câmera está em uso por outro programa.';
+      else if (ultimoErro.name === 'OverconstrainedError') msg += 'Sua câmera não suporta as configurações.';
+      else msg += ultimoErro.message || 'Erro desconhecido';
     }
     alert(msg);
     return;
@@ -3468,11 +3654,7 @@ async function abrirCamera(contexto) {
 
   cameraEstado.stream = stream;
   video.srcObject = stream;
-
-  video.onloadedmetadata = () => {
-    video.play().catch(() => {});
-  };
-
+  video.onloadedmetadata = () => { video.play().catch(() => {}); };
   modal.classList.add('ativo');
 }
 
@@ -3484,7 +3666,6 @@ function capturarFoto() {
   const controlesFoto = document.getElementById('camera-controles-foto');
 
   if (!video.videoWidth || !video.videoHeight) return;
-
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d');
@@ -3492,9 +3673,7 @@ function capturarFoto() {
   ctx.scale(-1, 1);
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  const base64 = canvas.toDataURL('image/jpeg', 0.92);
-  cameraEstado.fotoBase64 = base64;
-
+  cameraEstado.fotoBase64 = canvas.toDataURL('image/jpeg', 0.92);
   wrap.classList.add('mostrando-foto');
   controlesCamera.style.display = 'none';
   controlesFoto.style.display = 'flex';
@@ -3504,7 +3683,6 @@ function tirarOutraFoto() {
   const wrap = document.getElementById('camera-preview-wrap');
   const controlesCamera = document.getElementById('camera-controles');
   const controlesFoto = document.getElementById('camera-controles-foto');
-
   cameraEstado.fotoBase64 = null;
   wrap.classList.remove('mostrando-foto');
   controlesCamera.style.display = 'flex';
@@ -3514,7 +3692,6 @@ function tirarOutraFoto() {
 async function enviarFotoCapturada() {
   const contexto = cameraEstado.contexto;
   if (!cameraEstado.fotoBase64 || !contexto) return;
-
   const base64 = cameraEstado.fotoBase64;
   const arr = base64.split(',');
   const mime = arr[0].match(/:(.*?);/)[1];
@@ -3524,19 +3701,14 @@ async function enviarFotoCapturada() {
   while (n--) u8arr[n] = bstr.charCodeAt(n);
   const blob = new Blob([u8arr], { type: mime });
   const file = new File([blob], `foto-${Date.now()}.jpg`, { type: mime });
-
   fecharCamera();
-
   await enviarComUpload(file, 'foto', contexto);
 }
 
 function fecharCamera() {
-  const modal = document.getElementById('modal-camera');
-  modal.classList.remove('ativo');
+  document.getElementById('modal-camera').classList.remove('ativo');
   const video = document.getElementById('camera-video');
-  if (cameraEstado.stream) {
-    cameraEstado.stream.getTracks().forEach((t) => t.stop());
-  }
+  if (cameraEstado.stream) cameraEstado.stream.getTracks().forEach((t) => t.stop());
   cameraEstado.stream = null;
   cameraEstado.fotoBase64 = null;
   if (video) video.srcObject = null;
@@ -3609,6 +3781,7 @@ window.addEventListener('load', async () => {
     if (r.ok) {
       const data = await r.json();
       entrarNoApp(data.usuario);
+      await carregarBloqueiosESilenciados();
     }
   } catch (e) {}
 
@@ -3620,10 +3793,17 @@ window.addEventListener('load', async () => {
   });
 
   const nomeServidorEl = document.getElementById('nome-servidor');
-  if (nomeServidorEl) {
-    nomeServidorEl.onclick = abrirModalEditarServidor;
-  }
+  if (nomeServidorEl) nomeServidorEl.onclick = abrirModalEditarServidor;
 
   montarEmojiPicker();
   montarPickerReacao();
+
+  // Fecha painel de membros ao clicar fora
+  document.addEventListener('click', (e) => {
+    const painel = document.getElementById('painel-membros');
+    if (!painel.classList.contains('aberto')) return;
+    if (e.target.closest('#painel-membros')) return;
+    if (e.target.closest('.topo-main .acoes button[title="Membros"]')) return;
+    fecharPainelMembros();
+  });
 });

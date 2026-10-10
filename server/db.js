@@ -97,6 +97,23 @@ db.exec(`
     UNIQUE(tipo, alvo_id, usuario_id, emoji)
   );
 
+  CREATE TABLE IF NOT EXISTS bloqueios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id INTEGER NOT NULL,
+    bloqueado_id INTEGER NOT NULL,
+    criado_em INTEGER NOT NULL,
+    UNIQUE(usuario_id, bloqueado_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS silenciados (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id INTEGER NOT NULL,
+    tipo TEXT NOT NULL,
+    alvo_id INTEGER NOT NULL,
+    criado_em INTEGER NOT NULL,
+    UNIQUE(usuario_id, tipo, alvo_id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios (email);
   CREATE INDEX IF NOT EXISTS idx_amizades_de ON amizades (de_id);
   CREATE INDEX IF NOT EXISTS idx_amizades_para ON amizades (para_id);
@@ -108,9 +125,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_canais_servidor ON canais (servidor_id);
   CREATE INDEX IF NOT EXISTS idx_msg_canal ON mensagens_canal (canal_id, hora);
   CREATE INDEX IF NOT EXISTS idx_reacoes_alvo ON reacoes (tipo, alvo_id);
+  CREATE INDEX IF NOT EXISTS idx_bloqueios_user ON bloqueios (usuario_id);
+  CREATE INDEX IF NOT EXISTS idx_silenciados_user ON silenciados (usuario_id, tipo);
 `);
 
-// ========== MIGRAÇÕES ==========
 function migrar() {
   const colsU = db.prepare('PRAGMA table_info(usuarios)').all().map(c => c.name);
   if (!colsU.includes('avatar')) db.exec("ALTER TABLE usuarios ADD COLUMN avatar TEXT DEFAULT ''");
@@ -282,7 +300,16 @@ function listarConversas(usuarioId) {
     const naoLidas = db.prepare(
       'SELECT COUNT(*) as n FROM mensagens WHERE conversa_id = ? AND de_id != ? AND lida = 0'
     ).get(c.id, usuarioId).n;
-    resultado.push({ conversa_id: c.id, amigo: outro, ultima: ultima || null, nao_lidas: naoLidas });
+
+    const silenciado = estaSilenciado(usuarioId, 'usuario', c.outro_id);
+
+    resultado.push({
+      conversa_id: c.id,
+      amigo: outro,
+      ultima: ultima || null,
+      nao_lidas: naoLidas,
+      silenciado,
+    });
   }
   resultado.sort((x, y) => ((y.ultima?.hora || 0) - (x.ultima?.hora || 0)));
   return resultado;
@@ -388,12 +415,17 @@ function buscarServidorPorCodigo(codigo) {
 }
 
 function listarServidoresDoUsuario(usuarioId) {
-  return db.prepare(
+  const servidores = db.prepare(
     `SELECT s.* FROM servidores s
      JOIN membros_servidor m ON m.servidor_id = s.id
      WHERE m.usuario_id = ?
      ORDER BY s.criado_em`
   ).all(usuarioId);
+
+  return servidores.map((s) => ({
+    ...s,
+    silenciado: estaSilenciado(usuarioId, 'servidor', s.id),
+  }));
 }
 
 function atualizarServidor(id, { nome, descricao }) {
@@ -565,6 +597,69 @@ function listarReacoesDeMensagens(tipo, alvoIds) {
   return porMsg;
 }
 
+// ========== BLOQUEIOS ==========
+
+function bloquear(usuarioId, bloqueadoId) {
+  const existente = db.prepare(
+    'SELECT id FROM bloqueios WHERE usuario_id = ? AND bloqueado_id = ?'
+  ).get(usuarioId, bloqueadoId);
+  if (existente) return false;
+  db.prepare(
+    'INSERT INTO bloqueios (usuario_id, bloqueado_id, criado_em) VALUES (?, ?, ?)'
+  ).run(usuarioId, bloqueadoId, Date.now());
+  return true;
+}
+
+function desbloquear(usuarioId, bloqueadoId) {
+  return db.prepare(
+    'DELETE FROM bloqueios WHERE usuario_id = ? AND bloqueado_id = ?'
+  ).run(usuarioId, bloqueadoId);
+}
+
+function estaBloqueado(usuarioId, bloqueadoId) {
+  const x = db.prepare(
+    'SELECT 1 FROM bloqueios WHERE usuario_id = ? AND bloqueado_id = ?'
+  ).get(usuarioId, bloqueadoId);
+  return !!x;
+}
+
+function listarBloqueados(usuarioId) {
+  return db.prepare(
+    `SELECT u.id, u.nome, u.email, u.avatar, b.criado_em
+     FROM bloqueios b
+     JOIN usuarios u ON u.id = b.bloqueado_id
+     WHERE b.usuario_id = ?
+     ORDER BY b.criado_em DESC`
+  ).all(usuarioId);
+}
+
+// ========== SILENCIADOS ==========
+
+function silenciar(usuarioId, tipo, alvoId) {
+  if (!['usuario', 'servidor'].includes(tipo)) return false;
+  const existente = db.prepare(
+    'SELECT id FROM silenciados WHERE usuario_id = ? AND tipo = ? AND alvo_id = ?'
+  ).get(usuarioId, tipo, alvoId);
+  if (existente) return false;
+  db.prepare(
+    'INSERT INTO silenciados (usuario_id, tipo, alvo_id, criado_em) VALUES (?, ?, ?, ?)'
+  ).run(usuarioId, tipo, alvoId, Date.now());
+  return true;
+}
+
+function dessilenciar(usuarioId, tipo, alvoId) {
+  return db.prepare(
+    'DELETE FROM silenciados WHERE usuario_id = ? AND tipo = ? AND alvo_id = ?'
+  ).run(usuarioId, tipo, alvoId);
+}
+
+function estaSilenciado(usuarioId, tipo, alvoId) {
+  const x = db.prepare(
+    'SELECT 1 FROM silenciados WHERE usuario_id = ? AND tipo = ? AND alvo_id = ?'
+  ).get(usuarioId, tipo, alvoId);
+  return !!x;
+}
+
 // ========== HELPERS ==========
 
 function safeJsonParse(str) {
@@ -587,4 +682,6 @@ module.exports = {
   buscarMensagemCanalPorId, editarMensagemCanal, deletarMensagemCanal,
   limparMensagensCanal,
   adicionarReacao, removerReacao, listarReacoesDeMensagens,
+  bloquear, desbloquear, estaBloqueado, listarBloqueados,
+  silenciar, dessilenciar, estaSilenciado,
 };
