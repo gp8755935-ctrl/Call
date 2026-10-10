@@ -569,7 +569,6 @@ function notificarListaOnline() {
 io.on('connection', (socket) => {
   console.log('conectado:', socket.usuario.nome, socket.id);
 
-  // 🔥 MODIFICADO: agora inclui avatar, banner e bio
   const dadosCompletos = db.buscarUsuarioPorId(socket.usuario.id) || {};
   online.set(socket.id, {
     id: socket.usuario.id,
@@ -597,6 +596,44 @@ io.on('connection', (socket) => {
 
   socket.on('sair-canal', ({ canalId }) => {
     socket.leave('canal-' + canalId);
+  });
+
+  // 🔥 NOVO: digitando no canal
+  socket.on('digitando-canal', ({ canalId, nome }) => {
+    socket.to('canal-' + canalId).emit('alguem-digitando-canal', {
+      canalId,
+      nome,
+      usuarioId: socket.usuario.id,
+    });
+  });
+
+  socket.on('parou-digitando-canal', ({ canalId }) => {
+    socket.to('canal-' + canalId).emit('alguem-parou-digitando-canal', {
+      canalId,
+      usuarioId: socket.usuario.id,
+    });
+  });
+
+  // 🔥 NOVO: digitando na DM
+  socket.on('digitando-dm', ({ conversaId, paraUsuarioId, nome }) => {
+    const socketOutro = [...online.values()].find((u) => u.id === paraUsuarioId);
+    if (socketOutro) {
+      io.to(socketOutro.socketId).emit('alguem-digitando-dm', {
+        conversaId,
+        nome,
+        usuarioId: socket.usuario.id,
+      });
+    }
+  });
+
+  socket.on('parou-digitando-dm', ({ conversaId, paraUsuarioId }) => {
+    const socketOutro = [...online.values()].find((u) => u.id === paraUsuarioId);
+    if (socketOutro) {
+      io.to(socketOutro.socketId).emit('alguem-parou-digitando-dm', {
+        conversaId,
+        usuarioId: socket.usuario.id,
+      });
+    }
   });
 
   socket.on('disconnect', () => {

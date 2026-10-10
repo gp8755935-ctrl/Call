@@ -1,4 +1,7 @@
-// Helper: gera HTML do avatar
+// ============================================================
+// HELPERS
+// ============================================================
+
 function avatarHTML(usuario, classe = '', onclick = null) {
   if (!usuario) return '';
   const cls = 'avatar ' + classe;
@@ -15,7 +18,6 @@ function avatarHTML(usuario, classe = '', onclick = null) {
   return `<div class="${cls}"${attr} style="background: linear-gradient(180deg, ${cor}99, ${cor})${estiloExtra}">${inicial}</div>`;
 }
 
-// Lista de emojis
 const EMOJIS = {
   'Carinhas': ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕'],
   'Gestos': ['👍','👎','👌','🤌','✌️','🤞','🤟','🤘','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦵','🦶','👂','👃','🧠','🦷','👀','👁️','👅','👄'],
@@ -43,6 +45,217 @@ let telaAtual = 'home';
 let replyAtual = { canal: null, dm: null };
 
 let pickerReacaoEstado = { msgId: null, contexto: null };
+
+// 🔥 Estado de notificações
+let notificacoesAbertas = new Set();
+
+// 🔥 Estado de digitando (throttle)
+let digitandoTimeout = { canal: null, dm: null };
+let ultimoEnvioDigitando = { canal: 0, dm: 0 };
+let timeoutAlguemDigitando = { canal: null, dm: null };
+
+// ============================================================
+// NOTIFICAÇÕES DO SISTEMA (nativas do navegador)
+// ============================================================
+
+async function pedirPermissaoNotificacoes() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    try { await Notification.requestPermission(); } catch (e) {}
+  }
+}
+
+function mostrarNotificacaoSistema(titulo, corpo, icone) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  if (!document.hidden) return;
+
+  try {
+    const n = new Notification(titulo, {
+      body: corpo,
+      icon: icone || undefined,
+      tag: 'void-msg',
+      renotify: true,
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+    setTimeout(() => n.close(), 5000);
+  } catch (e) {}
+}
+
+// ============================================================
+// NOTIFICAÇÕES VISUAIS (barra no canto superior direito)
+// ============================================================
+
+let idNotifCounter = 0;
+
+function mostrarNotificacaoVisual({ tipo, deNome, deAvatar, deId, ondeTexto, texto, aoClicar }) {
+  const stack = document.getElementById('notif-stack');
+  if (!stack) return;
+
+  const id = 'notif-' + (++idNotifCounter);
+  notificacoesAbertas.add(id);
+
+  const el = document.createElement('div');
+  el.className = 'notif entrando ' + (tipo === 'dm' ? 'dm' : 'canal');
+  el.id = id;
+
+  // Avatar
+  const avatarInner = deAvatar
+    ? `<img src="${deAvatar}" alt="">`
+    : (deNome || '?').charAt(0).toUpperCase();
+
+  el.innerHTML = `
+    <div class="notif-avatar">${avatarInner}</div>
+    <div class="notif-corpo">
+      <div class="notif-titulo">${escapeHtml(deNome || 'Alguém')}</div>
+      <div class="notif-onde">${escapeHtml(ondeTexto || '')}</div>
+      <div class="notif-texto">${escapeHtml(texto || '')}</div>
+    </div>
+    <button class="notif-close" title="Fechar">✕</button>
+  `;
+
+  // Swipe to dismiss
+  let arrastando = false;
+  let startX = 0;
+  let startY = 0;
+  let moveu = false;
+
+  const iniciar = (x, y) => {
+    arrastando = true;
+    startX = x;
+    startY = y;
+    moveu = false;
+    el.style.transition = 'none';
+  };
+
+  const mover = (x, y) => {
+    if (!arrastando) return;
+    const dx = x - startX;
+    const dy = y - startY;
+
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) moveu = true;
+
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 15) {
+      // scroll, cancela
+      return;
+    }
+
+    el.style.transform = `translateX(${dx}px)`;
+    const opac = Math.max(0.2, 1 - Math.abs(dx) / 200);
+    el.style.opacity = opac;
+  };
+
+  const terminar = () => {
+    if (!arrastando) return;
+    arrastando = false;
+    el.style.transition = '';
+
+    const match = (el.style.transform || '').match(/translateX\((-?\d+(?:\.\d+)?)px\)/);
+    const dx = match ? parseFloat(match[1]) : 0;
+
+    if (Math.abs(dx) > 80) {
+      // Fecha
+      el.classList.add('fechando');
+      el.style.transform = `translateX(${dx > 0 ? 150 : -150}%)`;
+      el.style.opacity = '0';
+      setTimeout(() => {
+        el.remove();
+        notificacoesAbertas.delete(id);
+      }, 220);
+    } else {
+      el.style.transform = 'translateX(0)';
+      el.style.opacity = '1';
+    }
+  };
+
+  el.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.notif-close')) return;
+    iniciar(e.clientX, e.clientY);
+  });
+  el.addEventListener('mousemove', (e) => mover(e.clientX, e.clientY));
+  el.addEventListener('mouseup', terminar);
+  el.addEventListener('mouseleave', terminar);
+
+  el.addEventListener('touchstart', (e) => {
+    if (e.target.closest('.notif-close')) return;
+    if (e.touches.length === 1) iniciar(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 1) mover(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  el.addEventListener('touchend', terminar);
+
+  // Clique (se não arrastou)
+  el.addEventListener('click', (e) => {
+    if (e.target.closest('.notif-close')) return;
+    if (moveu) return;
+    if (typeof aoClicar === 'function') aoClicar();
+    fecharNotif();
+  });
+
+  el.querySelector('.notif-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    fecharNotif();
+  });
+
+  const fecharNotif = () => {
+    el.classList.add('fechando');
+    el.style.transform = 'translateX(120%)';
+    el.style.opacity = '0';
+    setTimeout(() => {
+      el.remove();
+      notificacoesAbertas.delete(id);
+    }, 220);
+  };
+
+  stack.appendChild(el);
+
+  // Auto-dismiss em 5s
+  setTimeout(() => {
+    if (document.body.contains(el)) fecharNotif();
+  }, 5000);
+}
+
+// ============================================================
+// SONS
+// ============================================================
+
+const audioCtx = window.AudioContext ? new AudioContext() : null;
+
+function tocarSom() {
+  if (!audioCtx) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
+  } catch (e) {}
+}
+
+function tocarSomNotificacao() {
+  if (!audioCtx) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1100, audioCtx.currentTime + 0.08);
+    osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.25);
+  } catch (e) {}
+}
 
 // ============================================================
 // AUTH
@@ -110,11 +323,22 @@ function entrarNoApp(usuario) {
   conectarSocket();
   carregarServidores();
   carregarAmizades();
+
+  // 🔥 Pede permissão pra notificações do sistema
+  pedirPermissaoNotificacoes();
 }
 
 // ============================================================
 // SOCKET
 // ============================================================
+
+function estouNoCanal(canalId) {
+  return telaAtual === 'canal' && canalAtivo && canalAtivo.id === canalId && !document.hidden;
+}
+
+function estouNaConversa(conversaId) {
+  return telaAtual === 'conversa' && conversaAtual && conversaAtual.conversa_id === conversaId && !document.hidden;
+}
 
 function conectarSocket() {
   if (socket) return;
@@ -164,15 +388,44 @@ function conectarSocket() {
     carregarConversas();
   });
 
+  // 🔥 DM NOVA — notifica se não estou na conversa
   socket.on('dm-nova', ({ conversa_id, mensagem }) => {
-    tocarSom();
-    if (conversaAtual && conversaAtual.conversa_id === conversa_id) {
+    if (estouNaConversa(conversa_id)) {
       adicionarMsgDM(mensagem);
       fetch(`/api/conversas/${conversa_id}/mensagens`);
-    } else {
-      naoLidasTotal++;
-      atualizarTitulo();
+      return;
     }
+
+    // Não estou na conversa: mostra notificação
+    naoLidasTotal++;
+    atualizarTitulo();
+    tocarSomNotificacao();
+
+    // Descobre nome do amigo da conversa
+    let nomeAmigo = mensagem.de_nome;
+    let avatarAmigo = mensagem.de_avatar;
+    let amigoId = mensagem.de_id;
+
+    mostrarNotificacaoVisual({
+      tipo: 'dm',
+      deNome: nomeAmigo,
+      deAvatar: avatarAmigo,
+      deId: amigoId,
+      ondeTexto: 'Mensagem direta',
+      texto: mensagem.texto,
+      aoClicar: async () => {
+        // Abre a conversa
+        const amigo = { id: amigoId, nome: nomeAmigo, avatar: avatarAmigo };
+        await abrirConversa(amigo);
+        // Marca como lida
+        setTimeout(() => {
+          fetch(`/api/conversas/${conversa_id}/mensagens`);
+        }, 100);
+      },
+    });
+
+    mostrarNotificacaoSistema(`💬 ${nomeAmigo}`, mensagem.texto, avatarAmigo || undefined);
+    carregarConversas();
   });
 
   socket.on('dm-editada', ({ conversa_id, mensagem }) => {
@@ -193,10 +446,40 @@ function conectarSocket() {
     }
   });
 
+  // 🔥 CANAL NOVA MSG — notifica se não estou no canal
   socket.on('canal-nova-msg', ({ canal_id, mensagem }) => {
-    if (canalAtivo && canalAtivo.id === canal_id) {
+    if (estouNoCanal(canal_id)) {
       adicionarMsgCanal(mensagem);
+      return;
     }
+
+    // Não estou no canal: notifica
+    tocarSomNotificacao();
+
+    // Descobre nome do canal
+    let nomeCanal = 'canal';
+    if (servidorAtivo) {
+      const c = servidorAtivo.canais.find((x) => x.id === canal_id);
+      if (c) nomeCanal = '#' + c.nome;
+    }
+
+    mostrarNotificacaoVisual({
+      tipo: 'canal',
+      deNome: mensagem.de_nome,
+      deAvatar: mensagem.de_avatar,
+      deId: mensagem.de_id,
+      ondeTexto: nomeCanal,
+      texto: mensagem.texto,
+      aoClicar: async () => {
+        // Abre o servidor e o canal
+        if (servidorAtivo) {
+          const c = servidorAtivo.canais.find((x) => x.id === canal_id);
+          if (c) await abrirCanal(c);
+        }
+      },
+    });
+
+    mostrarNotificacaoSistema(`💬 ${mensagem.de_nome} em ${nomeCanal}`, mensagem.texto, mensagem.de_avatar || undefined);
   });
 
   socket.on('canal-msg-editada', ({ canal_id, mensagem }) => {
@@ -252,10 +535,105 @@ function conectarSocket() {
     }
     renderizarServidores();
   });
+
+  // 🔥 DIGITANDO — recebe dos outros
+  socket.on('alguem-digitando-canal', ({ canalId, nome, usuarioId }) => {
+    if (!estouNoCanal(canalId)) return;
+    if (usuarioId === meuUsuario.id) return;
+    mostrarDigitando('canal', nome);
+  });
+
+  socket.on('alguem-parou-digitando-canal', ({ canalId, usuarioId }) => {
+    if (!canalAtivo || canalAtivo.id !== canalId) return;
+    if (usuarioId === meuUsuario.id) return;
+    esconderDigitando('canal');
+  });
+
+  socket.on('alguem-digitando-dm', ({ conversaId, nome, usuarioId }) => {
+    if (!estouNaConversa(conversaId)) return;
+    if (usuarioId === meuUsuario.id) return;
+    mostrarDigitando('dm', nome);
+  });
+
+  socket.on('alguem-parou-digitando-dm', ({ conversaId, usuarioId }) => {
+    if (!conversaAtual || conversaAtual.conversa_id !== conversaId) return;
+    if (usuarioId === meuUsuario.id) return;
+    esconderDigitando('dm');
+  });
 }
 
 // ============================================================
-// EMOJI PICKER (para input de mensagem)
+// DIGITANDO — emissão e exibição
+// ============================================================
+
+function emitirDigitando(contexto) {
+  if (!socket) return;
+
+  const agora = Date.now();
+  if (agora - ultimoEnvioDigitando[contexto] < 800) return;
+  ultimoEnvioDigitando[contexto] = agora;
+
+  if (contexto === 'canal') {
+    if (!canalAtivo) return;
+    socket.emit('digitando-canal', { canalId: canalAtivo.id, nome: meuUsuario.nome });
+  } else {
+    if (!conversaAtual) return;
+    socket.emit('digitando-dm', {
+      conversaId: conversaAtual.conversa_id,
+      paraUsuarioId: conversaAtual.amigo.id,
+      nome: meuUsuario.nome,
+    });
+  }
+
+  // Para de digitar após 1.5s
+  clearTimeout(digitandoTimeout[contexto]);
+  digitandoTimeout[contexto] = setTimeout(() => {
+    pararDigitando(contexto);
+  }, 1500);
+}
+
+function pararDigitando(contexto) {
+  if (!socket) return;
+  clearTimeout(digitandoTimeout[contexto]);
+  digitandoTimeout[contexto] = null;
+
+  if (contexto === 'canal') {
+    if (!canalAtivo) return;
+    socket.emit('parou-digitando-canal', { canalId: canalAtivo.id });
+  } else {
+    if (!conversaAtual) return;
+    socket.emit('parou-digitando-dm', {
+      conversaId: conversaAtual.conversa_id,
+      paraUsuarioId: conversaAtual.amigo.id,
+    });
+  }
+}
+
+function mostrarDigitando(contexto, nome) {
+  const barId = contexto === 'canal' ? 'digitando-canal' : 'digitando-dm';
+  const textoId = contexto === 'canal' ? 'digitando-canal-texto' : 'digitando-dm-texto';
+  const bar = document.getElementById(barId);
+  const texto = document.getElementById(textoId);
+  if (!bar || !texto) return;
+
+  texto.textContent = `${nome} está digitando`;
+  bar.classList.add('ativo');
+
+  clearTimeout(timeoutAlguemDigitando[contexto]);
+  timeoutAlguemDigitando[contexto] = setTimeout(() => {
+    esconderDigitando(contexto);
+  }, 3000);
+}
+
+function esconderDigitando(contexto) {
+  const barId = contexto === 'canal' ? 'digitando-canal' : 'digitando-dm';
+  const bar = document.getElementById(barId);
+  if (bar) bar.classList.remove('ativo');
+  clearTimeout(timeoutAlguemDigitando[contexto]);
+}
+
+// ============================================================
+// EMOJI PICKER
 // ============================================================
 
 function montarEmojiPicker() {
@@ -411,7 +789,6 @@ function montarPickerReacao() {
   });
 }
 
-// 🔥 CORRIGIDO — recebe o botão via `this` (não depende de event.currentTarget)
 function abrirPickerReacao(event, btn, contexto, msgId) {
   if (event) {
     event.stopPropagation();
@@ -421,7 +798,6 @@ function abrirPickerReacao(event, btn, contexto, msgId) {
   const picker = document.getElementById('reacao-picker-global');
   if (!picker || !btn) return;
 
-  // Se já estiver aberto pra mesma msg, fecha
   if (picker.classList.contains('ativo') &&
       pickerReacaoEstado.msgId === msgId &&
       pickerReacaoEstado.contexto === contexto) {
@@ -432,7 +808,6 @@ function abrirPickerReacao(event, btn, contexto, msgId) {
   pickerReacaoEstado = { msgId, contexto };
   picker.classList.add('ativo');
 
-  // Espera o picker renderizar pra medir direito
   requestAnimationFrame(() => {
     const rect = btn.getBoundingClientRect();
     const pRect = picker.getBoundingClientRect();
@@ -462,14 +837,12 @@ function fecharPickerReacao() {
   pickerReacaoEstado = { msgId: null, contexto: null };
 }
 
-// Fecha ao clicar fora — usa capture pra rodar antes do onclick inline
 document.addEventListener('click', (e) => {
   if (e.target.closest('#reacao-picker-global')) return;
   if (e.target.closest('.btn-reagir')) return;
   fecharPickerReacao();
 }, true);
 
-// Fecha ao rolar o chat
 document.addEventListener('scroll', (e) => {
   if (e.target && e.target.closest && e.target.closest('.chat-area')) {
     fecharPickerReacao();
@@ -477,7 +850,7 @@ document.addEventListener('scroll', (e) => {
 }, true);
 
 // ============================================================
-// REPLY (responder)
+// REPLY
 // ============================================================
 
 function ativarReply(contexto, msgId, autor, texto) {
@@ -742,6 +1115,10 @@ function atualizarMembrosOnline() {
 async function abrirCanal(canal) {
   if (canalAtivo) socket.emit('sair-canal', { canalId: canalAtivo.id });
 
+  // Para de digitar no canal antigo
+  pararDigitando('canal');
+  esconderDigitando('canal');
+
   canalAtivo = canal;
   socket.emit('entrar-canal', { canalId: canal.id });
   renderizarCanais();
@@ -803,6 +1180,7 @@ function enviarMsgCanal() {
 
   input.value = '';
   cancelarReply('canal');
+  pararDigitando('canal');
 
   fetch(`/api/canais/${canalAtivo.id}/mensagens`, {
     method: 'POST',
@@ -930,7 +1308,7 @@ function removerMsgDaTela(chatId, msgId) {
 }
 
 // ============================================================
-// REAÇÕES — toggle + atualizar na tela
+// REAÇÕES
 // ============================================================
 
 async function toggleReacao(contexto, msgId, emoji) {
@@ -1230,6 +1608,7 @@ function voltarDMs() {
   document.getElementById('chat-dm').innerHTML = '';
   cancelarReply('dm');
   fecharPickerReacao();
+  esconderDigitando('dm');
   abrirDM();
 }
 
@@ -1492,6 +1871,7 @@ async function abrirConversa(amigo) {
 
   cancelarReply('dm');
   fecharPickerReacao();
+  esconderDigitando('dm');
 
   telaAtual = 'conversa';
   document.getElementById('app').classList.remove('canal-ativo');
@@ -1524,6 +1904,7 @@ async function enviarMsgDM() {
 
   input.value = '';
   cancelarReply('dm');
+  pararDigitando('dm');
 
   const r = await fetch(`/api/conversas/${conversaAtual.conversa_id}/mensagens`, {
     method: 'POST',
@@ -1911,24 +2292,6 @@ function escapeHtml(s) {
     .replace(/'/g, '&#039;');
 }
 
-const audioCtx = window.AudioContext ? new AudioContext() : null;
-function tocarSom() {
-  if (!audioCtx) return;
-  try {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'sine';
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.15);
-    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.2);
-  } catch (e) {}
-}
-
 function atualizarTitulo() {
   if (naoLidasTotal > 0 && document.hidden) {
     document.title = `(${naoLidasTotal}) ${tituloOriginal}`;
@@ -1938,9 +2301,19 @@ function atualizarTitulo() {
 }
 document.addEventListener('visibilitychange', atualizarTitulo);
 
+// ============================================================
+// INPUTS — digitando + Enter
+// ============================================================
+
 document.addEventListener('keypress', (e) => {
   if (e.target.id === 'input-canal' && e.key === 'Enter') enviarMsgCanal();
   if (e.target.id === 'input-dm' && e.key === 'Enter') enviarMsgDM();
+});
+
+// 🔥 Detecta digitação e emite
+document.addEventListener('input', (e) => {
+  if (e.target.id === 'input-canal') emitirDigitando('canal');
+  if (e.target.id === 'input-dm') emitirDigitando('dm');
 });
 
 // ============================================================
@@ -1984,4 +2357,4 @@ window.addEventListener('load', async () => {
 
   montarEmojiPicker();
   montarPickerReacao();
-}); 
+});

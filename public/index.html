@@ -251,7 +251,6 @@
     }
     #app.ativo { display: flex; }
 
-    /* SIDEBAR SERVIDORES */
     .sidebar-servidores {
       width: 80px;
       background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(186,230,253,0.35));
@@ -322,7 +321,6 @@
       display: block;
     }
 
-    /* SIDEBAR CANAIS */
     .sidebar-canais {
       width: 270px;
       background: linear-gradient(180deg, rgba(255,255,255,0.55), rgba(186,230,253,0.4));
@@ -447,7 +445,6 @@
       box-shadow: 0 2px 6px rgba(34,197,94,0.4);
     }
 
-    /* MAIN */
     .main {
       flex: 1; display: flex; flex-direction: column;
       overflow: hidden;
@@ -474,7 +471,6 @@
     }
     .topo-main .acoes { display: flex; gap: 8px; flex-wrap: wrap; }
 
-    /* TELAS MAIN */
     .tela-main { display: none; flex: 1; overflow: hidden; padding: 24px; min-height: 0; }
     #tela-canal.ativa,
     #tela-conversa.ativa {
@@ -506,6 +502,43 @@
       font-style: italic; padding: 40px 20px;
       font-weight: 600;
       text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+    }
+
+    /* ============ BARRA DE DIGITANDO ============ */
+    .digitando-bar {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 22px;
+      font-size: 12px;
+      color: var(--texto-medio);
+      font-weight: 700;
+      font-style: italic;
+      background: linear-gradient(180deg, rgba(255,255,255,0.2), rgba(255,255,255,0.0));
+      flex-shrink: 0;
+      min-height: 28px;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+    }
+    .digitando-bar.ativo { display: flex; }
+
+    .digitando-dots {
+      display: inline-flex;
+      gap: 3px;
+      margin-left: 2px;
+    }
+    .digitando-dots span {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--agua-2);
+      opacity: 0.4;
+      animation: digitandoPulse 1.2s infinite ease-in-out;
+    }
+    .digitando-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .digitando-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes digitandoPulse {
+      0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+      30%           { opacity: 1;   transform: translateY(-3px); }
     }
 
     .barra-msg {
@@ -565,7 +598,6 @@
       background: #e0f2fe !important;
     }
 
-    /* MENSAGENS COM AVATAR */
     .msg-com-avatar {
       display: flex; gap: 10px;
       align-items: flex-start;
@@ -614,7 +646,6 @@
       max-width: fit-content;
     }
 
-    /* ============ MENSAGEM — BOTÕES DE AÇÃO ============ */
     .msg-acoes {
       position: absolute;
       top: -8px;
@@ -654,7 +685,6 @@
       color: #dc2626;
     }
 
-    /* Modo edição */
     .msg-editando {
       display: flex;
       gap: 6px;
@@ -681,7 +711,6 @@
       font-weight: 600;
     }
 
-    /* ============ EMOJI PICKER ============ */
     .emoji-btn {
       background: transparent;
       border: none;
@@ -750,7 +779,6 @@
       transform: scale(1.2);
     }
 
-    /* ============ REAÇÕES ============ */
     .msg-reacoes {
       display: flex !important;
       flex-wrap: wrap;
@@ -801,7 +829,6 @@
       padding: 0;
     }
 
-    /* 🔥 PICKER GLOBAL DE REAÇÃO — fica FORA das mensagens, direto no <body> */
     #reacao-picker-global {
       position: fixed;
       display: none;
@@ -829,7 +856,6 @@
       transform: scale(1.3);
     }
 
-    /* ============ REPLY ============ */
     .msg-reply-hint {
       position: absolute;
       left: -50px;
@@ -914,7 +940,6 @@
       box-shadow: none;
     }
 
-    /* TELAS INTERNAS */
     .tela-main h3 {
       font-size: 24px; font-weight: 900;
       margin-bottom: 20px; color: white;
@@ -986,7 +1011,6 @@
     }
     .status-dot.offline { background: rgba(148, 163, 184, 0.7); }
 
-    /* BARRA DE USUÁRIO MINI */
     .barra-usuario {
       position: fixed;
       bottom: 14px;
@@ -1039,7 +1063,6 @@
       box-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
     }
 
-    /* MODAIS */
     .modal-bg {
       display: none;
       position: fixed; inset: 0;
@@ -1109,7 +1132,6 @@
       position: relative; z-index: 1;
     }
 
-    /* ===== MODAL DE PERFIL ===== */
     .modal-perfil {
       padding: 0 !important;
       overflow: hidden;
@@ -1266,7 +1288,6 @@
       margin-top: 8px !important;
     }
 
-    /* EDITOR DE IMAGEM */
     .modal-editor {
       max-width: 560px !important;
     }
@@ -1354,6 +1375,150 @@
       text-align: center;
     }
 
+    /* ============ NOTIFICAÇÕES ============ */
+    #notif-stack {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 9000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+      max-width: 340px;
+      width: calc(100% - 32px);
+    }
+
+    .notif {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: linear-gradient(160deg, rgba(255,255,255,0.95), rgba(224,242,254,0.88));
+      border: 2px solid rgba(255,255,255,0.95);
+      border-left: 4px solid var(--agua-1);
+      border-radius: 18px;
+      box-shadow: inset 0 2px 0 rgba(255,255,255,0.9),
+                  0 10px 30px rgba(2,132,199,0.35),
+                  0 0 20px rgba(6,182,212,0.2);
+      cursor: pointer;
+      backdrop-filter: blur(16px) saturate(180%);
+      transform: translateX(0);
+      opacity: 1;
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+                  opacity 0.2s;
+      position: relative;
+      touch-action: pan-y;
+      user-select: none;
+      will-change: transform, opacity;
+    }
+    .notif.entrando {
+      animation: notifEntrando 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes notifEntrando {
+      from { transform: translateX(120%); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+    .notif.saindo {
+      transform: translateX(120%);
+      opacity: 0;
+    }
+    .notif.fechando {
+      transition: transform 0.2s, opacity 0.2s;
+    }
+    .notif.dm {
+      border-left-color: var(--verde-2);
+    }
+
+    .notif-avatar {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex-shrink: 0;
+      border: 2px solid rgba(255,255,255,0.9);
+      background: linear-gradient(180deg, #bae6fd, #0284c7);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 900; font-size: 15px;
+      overflow: hidden;
+      filter: none !important;
+      opacity: 1 !important;
+    }
+    .notif-avatar img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+      display: block;
+    }
+
+    .notif-corpo {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .notif-titulo {
+      font-weight: 900;
+      font-size: 13px;
+      color: var(--texto-escuro);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .notif-onde {
+      font-size: 10px;
+      color: var(--agua-2);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .notif-texto {
+      font-size: 12px;
+      color: var(--texto-medio);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    .notif-close {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      color: var(--texto-medio);
+      font-size: 14px;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 50%;
+      line-height: 1;
+      min-width: auto;
+      width: auto;
+      height: auto;
+      flex-shrink: 0;
+      opacity: 0.6;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    .notif-close::before { display: none; }
+    .notif-close:hover {
+      opacity: 1;
+      background: rgba(2,132,199,0.15);
+      transform: none;
+      box-shadow: none;
+    }
+
+    @media (max-width: 500px) {
+      #notif-stack {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+        max-width: none;
+        width: auto;
+      }
+      .notif { padding: 10px 12px; }
+      .notif-avatar { width: 36px; height: 36px; font-size: 14px; }
+    }
+
     /* BOTÃO HAMBURGER */
     .btn-hamburger {
       display: none;
@@ -1378,7 +1543,6 @@
       }
     }
 
-    /* RESPONSIVO */
     @media (max-width: 768px) {
       .sidebar-servidores { width: 68px; padding: 12px 0 80px 0; gap: 10px; }
       .servidor-icon { width: 46px; height: 46px; font-size: 18px; }
@@ -1471,6 +1635,9 @@
     <div class="bolha" style="width: 100px; height: 100px; top: 85%; left: 45%; animation-delay: 5s;"></div>
   </div>
 
+  <!-- 🔥 STACK DE NOTIFICAÇÕES -->
+  <div id="notif-stack"></div>
+
   <!-- LOGIN -->
   <div id="tela-auth">
     <div class="auth-card">
@@ -1549,6 +1716,12 @@
       <div id="tela-canal" class="tela-main">
         <div class="chat-area" id="chat-canal"></div>
 
+        <!-- 🔥 DIGITANDO (canal) -->
+        <div class="digitando-bar" id="digitando-canal">
+          <span id="digitando-canal-texto"></span>
+          <span class="digitando-dots"><span></span><span></span><span></span></span>
+        </div>
+
         <div class="barra-reply" id="barra-reply-canal">
           <div class="reply-info" id="reply-info-canal"></div>
           <button class="btn-cancelar-reply" onclick="cancelarReply('canal')" title="Cancelar">✖️</button>
@@ -1578,6 +1751,12 @@
           </div>
         </div>
         <div class="chat-area" id="chat-dm"></div>
+
+        <!-- 🔥 DIGITANDO (dm) -->
+        <div class="digitando-bar" id="digitando-dm">
+          <span id="digitando-dm-texto"></span>
+          <span class="digitando-dots"><span></span><span></span><span></span></span>
+        </div>
 
         <div class="barra-reply" id="barra-reply-dm">
           <div class="reply-info" id="reply-info-dm"></div>
@@ -1665,7 +1844,7 @@
     </div>
   </div>
 
-  <!-- ============ MODAL PERFIL (EDIÇÃO DO PRÓPRIO) ============ -->
+  <!-- MODAL PERFIL -->
   <div id="modal-perfil" class="modal-bg">
     <div class="modal modal-perfil">
       <div class="perfil-banner clicavel" id="perfil-banner-container"
@@ -1702,7 +1881,7 @@
     </div>
   </div>
 
-  <!-- ============ MODAL VISITAR PERFIL ============ -->
+  <!-- MODAL VISITAR PERFIL -->
   <div id="modal-perfil-visita" class="modal-bg">
     <div class="modal modal-perfil">
       <button class="modal-fechar" onclick="fecharPerfilVisitado()">✕</button>
@@ -1753,11 +1932,8 @@
     </div>
   </div>
 
-  <!-- Emoji pickers -->
   <div class="emoji-picker" id="emoji-picker-canal"></div>
   <div class="emoji-picker" id="emoji-picker-dm"></div>
-
-  <!-- 🔥 PICKER GLOBAL DE REAÇÃO -->
   <div id="reacao-picker-global"></div>
 
   <script src="/socket.io/socket.io.js"></script>

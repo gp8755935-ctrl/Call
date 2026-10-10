@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
+    "dev": "node --watch --watch-path=./server --watch-path=./public server/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
