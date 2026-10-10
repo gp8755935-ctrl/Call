@@ -902,17 +902,39 @@ function estouNaConversa(conversaId) {
 
 function conectarSocket() {
   if (socket) return;
-  socket = io();
+
+  socket = io({
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 3000,
+    timeout: 10000,
+    transports: ['websocket', 'polling'],
+    autoConnect: true,
+  });
 
   socket.on('connect', () => {
     console.log('Conectado como', meuUsuario.nome, '— socket', socket.id);
+
+    // 🔥 Re-entra nos quartos ao reconectar
+    if (servidorAtivo) {
+      socket.emit('entrar-servidores');
+    }
+    if (canalAtivo) {
+      socket.emit('entrar-canal', { canalId: canalAtivo.id });
+    }
+  });
+
+  socket.on('disconnect', (motivo) => {
+    console.log('Desconectado:', motivo);
+  });
+
+  socket.io.on('reconnect', (tentativa) => {
+    console.log('Reconectado após', tentativa, 'tentativas');
   });
 
   socket.on('connect_error', (err) => {
-    if (err.message === 'Não autenticado' || err.message === 'Token inválido') {
-      alert('Sessão expirada. Faça login de novo.');
-      location.reload();
-    }
+    console.error('Erro de conexão socket:', err.message);
   });
 
   socket.on('lista-online', (users) => {
@@ -1144,7 +1166,6 @@ function conectarSocket() {
     renderizarServidores();
   });
 
-  // 🔥 NOVOS EVENTOS DE MEMBROS
   socket.on('membro-entrou', ({ servidor_id, membro }) => {
     if (servidorAtivo && servidorAtivo.servidor.id === servidor_id) {
       if (!servidorAtivo.membros.some((m) => m.id === membro.id)) {
@@ -1204,94 +1225,6 @@ function conectarSocket() {
     if (usuarioId === meuUsuario.id) return;
     esconderDigitando('dm');
   });
-}
-
-// ============================================================
-// BLOQUEIOS E SILENCIADOS (estado local)
-// ============================================================
-
-let bloqueadosLocal = new Set();
-let silenciadosUsuarioLocal = new Set();
-let silenciadosServidorLocal = new Set();
-
-function estaBloqueadoLocal(id) { return bloqueadosLocal.has(id); }
-function estaSilenciadoLocal(tipo, id) {
-  if (tipo === 'usuario') return silenciadosUsuarioLocal.has(id);
-  if (tipo === 'servidor') return silenciadosServidorLocal.has(id);
-  return false;
-}
-
-async function carregarBloqueiosESilenciados() {
-  try {
-    const r1 = await fetch('/api/bloqueados');
-    if (r1.ok) {
-      const d1 = await r1.json();
-      bloqueadosLocal = new Set((d1.bloqueados || []).map((b) => b.id));
-    }
-  } catch (e) {}
-}
-
-// ============================================================
-// DIGITANDO
-// ============================================================
-
-function emitirDigitando(contexto) {
-  if (!config.digitando) return;
-  if (!socket) return;
-  const agora = Date.now();
-  if (agora - ultimoEnvioDigitando[contexto] < 800) return;
-  ultimoEnvioDigitando[contexto] = agora;
-
-  if (contexto === 'canal') {
-    if (!canalAtivo) return;
-    socket.emit('digitando-canal', { canalId: canalAtivo.id, nome: meuUsuario.nome });
-  } else {
-    if (!conversaAtual) return;
-    socket.emit('digitando-dm', {
-      conversaId: conversaAtual.conversa_id,
-      paraUsuarioId: conversaAtual.amigo.id,
-      nome: meuUsuario.nome,
-    });
-  }
-
-  clearTimeout(digitandoTimeout[contexto]);
-  digitandoTimeout[contexto] = setTimeout(() => { pararDigitando(contexto); }, 1500);
-}
-
-function pararDigitando(contexto) {
-  if (!socket) return;
-  clearTimeout(digitandoTimeout[contexto]);
-  digitandoTimeout[contexto] = null;
-
-  if (contexto === 'canal') {
-    if (!canalAtivo) return;
-    socket.emit('parou-digitando-canal', { canalId: canalAtivo.id });
-  } else {
-    if (!conversaAtual) return;
-    socket.emit('parou-digitando-dm', {
-      conversaId: conversaAtual.conversa_id,
-      paraUsuarioId: conversaAtual.amigo.id,
-    });
-  }
-}
-
-function mostrarDigitando(contexto, nome) {
-  const barId = contexto === 'canal' ? 'digitando-canal' : 'digitando-dm';
-  const textoId = contexto === 'canal' ? 'digitando-canal-texto' : 'digitando-dm-texto';
-  const bar = document.getElementById(barId);
-  const texto = document.getElementById(textoId);
-  if (!bar || !texto) return;
-  texto.textContent = `${nome} está digitando`;
-  bar.classList.add('ativo');
-  clearTimeout(timeoutAlguemDigitando[contexto]);
-  timeoutAlguemDigitando[contexto] = setTimeout(() => { esconderDigitando(contexto); }, 3000);
-}
-
-function esconderDigitando(contexto) {
-  const barId = contexto === 'canal' ? 'digitando-canal' : 'digitando-dm';
-  const bar = document.getElementById(barId);
-  if (bar) bar.classList.remove('ativo');
-  clearTimeout(timeoutAlguemDigitando[contexto]);
 }
 
 // ============================================================
@@ -3606,4 +3539,74 @@ window.addEventListener('load', async () => {
 
   montarEmojiPicker();
   montarPickerReacao();
-}); 
+});
+
+// ============================================================
+// 🔥 KEEP-ALIVE — Mantém a conexão viva no celular
+// ============================================================
+
+// 🔥 Quando a aba volta ao foco (celular), verifica se o socket está vivo
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    console.log('[VISIBILITY] Aba voltou ao foco');
+
+    // Reconecta o socket se estiver morto
+    if (socket && !socket.connected) {
+      console.log('[VISIBILITY] Socket morto, reconectando...');
+      socket.connect();
+    }
+
+    // Recarrega a conversa atual
+    if (conversaAtual) {
+      fetch(`/api/conversas/${conversaAtual.conversa_id}/mensagens`)
+        .then(r => r.json())
+        .then(data => {
+          const el = document.getElementById('chat-dm');
+          if (el && data.mensagens) {
+            el.innerHTML = '';
+            data.mensagens.forEach(adicionarMsgDM);
+          }
+        })
+        .catch(() => {});
+    }
+
+    // Recarrega o canal atual
+    if (canalAtivo) {
+      fetch(`/api/canais/${canalAtivo.id}/mensagens`)
+        .then(r => r.json())
+        .then(data => {
+          const el = document.getElementById('chat-canal');
+          if (el && data.mensagens) {
+            el.innerHTML = '';
+            data.mensagens.forEach(adicionarMsgCanal);
+          }
+        })
+        .catch(() => {});
+    }
+
+    // Re-entra nos quartos
+    if (socket && socket.connected) {
+      if (servidorAtivo) socket.emit('entrar-servidores');
+      if (canalAtivo) socket.emit('entrar-canal', { canalId: canalAtivo.id });
+    }
+  }
+});
+
+// 🔥 Heartbeat a cada 20s — mantém o socket vivo
+setInterval(() => {
+  if (socket && !socket.connected) {
+    console.log('[HEARTBEAT] Socket morto, reconectando...');
+    socket.connect();
+  }
+}, 20000);
+
+// 🔥 Reconecta ao voltar online (celular perdeu sinal e voltou)
+window.addEventListener('online', () => {
+  console.log('[ONLINE] Voltou a ter internet');
+  if (socket && !socket.connected) socket.connect();
+});
+
+// 🔥 Fecha o socket ao sair
+window.addEventListener('beforeunload', () => {
+  if (socket) socket.disconnect();
+});
