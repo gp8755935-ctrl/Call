@@ -16,7 +16,7 @@ const io = new Server(server);
 // 🔥 Detecta se está em produção (atrás de proxy)
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-// 🔥 Confia no proxy (Cloudflare/ngrok/Render) pra pegar IP e protocolo reais
+// 🔥 Confia no proxy (Render/Cloudflare/ngrok) pra pegar IP e protocolo reais
 app.set('trust proxy', 1);
 
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
@@ -47,6 +47,7 @@ app.use((req, res, next) => {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.setHeader('Surrogate-Control', 'no-store');
+  res.setHeader('CDN-Cache-Control', 'no-store'); // 🔥 NOVO — específico do Render
   // 🔥 Segurança extra
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -54,11 +55,20 @@ app.use((req, res, next) => {
   next();
 });
 
+// 🔥 Log de debug pra todas as chamadas /api/*
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    const temCookie = req.cookies && req.cookies.token ? 'SIM' : 'NÃO';
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} — IP: ${req.ip} — Cookie: ${temCookie}`);
+  }
+  next();
+});
+
 // 🔥 Valida HTTPS quando atrás de proxy
 app.use((req, res, next) => {
   const host = req.headers.host || '';
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
-  
+
   // Se não for local, exige HTTPS
   if (!ehLocalhost) {
     const proto = req.headers['x-forwarded-proto'] || req.protocol;
@@ -101,15 +111,15 @@ function exigirAuth(req, res, next) {
   next();
 }
 
-// 🔥 Cookie mais seguro — sempre Secure quando não for localhost
+// 🔥 Cookie mais seguro — sempre Secure quando não for localhost, SameSite STRICT
 function setarCookieToken(req, res, token) {
   const host = req.headers.host || '';
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
-  
+
   res.cookie('token', token, {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: !ehLocalhost,   // 🔥 Secure sempre que não for local
+    sameSite: 'strict',   // 🔥 MUDOU DE 'lax' PRA 'strict'
+    secure: !ehLocalhost, // 🔥 Secure sempre que não for local
     maxAge: 30 * 24 * 60 * 60 * 1000,
     path: '/',
   });
@@ -773,10 +783,13 @@ app.delete('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) 
 io.use((socket, next) => {
   try {
     const cookies = socket.request.headers.cookie || '';
+    console.log('[SOCKET] Tentando auth — cookies:', cookies.substring(0, 80));
+
     const matches = [...cookies.matchAll(/(?:^|;\s*)token=([^;]+)/g)];
     if (!matches.length) return next(new Error('Não autenticado'));
     const token = decodeURIComponent(matches[matches.length - 1][1]);
     const payload = auth.verificarToken(token);
+    console.log('[SOCKET] Token decodificado — user id:', payload?.id, 'nome:', payload?.nome);
     if (!payload || !payload.id) return next(new Error('Token inválido'));
 
     const usuarioAtual = db.buscarUsuarioPorId(payload.id);
