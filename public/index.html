@@ -489,7 +489,6 @@
       display: block; overflow-y: auto; padding: 24px;
     }
 
-    /* Esconde a barra quando NÃO há canal selecionado */
     #tela-canal:not(.tem-canal) .barra-msg {
       display: none;
     }
@@ -529,7 +528,7 @@
       flex-shrink: 0;
     }
 
-    /* ============ AVATAR — CORRIGIDO ============ */
+    /* ============ AVATAR ============ */
     .avatar {
       width: 40px; height: 40px;
       border-radius: 50%;
@@ -562,7 +561,6 @@
       z-index: 1;
     }
 
-    /* Quando o avatar tem foto, o fundo não deve vazar */
     .avatar.com-imagem {
       background: #e0f2fe !important;
     }
@@ -803,8 +801,8 @@
       padding: 0;
     }
 
-    /* Mini picker de reações */
-    .reacao-picker {
+    /* 🔥 PICKER GLOBAL DE REAÇÃO — fica FORA das mensagens, direto no <body> */
+    #reacao-picker-global {
       position: fixed;
       display: none;
       gap: 2px;
@@ -813,21 +811,22 @@
       border-radius: 999px;
       padding: 4px 8px;
       box-shadow: 0 6px 20px rgba(2,132,199,0.5);
-      z-index: 2600;
+      z-index: 9999;
       backdrop-filter: blur(20px);
     }
-    .reacao-picker.ativo { display: flex !important; }
-    .reacao-picker span {
-      font-size: 18px;
-      padding: 4px 6px;
+    #reacao-picker-global.ativo { display: flex !important; animation: fadeIn 0.15s; }
+    #reacao-picker-global span {
+      font-size: 20px;
+      padding: 6px 8px;
       cursor: pointer;
-      border-radius: 8px;
+      border-radius: 10px;
       transition: all 0.15s;
       user-select: none;
+      line-height: 1;
     }
-    .reacao-picker span:hover {
+    #reacao-picker-global span:hover {
       background: rgba(56, 189, 248, 0.25);
-      transform: scale(1.25);
+      transform: scale(1.3);
     }
 
     /* ============ REPLY ============ */
@@ -1110,7 +1109,7 @@
       position: relative; z-index: 1;
     }
 
-    /* ===== MODAL DE PERFIL (edição e visita) ===== */
+    /* ===== MODAL DE PERFIL ===== */
     .modal-perfil {
       padding: 0 !important;
       overflow: hidden;
@@ -1140,7 +1139,6 @@
       opacity: 1 !important;
     }
 
-    /* Botão de fechar no canto do modal de visita */
     .modal-fechar {
       position: absolute;
       top: 10px;
@@ -1169,13 +1167,11 @@
       box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
     }
 
-    /* ===== sobreposição de edição (só quando for o próprio perfil) ===== */
     .perfil-banner.clicavel { cursor: pointer; }
 
     .perfil-banner-overlay {
       position: absolute;
       inset: 0;
-      /* tingimento azul leve — NUNCA preto pesado */
       background: linear-gradient(180deg, rgba(2,132,199,0.0), rgba(2,132,199,0.45));
       display: flex;
       align-items: flex-end;
@@ -1207,7 +1203,6 @@
     .avatar-overlay {
       position: absolute; inset: 0;
       border-radius: 50%;
-      /* tingimento azul leve — nunca preto pesado */
       background: rgba(2, 132, 199, 0.35);
       display: flex; align-items: center; justify-content: center;
       color: white; font-size: 28px;
@@ -1216,7 +1211,6 @@
       z-index: 2;
     }
 
-    /* 🔥 SÓ ativa hover em dispositivos com mouse (desktop) — evita "grudar" no mobile */
     @media (hover: hover) and (pointer: fine) {
       .perfil-avatar-wrapper .avatar-container:hover .avatar-overlay {
         opacity: 1;
@@ -1708,7 +1702,7 @@
     </div>
   </div>
 
-  <!-- ============ MODAL VISITAR PERFIL (OUTRA PESSOA) ============ -->
+  <!-- ============ MODAL VISITAR PERFIL ============ -->
   <div id="modal-perfil-visita" class="modal-bg">
     <div class="modal modal-perfil">
       <button class="modal-fechar" onclick="fecharPerfilVisitado()">✕</button>
@@ -1762,6 +1756,9 @@
   <!-- Emoji pickers -->
   <div class="emoji-picker" id="emoji-picker-canal"></div>
   <div class="emoji-picker" id="emoji-picker-dm"></div>
+
+  <!-- 🔥 PICKER GLOBAL DE REAÇÃO -->
+  <div id="reacao-picker-global"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/app.js"></script>

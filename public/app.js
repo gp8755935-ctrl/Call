@@ -24,6 +24,8 @@ const EMOJIS = {
   'Símbolos': ['✅','❌','❗','❓','⚠️','🚫','💯','🔞','📛','♻️','🆗','🆕','🆒','🆓','🔝','🔙','🔚','🔛','🔜','🔎','🔍','➕','➖','➗','✖️','💲','💱','©️','®️','™️','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','🔶','🔷','🔸','🔹','🔺','🔻'],
 };
 
+const EMOJIS_RAPIDOS = ['👍','❤️','😂','😮','😢','🔥','🎉','👏'];
+
 let socket = null;
 let meuUsuario = null;
 let onlineIds = new Set();
@@ -38,8 +40,9 @@ let tituloOriginal = 'Void — Conecte-se';
 
 let telaAtual = 'home';
 
-// Reply
 let replyAtual = { canal: null, dm: null };
+
+let pickerReacaoEstado = { msgId: null, contexto: null };
 
 // ============================================================
 // AUTH
@@ -252,7 +255,7 @@ function conectarSocket() {
 }
 
 // ============================================================
-// EMOJI PICKER
+// EMOJI PICKER (para input de mensagem)
 // ============================================================
 
 function montarEmojiPicker() {
@@ -375,8 +378,103 @@ document.addEventListener('keydown', (e) => {
     document.querySelectorAll('.emoji-picker.ativo').forEach((el) => {
       el.classList.remove('ativo');
     });
+    fecharPickerReacao();
   }
 });
+
+// ============================================================
+// REAÇÕES — PICKER GLOBAL
+// ============================================================
+
+function montarPickerReacao() {
+  const el = document.getElementById('reacao-picker-global');
+  if (!el) return;
+
+  let html = '';
+  EMOJIS_RAPIDOS.forEach((e) => {
+    html += `<span data-emoji="${e}">${e}</span>`;
+  });
+  el.innerHTML = html;
+
+  el.addEventListener('click', (ev) => {
+    const span = ev.target.closest('span[data-emoji]');
+    if (!span) return;
+    ev.stopPropagation();
+    ev.preventDefault();
+
+    const emoji = span.getAttribute('data-emoji');
+    const { msgId, contexto } = pickerReacaoEstado;
+    if (msgId != null && contexto) {
+      toggleReacao(contexto, msgId, emoji);
+    }
+    fecharPickerReacao();
+  });
+}
+
+// 🔥 CORRIGIDO — recebe o botão via `this` (não depende de event.currentTarget)
+function abrirPickerReacao(event, btn, contexto, msgId) {
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+
+  const picker = document.getElementById('reacao-picker-global');
+  if (!picker || !btn) return;
+
+  // Se já estiver aberto pra mesma msg, fecha
+  if (picker.classList.contains('ativo') &&
+      pickerReacaoEstado.msgId === msgId &&
+      pickerReacaoEstado.contexto === contexto) {
+    fecharPickerReacao();
+    return;
+  }
+
+  pickerReacaoEstado = { msgId, contexto };
+  picker.classList.add('ativo');
+
+  // Espera o picker renderizar pra medir direito
+  requestAnimationFrame(() => {
+    const rect = btn.getBoundingClientRect();
+    const pRect = picker.getBoundingClientRect();
+    const pW = pRect.width || 300;
+    const pH = pRect.height || 44;
+
+    let top = rect.top - pH - 8;
+    let left = rect.left;
+
+    if (left + pW > window.innerWidth - 10) {
+      left = window.innerWidth - pW - 10;
+    }
+    if (left < 10) left = 10;
+
+    if (top < 10) {
+      top = rect.bottom + 8;
+    }
+
+    picker.style.top = top + 'px';
+    picker.style.left = left + 'px';
+  });
+}
+
+function fecharPickerReacao() {
+  const picker = document.getElementById('reacao-picker-global');
+  if (picker) picker.classList.remove('ativo');
+  pickerReacaoEstado = { msgId: null, contexto: null };
+}
+
+// Fecha ao clicar fora — usa capture pra rodar antes do onclick inline
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#reacao-picker-global')) return;
+  if (e.target.closest('.btn-reagir')) return;
+  fecharPickerReacao();
+}, true);
+
+// Fecha ao rolar o chat
+document.addEventListener('scroll', (e) => {
+  if (e.target && e.target.closest && e.target.closest('.chat-area')) {
+    fecharPickerReacao();
+  }
+}, true);
 
 // ============================================================
 // REPLY (responder)
@@ -410,13 +508,8 @@ function cancelarReply(contexto) {
 // ============================================================
 
 let swipeEstado = {
-  ativo: false,
-  x: 0,
-  y: 0,
-  msgEl: null,
-  startX: 0,
-  startY: 0,
-  tipo: null,
+  ativo: false, x: 0, y: 0, msgEl: null,
+  startX: 0, startY: 0, tipo: null,
 };
 
 function ativarSwipe(msgEl) {
@@ -425,7 +518,6 @@ function ativarSwipe(msgEl) {
   const msgId = Number(msgEl.dataset.msgId);
   const autor = msgEl.querySelector('.msg-autor')?.textContent || '?';
   const texto = msgEl.querySelector('.msg-texto')?.textContent || '';
-
   ativarReply(contexto, msgId, autor, texto);
 }
 
@@ -438,15 +530,10 @@ function iniciarSwipe(e, msgEl) {
   const clientY = isTouch ? e.touches[0].clientY : e.clientY;
 
   swipeEstado = {
-    ativo: true,
-    x: clientX,
-    y: clientY,
-    msgEl,
-    startX: clientX,
-    startY: clientY,
+    ativo: true, x: clientX, y: clientY, msgEl,
+    startX: clientX, startY: clientY,
     tipo: isTouch ? 'touch' : 'mouse',
   };
-
   msgEl.classList.add('arrastando');
 }
 
@@ -494,16 +581,12 @@ function terminarSwipe(e) {
   const deslocamento = match ? parseFloat(match[1]) : 0;
 
   msgEl.classList.remove('arrastando');
-
   if (deslocamento >= 60) {
     ativarSwipe(msgEl);
     msgEl.classList.remove('arrastando-ativo');
   }
-
   msgEl.style.transform = '';
-  setTimeout(() => {
-    msgEl.classList.remove('arrastando-ativo');
-  }, 200);
+  setTimeout(() => msgEl.classList.remove('arrastando-ativo'), 200);
 
   swipeEstado = { ativo: false, x: 0, y: 0, msgEl: null, startX: 0, startY: 0, tipo: null };
 }
@@ -664,6 +747,7 @@ async function abrirCanal(canal) {
   renderizarCanais();
 
   cancelarReply('canal');
+  fecharPickerReacao();
 
   const r = await fetch(`/api/canais/${canal.id}/mensagens`);
   const data = await r.json();
@@ -789,19 +873,13 @@ function criarElMsg(m, chatId, contexto) {
       ${reacoesHTML(m.id, reacoes, contexto)}
     </div>
     <div class="msg-acoes">
-      <button class="btn-reagir" onclick="toggleReacaoPicker(event, this)" title="Reagir">😀</button>
+      <button class="btn-reagir"
+        onclick="abrirPickerReacao(event, this, '${contexto}', ${m.id})"
+        title="Reagir">😀</button>
       ${ehMinha ? `
         <button onclick="iniciarEdicao('${chatId}', ${m.id}, '${contexto}')" title="Editar">✏️</button>
         <button class="perigo" onclick="deletarMsg('${chatId}', ${m.id}, '${contexto}')" title="Deletar">🗑️</button>
       ` : ''}
-    </div>
-    <div class="reacao-picker" onclick="event.stopPropagation()">
-      <span onclick="toggleReacao('${contexto}', ${m.id}, '👍')">👍</span>
-      <span onclick="toggleReacao('${contexto}', ${m.id}, '❤️')">❤️</span>
-      <span onclick="toggleReacao('${contexto}', ${m.id}, '😂')">😂</span>
-      <span onclick="toggleReacao('${contexto}', ${m.id}, '😮')">😮</span>
-      <span onclick="toggleReacao('${contexto}', ${m.id}, '😢')">😢</span>
-      <span onclick="toggleReacao('${contexto}', ${m.id}, '🔥')">🔥</span>
     </div>
   `;
 
@@ -852,72 +930,33 @@ function removerMsgDaTela(chatId, msgId) {
 }
 
 // ============================================================
-// REAÇÕES
+// REAÇÕES — toggle + atualizar na tela
 // ============================================================
 
-function toggleReacaoPicker(event, btn) {
-  event.stopPropagation();
-
-  const msgEl = btn.closest('.msg-com-avatar');
-  const picker = msgEl.querySelector('.reacao-picker');
-  const btnRect = btn.getBoundingClientRect();
-
-  document.querySelectorAll('.reacao-picker.ativo').forEach((p) => {
-    if (p !== picker) p.classList.remove('ativo');
-  });
-
-  if (picker.classList.contains('ativo')) {
-    picker.classList.remove('ativo');
-    return;
-  }
-
-  picker.classList.add('ativo');
-
-  requestAnimationFrame(() => {
-    const pRect = picker.getBoundingClientRect();
-    const pWidth = pRect.width || 220;
-    const pHeight = pRect.height || 40;
-
-    let top = btnRect.top - pHeight - 8;
-    let left = btnRect.right - pWidth;
-
-    if (left < 10) left = 10;
-    if (left + pWidth > window.innerWidth - 10) {
-      left = window.innerWidth - pWidth - 10;
-    }
-
-    if (top < 10) {
-      top = btnRect.bottom + 8;
-    }
-
-    if (top + pHeight > window.innerHeight - 10) {
-      top = Math.max(10, window.innerHeight - pHeight - 10);
-    }
-
-    picker.style.top = top + 'px';
-    picker.style.left = left + 'px';
-  });
-}
-
 async function toggleReacao(contexto, msgId, emoji) {
-  document.querySelectorAll('.reacao-picker').forEach((p) => p.classList.remove('ativo'));
+  fecharPickerReacao();
 
-  const r = await fetch('/api/reacoes/toggle', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tipo: contexto, alvoId: msgId, emoji }),
-  });
+  try {
+    const r = await fetch('/api/reacoes/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo: contexto, alvoId: msgId, emoji }),
+    });
 
-  if (!r.ok) {
+    if (!r.ok) {
+      const data = await r.json();
+      alert(data.erro || 'Erro ao reagir');
+      return;
+    }
+
     const data = await r.json();
-    alert(data.erro || 'Erro ao reagir');
-    return;
+    const chatId = contexto === 'canal' ? 'chat-canal' : 'chat-dm';
+    atualizarReacoesNaTela(chatId, msgId, data.reacoes);
+    tocarSom();
+  } catch (e) {
+    console.error('Erro ao reagir:', e);
+    alert('Erro de conexão ao reagir');
   }
-
-  const data = await r.json();
-  const chatId = contexto === 'canal' ? 'chat-canal' : 'chat-dm';
-  atualizarReacoesNaTela(chatId, msgId, data.reacoes);
-  tocarSom();
 }
 
 function atualizarReacoesNaTela(chatId, msgId, reacoes) {
@@ -935,11 +974,6 @@ function atualizarReacoesNaTela(chatId, msgId, reacoes) {
     conteudo.insertAdjacentHTML('beforeend', html);
   }
 }
-
-document.addEventListener('click', (e) => {
-  if (e.target.closest('.reacao-picker') || e.target.closest('.btn-reagir')) return;
-  document.querySelectorAll('.reacao-picker').forEach((p) => p.classList.remove('ativo'));
-});
 
 // ============================================================
 // EDITAR / DELETAR MENSAGEM
@@ -1195,6 +1229,7 @@ function voltarDMs() {
   conversaAtual = null;
   document.getElementById('chat-dm').innerHTML = '';
   cancelarReply('dm');
+  fecharPickerReacao();
   abrirDM();
 }
 
@@ -1456,6 +1491,7 @@ async function abrirConversa(amigo) {
   conversaAtual = { conversa_id: data.conversa_id, amigo: data.amigo };
 
   cancelarReply('dm');
+  fecharPickerReacao();
 
   telaAtual = 'conversa';
   document.getElementById('app').classList.remove('canal-ativo');
@@ -1574,7 +1610,7 @@ function atualizarAvataresNaUI() {
 }
 
 // ============================================================
-// PERFIL — VISITA (outra pessoa)
+// PERFIL — VISITA
 // ============================================================
 
 function abrirPerfilVisitado(usuario) {
@@ -1701,14 +1737,12 @@ function abrirEditor(file, tipo) {
   reader.readAsDataURL(file);
 }
 
-// 🔥 CORRIGIDO — fundo xadrez em vez de rgba branco leitoso
 function desenharEditor() {
   const canvas = document.getElementById('editor-canvas');
   const ctx = canvas.getContext('2d');
   const { imagem, canvasW, canvasH, baseScale, zoom, offsetX, offsetY, tipo } = editorEstado;
   if (!imagem) return;
 
-  // Fundo XADREZ (só visual, NÃO vai pro resultado final)
   ctx.clearRect(0, 0, canvasW, canvasH);
   const tam = 10;
   for (let y = 0; y < canvasH; y += tam) {
@@ -1804,7 +1838,6 @@ window.addEventListener('load', () => {
   }, { passive: false });
 });
 
-// 🔥 CORRIGIDO — fundo branco sólido antes de exportar como JPEG
 async function salvarEdicao() {
   const { tipo, canvasW, canvasH } = editorEstado;
   const canvas = document.getElementById('editor-canvas');
@@ -1819,13 +1852,10 @@ async function salvarEdicao() {
   outputCanvas.height = outputH;
   const outCtx = outputCanvas.getContext('2d');
 
-  // 🔥 FUNDO BRANCO SÓLIDO — evita que a transparência vire preto no JPEG
   outCtx.fillStyle = '#ffffff';
   outCtx.fillRect(0, 0, outputW, outputH);
-
   outCtx.drawImage(canvas, 0, 0, canvasW, canvasH, 0, 0, outputW, outputH);
 
-  // 🔥 JPEG com fundo branco (não preto) e qualidade maior
   const base64 = outputCanvas.toDataURL('image/jpeg', 0.92);
 
   const endpoint = tipo === 'avatar' ? '/api/avatar' : '/api/banner';
@@ -1953,4 +1983,5 @@ window.addEventListener('load', async () => {
   }
 
   montarEmojiPicker();
-});
+  montarPickerReacao();
+}); 
