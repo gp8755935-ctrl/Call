@@ -3,13 +3,16 @@ function avatarHTML(usuario, classe = '', onclick = null) {
   if (!usuario) return '';
   const cls = 'avatar ' + classe;
   const attr = onclick ? ` onclick="${onclick}" style="cursor:pointer"` : '';
+
   if (usuario.avatar) {
-    return `<div class="${cls}"${attr}><img src="${usuario.avatar}" alt=""></div>`;
+    return `<div class="${cls} com-imagem"${attr}><img src="${usuario.avatar}" alt=""></div>`;
   }
+
   const inicial = (usuario.nome || '?').charAt(0).toUpperCase();
   const cores = ['#0284c7', '#0891b2', '#16a34a', '#7c3aed', '#db2777', '#ea580c'];
   const cor = cores[(usuario.nome || '').charCodeAt(0) % cores.length];
-  return `<div class="${cls}"${attr} style="background: linear-gradient(180deg, ${cor}99, ${cor})${onclick ? '; cursor:pointer' : ''}">${inicial}</div>`;
+  const estiloExtra = onclick ? '; cursor:pointer' : '';
+  return `<div class="${cls}"${attr} style="background: linear-gradient(180deg, ${cor}99, ${cor})${estiloExtra}">${inicial}</div>`;
 }
 
 // Lista de emojis
@@ -403,7 +406,8 @@ function cancelarReply(contexto) {
 }
 
 // ============================================================
-// SWIPE TO REPLY// ============================================================
+// SWIPE TO REPLY
+// ============================================================
 
 let swipeEstado = {
   ativo: false,
@@ -637,7 +641,7 @@ function renderizarMembros() {
     d.className = 'membro-item';
     const estaOnline = onlineIds.has(m.id);
 
-    // 🔥 foto clicável → abre perfil visitado
+    // foto clicável → abre perfil visitado
     const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(m).replace(/"/g, '&quot;')})`;
     d.innerHTML = `
       ${avatarHTML(m, 'mini', onclickAttr)}
@@ -769,7 +773,7 @@ function criarElMsg(m, chatId, contexto) {
   const reacoes = m.reacoes || {};
   const reply = replyHTML(m);
 
-  // 🔥 avatar na mensagem também é clicável → abre perfil
+  // avatar na mensagem também é clicável → abre perfil
   const usuarioMsg = { nome: m.de_nome, avatar: m.de_avatar, id: m.de_id };
   const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(usuarioMsg).replace(/"/g, '&quot;')})`;
 
@@ -1435,7 +1439,6 @@ async function carregarConversas() {
       li.appendChild(b);
     }
     li.onclick = (e) => {
-      // se clicou no avatar, não abre a conversa
       if (e.target.closest('.avatar')) return;
       abrirConversa(c.amigo);
     };
@@ -1518,12 +1521,14 @@ function fecharModalPerfil() {
   document.getElementById('modal-perfil').classList.remove('ativo');
 }
 
+// 🔥 CORRIGIDO — aplica a classe .com-imagem quando tem foto
 function atualizarPreviewAvatar(usuario) {
   const el = document.getElementById('avatar-preview');
   if (usuario.avatar) {
+    el.classList.add('com-imagem');
     el.innerHTML = `<img src="${usuario.avatar}" alt="">`;
-    el.style.background = 'transparent';
   } else {
+    el.classList.remove('com-imagem');
     const inicial = (usuario.nome || '?').charAt(0).toUpperCase();
     el.innerHTML = inicial;
     el.style.background = 'linear-gradient(180deg, #38bdf8, #0284c7)';
@@ -1555,16 +1560,17 @@ async function salvarBio() {
   tocarSom();
 }
 
-// 🔥 CORRIGIDO: não substitui mais o outerHTML do elemento inteiro.
-// Só atualiza o conteúdo interno do #avatar-usuario.
+// 🔥 CORRIGIDO — não substitui mais o outerHTML, e usa .com-imagem
 function atualizarAvataresNaUI() {
   const el = document.getElementById('avatar-usuario');
   if (!el) return;
   el.className = 'avatar';
   el.removeAttribute('style');
   if (meuUsuario.avatar) {
+    el.classList.add('com-imagem');
     el.innerHTML = `<img src="${meuUsuario.avatar}" alt="">`;
   } else {
+    el.classList.remove('com-imagem');
     const inicial = (meuUsuario.nome || '?').charAt(0).toUpperCase();
     el.innerHTML = inicial;
     el.style.background = 'linear-gradient(180deg, #38bdf8, #0284c7)';
@@ -1587,12 +1593,13 @@ function abrirPerfilVisitado(usuario) {
   document.getElementById('visita-nome').textContent = usuario.nome;
   document.getElementById('visita-email').textContent = usuario.email || '';
 
-  // avatar
+  // 🔥 avatar — com a correção da classe .com-imagem
   const avatarEl = document.getElementById('visita-avatar');
   if (usuario.avatar) {
+    avatarEl.classList.add('com-imagem');
     avatarEl.innerHTML = `<img src="${usuario.avatar}" alt="">`;
-    avatarEl.style.background = 'transparent';
   } else {
+    avatarEl.classList.remove('com-imagem');
     const inicial = (usuario.nome || '?').charAt(0).toUpperCase();
     avatarEl.innerHTML = inicial;
     avatarEl.style.background = 'linear-gradient(180deg, #38bdf8, #0284c7)';

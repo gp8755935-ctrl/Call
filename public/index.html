@@ -529,7 +529,7 @@
       flex-shrink: 0;
     }
 
-    /* AVATAR — garante que NÃO haja filter/opacity indesejado */
+    /* ============ AVATAR — CORRIGIDO ============ */
     .avatar {
       width: 40px; height: 40px;
       border-radius: 50%;
@@ -545,11 +545,27 @@
       overflow: hidden;
       filter: none !important;
       opacity: 1 !important;
+      position: relative;
     }
     .avatar.mini { width: 28px; height: 28px; font-size: 12px; border-width: 1.5px; }
     .avatar.grande { width: 96px; height: 96px; font-size: 36px; border-width: 3px; }
     .avatar.gigante { width: 110px; height: 110px; font-size: 40px; border-width: 4px; }
-    .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; filter: none; opacity: 1; }
+
+    .avatar img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+      filter: none !important;
+      opacity: 1 !important;
+      border-radius: 50%;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Quando o avatar tem foto, o fundo não deve vazar */
+    .avatar.com-imagem {
+      background: #e0f2fe !important;
+    }
 
     /* MENSAGENS COM AVATAR */
     .msg-com-avatar {
@@ -1120,7 +1136,6 @@
       background-position: center;
       background-repeat: no-repeat;
       transition: transform 0.3s;
-      /* 🔥 garante que a imagem do banner não seja escurecida */
       filter: none !important;
       opacity: 1 !important;
     }
@@ -1156,10 +1171,11 @@
 
     /* ===== sobreposição de edição (só quando for o próprio perfil) ===== */
     .perfil-banner.clicavel { cursor: pointer; }
+
     .perfil-banner-overlay {
       position: absolute;
       inset: 0;
-      /* 🔥 NÃO usar rgba(0,0,0,0.5) — isso escurece a foto */
+      /* tingimento azul leve — NUNCA preto pesado */
       background: linear-gradient(180deg, rgba(2,132,199,0.0), rgba(2,132,199,0.45));
       display: flex;
       align-items: flex-end;
@@ -1172,9 +1188,7 @@
       transition: opacity 0.2s;
       pointer-events: none;
       text-shadow: 0 1px 3px rgba(0,0,0,0.4);
-    }
-    .perfil-banner.clicavel:hover .perfil-banner-overlay {
-      opacity: 1;
+      z-index: 2;
     }
 
     .perfil-avatar-wrapper {
@@ -1189,19 +1203,27 @@
       position: relative;
       border-radius: 50%;
     }
-    .perfil-avatar-wrapper .avatar-container:hover .avatar-overlay {
-      opacity: 1;
-    }
 
     .avatar-overlay {
       position: absolute; inset: 0;
       border-radius: 50%;
-      /* 🔥 Só um leve tingimento, sem preto pesado */
+      /* tingimento azul leve — nunca preto pesado */
       background: rgba(2, 132, 199, 0.35);
       display: flex; align-items: center; justify-content: center;
       color: white; font-size: 28px;
       opacity: 0; transition: opacity 0.2s;
       pointer-events: none;
+      z-index: 2;
+    }
+
+    /* 🔥 SÓ ativa hover em dispositivos com mouse (desktop) — evita "grudar" no mobile */
+    @media (hover: hover) and (pointer: fine) {
+      .perfil-avatar-wrapper .avatar-container:hover .avatar-overlay {
+        opacity: 1;
+      }
+      .perfil-banner.clicavel:hover .perfil-banner-overlay {
+        opacity: 1;
+      }
     }
 
     .perfil-info {
