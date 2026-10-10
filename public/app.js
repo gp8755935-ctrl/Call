@@ -641,7 +641,6 @@ function renderizarMembros() {
     d.className = 'membro-item';
     const estaOnline = onlineIds.has(m.id);
 
-    // foto clicável → abre perfil visitado
     const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(m).replace(/"/g, '&quot;')})`;
     d.innerHTML = `
       ${avatarHTML(m, 'mini', onclickAttr)}
@@ -773,7 +772,6 @@ function criarElMsg(m, chatId, contexto) {
   const reacoes = m.reacoes || {};
   const reply = replyHTML(m);
 
-  // avatar na mensagem também é clicável → abre perfil
   const usuarioMsg = { nome: m.de_nome, avatar: m.de_avatar, id: m.de_id };
   const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(usuarioMsg).replace(/"/g, '&quot;')})`;
 
@@ -1521,7 +1519,6 @@ function fecharModalPerfil() {
   document.getElementById('modal-perfil').classList.remove('ativo');
 }
 
-// 🔥 CORRIGIDO — aplica a classe .com-imagem quando tem foto
 function atualizarPreviewAvatar(usuario) {
   const el = document.getElementById('avatar-preview');
   if (usuario.avatar) {
@@ -1560,7 +1557,6 @@ async function salvarBio() {
   tocarSom();
 }
 
-// 🔥 CORRIGIDO — não substitui mais o outerHTML, e usa .com-imagem
 function atualizarAvataresNaUI() {
   const el = document.getElementById('avatar-usuario');
   if (!el) return;
@@ -1584,7 +1580,6 @@ function atualizarAvataresNaUI() {
 function abrirPerfilVisitado(usuario) {
   if (!usuario || !usuario.nome) return;
 
-  // se for você mesmo, abre o modal de edição
   if (meuUsuario && usuario.id === meuUsuario.id) {
     abrirModalPerfil();
     return;
@@ -1593,7 +1588,6 @@ function abrirPerfilVisitado(usuario) {
   document.getElementById('visita-nome').textContent = usuario.nome;
   document.getElementById('visita-email').textContent = usuario.email || '';
 
-  // 🔥 avatar — com a correção da classe .com-imagem
   const avatarEl = document.getElementById('visita-avatar');
   if (usuario.avatar) {
     avatarEl.classList.add('com-imagem');
@@ -1605,7 +1599,6 @@ function abrirPerfilVisitado(usuario) {
     avatarEl.style.background = 'linear-gradient(180deg, #38bdf8, #0284c7)';
   }
 
-  // banner
   const bannerEl = document.getElementById('visita-banner');
   if (usuario.banner) {
     bannerEl.style.backgroundImage = `url(${usuario.banner})`;
@@ -1613,7 +1606,6 @@ function abrirPerfilVisitado(usuario) {
     bannerEl.style.backgroundImage = '';
   }
 
-  // bio
   document.getElementById('visita-bio').textContent =
     (usuario.bio && usuario.bio.trim()) ? usuario.bio : 'Sem descrição.';
 
@@ -1624,7 +1616,6 @@ function fecharPerfilVisitado() {
   document.getElementById('modal-perfil-visita').classList.remove('ativo');
 }
 
-// fechar ao clicar no fundo
 document.addEventListener('click', (e) => {
   if (e.target.id === 'modal-perfil-visita') fecharPerfilVisitado();
   if (e.target.id === 'modal-perfil') fecharModalPerfil();
@@ -1710,15 +1701,22 @@ function abrirEditor(file, tipo) {
   reader.readAsDataURL(file);
 }
 
+// 🔥 CORRIGIDO — fundo xadrez em vez de rgba branco leitoso
 function desenharEditor() {
   const canvas = document.getElementById('editor-canvas');
   const ctx = canvas.getContext('2d');
   const { imagem, canvasW, canvasH, baseScale, zoom, offsetX, offsetY, tipo } = editorEstado;
   if (!imagem) return;
 
+  // Fundo XADREZ (só visual, NÃO vai pro resultado final)
   ctx.clearRect(0, 0, canvasW, canvasH);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.fillRect(0, 0, canvasW, canvasH);
+  const tam = 10;
+  for (let y = 0; y < canvasH; y += tam) {
+    for (let x = 0; x < canvasW; x += tam) {
+      ctx.fillStyle = ((x / tam + y / tam) % 2 === 0) ? '#e0f2fe' : '#ffffff';
+      ctx.fillRect(x, y, tam, tam);
+    }
+  }
 
   const escalaTotal = baseScale * zoom;
   const w = imagem.width * escalaTotal;
@@ -1806,6 +1804,7 @@ window.addEventListener('load', () => {
   }, { passive: false });
 });
 
+// 🔥 CORRIGIDO — fundo branco sólido antes de exportar como JPEG
 async function salvarEdicao() {
   const { tipo, canvasW, canvasH } = editorEstado;
   const canvas = document.getElementById('editor-canvas');
@@ -1819,9 +1818,16 @@ async function salvarEdicao() {
   outputCanvas.width = outputW;
   outputCanvas.height = outputH;
   const outCtx = outputCanvas.getContext('2d');
+
+  // 🔥 FUNDO BRANCO SÓLIDO — evita que a transparência vire preto no JPEG
+  outCtx.fillStyle = '#ffffff';
+  outCtx.fillRect(0, 0, outputW, outputH);
+
   outCtx.drawImage(canvas, 0, 0, canvasW, canvasH, 0, 0, outputW, outputH);
 
-  const base64 = outputCanvas.toDataURL('image/jpeg', 0.85);
+  // 🔥 JPEG com fundo branco (não preto) e qualidade maior
+  const base64 = outputCanvas.toDataURL('image/jpeg', 0.92);
+
   const endpoint = tipo === 'avatar' ? '/api/avatar' : '/api/banner';
   const chave = tipo === 'avatar' ? 'avatar' : 'banner';
 
