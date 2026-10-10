@@ -638,7 +638,6 @@ function renderAnexoHTML(anexo) {
   } catch (e) { return ''; }
   return '';
 }
-
 // ============================================================
 // MEDIA PLAYER
 // ============================================================
@@ -3607,4 +3606,4 @@ window.addEventListener('load', async () => {
 
   montarEmojiPicker();
   montarPickerReacao();
-});
+}); 

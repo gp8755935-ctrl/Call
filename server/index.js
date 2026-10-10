@@ -13,6 +13,12 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// 🔥 Detecta se está em produção (atrás de proxy)
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+// 🔥 Confia no proxy (Cloudflare/ngrok/Render) pra pegar IP e protocolo reais
+app.set('trust proxy', 1);
+
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -33,6 +39,36 @@ const TIPOS_PERMITIDOS = {
 
 const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } });
 
+// ============================================================
+// 🔥 CORREÇÃO CRÍTICA — Anti-cache + headers de segurança
+// ============================================================
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  // 🔥 Segurança extra
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
+
+// 🔥 Valida HTTPS quando atrás de proxy
+app.use((req, res, next) => {
+  const host = req.headers.host || '';
+  const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
+  
+  // Se não for local, exige HTTPS
+  if (!ehLocalhost) {
+    const proto = req.headers['x-forwarded-proto'] || req.protocol;
+    if (proto !== 'https') {
+      return res.status(400).json({ erro: 'HTTPS obrigatório' });
+    }
+  }
+  next();
+});
+
 app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -47,7 +83,7 @@ app.get('/uploads/:filename', (req, res) => {
 // ========== AUTH HELPERS ==========
 
 function pegarUsuario(req) {
-  const token = req.cookies.token;
+  const token = req.cookies && req.cookies.token;
   if (!token) return null;
   return auth.verificarToken(token);
 }
@@ -55,8 +91,33 @@ function pegarUsuario(req) {
 function exigirAuth(req, res, next) {
   const u = pegarUsuario(req);
   if (!u) return res.status(401).json({ erro: 'Não logado' });
+  const usuarioAtual = db.buscarUsuarioPorId(u.id);
+  if (!usuarioAtual) {
+    limparCookies(res);
+    return res.status(401).json({ erro: 'Usuário não existe' });
+  }
   req.usuario = u;
+  req.usuarioAtual = usuarioAtual;
   next();
+}
+
+// 🔥 Cookie mais seguro — sempre Secure quando não for localhost
+function setarCookieToken(req, res, token) {
+  const host = req.headers.host || '';
+  const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
+  
+  res.cookie('token', token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: !ehLocalhost,   // 🔥 Secure sempre que não for local
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    path: '/',
+  });
+}
+
+function limparCookies(res) {
+  res.clearCookie('token', { path: '/' });
+  res.clearCookie('connect.sid', { path: '/' });
 }
 
 // ========== UPLOAD ==========
@@ -102,7 +163,9 @@ app.post('/api/cadastro', async (req, res) => {
     const senhaHash = await auth.hashearSenha(senha);
     const usuario = db.criarUsuario({ nome, email, senhaHash });
     const token = auth.gerarToken(usuario);
-    res.cookie('token', token, { httpOnly: true, sameSite: 'lax', maxAge: 30 * 24 * 60 * 60 * 1000 });
+    // 🔥 Limpa cookies antigos ANTES de setar o novo
+    limparCookies(res);
+    setarCookieToken(req, res, token);
     res.json({ ok: true, usuario });
   } catch (e) {
     console.error(e);
@@ -117,19 +180,27 @@ app.post('/api/login', async (req, res) => {
   if (!usuario) return res.status(400).json({ erro: 'Email ou senha inválidos' });
   const ok = await auth.verificarSenha(senha, usuario.senha_hash);
   if (!ok) return res.status(400).json({ erro: 'Email ou senha inválidos' });
+
+  // 🔥 Limpa cookies antigos ANTES de setar o novo
+  limparCookies(res);
+
   const token = auth.gerarToken(usuario);
-  res.cookie('token', token, { httpOnly: true, sameSite: 'lax', maxAge: 30 * 24 * 60 * 60 * 1000 });
+  setarCookieToken(req, res, token);
   res.json({
     ok: true,
     usuario: {
-      id: usuario.id, nome: usuario.nome, email: usuario.email,
-      avatar: usuario.avatar || '', banner: usuario.banner || '', bio: usuario.bio || '',
+      id: usuario.id,
+      nome: usuario.nome,
+      email: usuario.email,
+      avatar: usuario.avatar || '',
+      banner: usuario.banner || '',
+      bio: usuario.bio || '',
     },
   });
 });
 
 app.post('/api/logout', (req, res) => {
-  res.clearCookie('token');
+  limparCookies(res);
   res.json({ ok: true });
 });
 
@@ -137,8 +208,20 @@ app.get('/api/eu', (req, res) => {
   const u = pegarUsuario(req);
   if (!u) return res.status(401).json({ erro: 'Não logado' });
   const usuario = db.buscarUsuarioPorId(u.id);
-  if (!usuario) return res.status(401).json({ erro: 'Usuário não existe' });
-  res.json({ usuario });
+  if (!usuario) {
+    limparCookies(res);
+    return res.status(401).json({ erro: 'Usuário não existe' });
+  }
+  res.json({
+    usuario: {
+      id: usuario.id,
+      nome: usuario.nome,
+      email: usuario.email,
+      avatar: usuario.avatar || '',
+      banner: usuario.banner || '',
+      bio: usuario.bio || '',
+    },
+  });
 });
 
 app.post('/api/avatar', exigirAuth, (req, res) => {
@@ -205,8 +288,6 @@ app.post('/api/amizades/pedir', exigirAuth, (req, res) => {
   }
 
   const pedido = db.criarPedidoAmizade(req.usuario.id, paraId);
-
-  // 🔥 Notifica SÓ o destinatário
   const socketDestino = [...online.values()].find((u) => u.id === paraId);
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
 
@@ -234,8 +315,6 @@ app.post('/api/amizades/aceitar', exigirAuth, (req, res) => {
   db.atualizarStatusAmizade(amizadeId, 'aceita');
 
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
-
-  // 🔥 Notifica SÓ o solicitante
   const socketSolicitante = [...online.values()].find((u) => u.id === pedido.id);
   if (socketSolicitante) {
     io.to(socketSolicitante.socketId).emit('amizade-aceita', {
@@ -517,7 +596,6 @@ app.post('/api/servidores/entrar', exigirAuth, (req, res) => {
   const entrou = db.adicionarMembro(s.id, req.usuario.id);
   if (!entrou) return res.status(400).json({ erro: 'Você já é membro' });
 
-  // 🔥 Notifica todos os membros do servidor que alguém entrou
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
   io.to('servidor-' + s.id).emit('membro-entrou', {
     servidor_id: s.id,
@@ -562,10 +640,8 @@ app.post('/api/servidores/:id/remover-membro', exigirAuth, (req, res) => {
 
   db.removerMembro(servidorId, usuarioId);
 
-  // 🔥 Notifica o servidor inteiro
   io.to('servidor-' + servidorId).emit('membro-removido', { servidor_id: servidorId, usuario_id: usuarioId });
 
-  // 🔥 Notifica o membro removido individualmente
   const socketRemovido = [...online.values()].find((u) => u.id === usuarioId);
   if (socketRemovido) {
     io.to(socketRemovido.socketId).emit('voce-foi-removido', {
@@ -693,15 +769,29 @@ app.delete('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) 
 
 // ========== SOCKET.IO ==========
 
+// 🔥 Middleware de auth do socket — pega o ÚLTIMO cookie token
 io.use((socket, next) => {
-  const cookies = socket.request.headers.cookie || '';
-  const match = cookies.match(/token=([^;]+)/);
-  const token = match ? match[1] : null;
-  if (!token) return next(new Error('Não autenticado'));
-  const payload = auth.verificarToken(token);
-  if (!payload) return next(new Error('Token inválido'));
-  socket.usuario = payload;
-  next();
+  try {
+    const cookies = socket.request.headers.cookie || '';
+    const matches = [...cookies.matchAll(/(?:^|;\s*)token=([^;]+)/g)];
+    if (!matches.length) return next(new Error('Não autenticado'));
+    const token = decodeURIComponent(matches[matches.length - 1][1]);
+    const payload = auth.verificarToken(token);
+    if (!payload || !payload.id) return next(new Error('Token inválido'));
+
+    const usuarioAtual = db.buscarUsuarioPorId(payload.id);
+    if (!usuarioAtual) return next(new Error('Usuário não existe'));
+
+    socket.usuario = {
+      id: usuarioAtual.id,
+      nome: usuarioAtual.nome,
+      email: usuarioAtual.email,
+    };
+    next();
+  } catch (e) {
+    console.error('Erro no middleware de socket:', e);
+    next(new Error('Erro de autenticação'));
+  }
 });
 
 const online = new Map();
