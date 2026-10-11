@@ -54,8 +54,17 @@ let menuContextoAberto = null;
 let painelMembrosAberto = false;
 let perfilVisitadoAtual = null;
 
-const CONFIG_PADRAO = { somMsg: true, somReacao: true, notifVisual: true, notifSistema: true, digitando: true };
+const CONFIG_PADRAO = { somMsg: true, somReacao: true, notifVisual: true, notifSistema: true, digitando: true, darkMode: false };
 let config = { ...CONFIG_PADRAO };
+
+// 🔥 Aplica o tema (claro/escuro)
+function aplicarTema(escuro) {
+  if (escuro) {
+    document.body.classList.add('tema-escuro');
+  } else {
+    document.body.classList.remove('tema-escuro');
+  }
+}
 
 function carregarConfig() {
   try {
@@ -70,11 +79,12 @@ function salvarConfig() {
 }
 
 function aplicarConfigNaUI() {
-  const ids = { somMsg: 'cfg-som-msg', somReacao: 'cfg-som-reacao', notifVisual: 'cfg-notif-visual', notifSistema: 'cfg-notif-sistema', digitando: 'cfg-digitando' };
+  const ids = { somMsg: 'cfg-som-msg', somReacao: 'cfg-som-reacao', notifVisual: 'cfg-notif-visual', notifSistema: 'cfg-notif-sistema', digitando: 'cfg-digitando', darkMode: 'cfg-dark-mode' };
   for (const [chave, id] of Object.entries(ids)) {
     const el = document.getElementById(id);
     if (el) el.checked = !!config[chave];
   }
+  aplicarTema(config.darkMode);
 }
 
 function abrirConfig() {
@@ -87,7 +97,7 @@ function fecharConfig() {
 }
 
 function bindConfig() {
-  const ids = { somMsg: 'cfg-som-msg', somReacao: 'cfg-som-reacao', notifVisual: 'cfg-notif-visual', notifSistema: 'cfg-notif-sistema', digitando: 'cfg-digitando' };
+  const ids = { somMsg: 'cfg-som-msg', somReacao: 'cfg-som-reacao', notifVisual: 'cfg-notif-visual', notifSistema: 'cfg-notif-sistema', digitando: 'cfg-digitando', darkMode: 'cfg-dark-mode' };
   for (const [chave, id] of Object.entries(ids)) {
     const el = document.getElementById(id);
     if (!el) continue;
@@ -95,6 +105,7 @@ function bindConfig() {
       config[chave] = el.checked;
       salvarConfig();
       if (chave === 'notifSistema' && el.checked) pedirPermissaoNotificacoes();
+      if (chave === 'darkMode') aplicarTema(el.checked);
     });
   }
 }
@@ -898,7 +909,6 @@ function entrarNoApp(usuario) {
   carregarAmizades();
   pedirPermissaoNotificacoes();
 
-  // 🔥 Tenta restaurar a última tela
   setTimeout(async () => {
     await restaurarUltimaTela();
   }, 1200);
@@ -920,12 +930,12 @@ function conectarSocket() {
   if (socket) return;
 
   socket = io({
+    transports: ['websocket'],
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 500,
     reconnectionDelayMax: 3000,
     timeout: 10000,
-    transports: ['websocket', 'polling'],
     autoConnect: true,
   });
 
@@ -953,7 +963,7 @@ function conectarSocket() {
     carregarAmizades();
   });
 
-  // ============ AMIZADE ============
+    // ============ AMIZADE ============
   socket.on('amizade-nova', (payload) => {
     const paraId = payload?.paraId;
     const pedido = payload?.pedido;
@@ -1167,13 +1177,36 @@ function conectarSocket() {
     renderizarServidores();
   });
 
+  // 🔥 SERVIDOR DELETADO — limpa tudo
   socket.on('servidor-deletado', ({ servidor_id }) => {
     servidores = servidores.filter((s) => s.id !== servidor_id);
+
     if (servidorAtivo && servidorAtivo.servidor.id === servidor_id) {
       servidorAtivo = null;
+      canalAtivo = null;
       document.getElementById('sidebar-canais').style.display = 'none';
+      document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
+      document.getElementById('titulo-main').textContent = 'Selecione um canal';
+      document.getElementById('app').classList.remove('canal-ativo');
+      document.getElementById('tela-canal').classList.remove('tem-canal');
+      telaAtual = 'home';
+      esconderTelasMain();
+      document.getElementById('tela-canal').classList.add('ativa');
+
+      try {
+        const salvo = localStorage.getItem('void-ultima-tela');
+        if (salvo) {
+          const dados = JSON.parse(salvo);
+          if (dados.servidorId === servidor_id) localStorage.removeItem('void-ultima-tela');
+        }
+      } catch (e) {}
     }
+
     renderizarServidores();
+
+    if (servidores.length > 0) {
+      setTimeout(() => abrirServidor(servidores[0].id), 200);
+    }
   });
 
   socket.on('membro-entrou', ({ servidor_id, membro }) => {
@@ -1193,21 +1226,33 @@ function conectarSocket() {
     }
   });
 
+  // 🔥 VOCÊ FOI REMOVIDO — limpa tudo
   socket.on('voce-foi-removido', ({ servidor_id, servidor_nome }) => {
     servidores = servidores.filter((s) => s.id !== servidor_id);
+
     if (servidorAtivo && servidorAtivo.servidor.id === servidor_id) {
       servidorAtivo = null;
       canalAtivo = null;
       document.getElementById('sidebar-canais').style.display = 'none';
-      document.getElementById('chat-canal').innerHTML = '';
+      document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
       document.getElementById('titulo-main').textContent = 'Selecione um canal';
-      telaAtual = 'home';
       document.getElementById('app').classList.remove('canal-ativo');
+      document.getElementById('tela-canal').classList.remove('tem-canal');
+      telaAtual = 'home';
       esconderTelasMain();
       document.getElementById('tela-canal').classList.add('ativa');
-      document.getElementById('tela-canal').classList.remove('tem-canal');
+
+      try {
+        const salvo = localStorage.getItem('void-ultima-tela');
+        if (salvo) {
+          const dados = JSON.parse(salvo);
+          if (dados.servidorId === servidor_id) localStorage.removeItem('void-ultima-tela');
+        }
+      } catch (e) {}
     }
+
     renderizarServidores();
+
     mostrarNotificacaoVisual({
       tipo: 'amizade',
       deNome: 'Sistema',
@@ -1215,6 +1260,10 @@ function conectarSocket() {
       texto: `Você foi removido de "${servidor_nome}"`,
       silencioso: false,
     });
+
+    if (servidores.length > 0) {
+      setTimeout(() => abrirServidor(servidores[0].id), 300);
+    }
   });
 
   // ============ DIGITANDO ============
@@ -1739,19 +1788,32 @@ function abrirMenuServidor(event, s) {
           const r = await fetch('/api/servidores/' + s.id, { method: 'DELETE' });
           if (!r.ok) { alert('Erro ao excluir'); return; }
           servidores = servidores.filter((x) => x.id !== s.id);
+
           if (servidorAtivo && servidorAtivo.servidor.id === s.id) {
             servidorAtivo = null;
             canalAtivo = null;
             document.getElementById('sidebar-canais').style.display = 'none';
-            document.getElementById('chat-canal').innerHTML = '';
+            document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
             document.getElementById('titulo-main').textContent = 'Selecione um canal';
-            telaAtual = 'home';
             document.getElementById('app').classList.remove('canal-ativo');
+            document.getElementById('tela-canal').classList.remove('tem-canal');
+            telaAtual = 'home';
             esconderTelasMain();
             document.getElementById('tela-canal').classList.add('ativa');
-            document.getElementById('tela-canal').classList.remove('tem-canal');
+
+            try {
+              const salvo = localStorage.getItem('void-ultima-tela');
+              if (salvo) {
+                const dados = JSON.parse(salvo);
+                if (dados.servidorId === s.id) localStorage.removeItem('void-ultima-tela');
+              }
+            } catch (e) {}
           }
           renderizarServidores();
+
+          if (servidores.length > 0) {
+            setTimeout(() => abrirServidor(servidores[0].id), 200);
+          }
         },
       }] : [{
         emoji: '🚪',
@@ -1762,19 +1824,33 @@ function abrirMenuServidor(event, s) {
           const r = await fetch(`/api/servidores/${s.id}/sair`, { method: 'POST' });
           if (!r.ok) { alert('Erro ao sair'); return; }
           servidores = servidores.filter((x) => x.id !== s.id);
+
+          // 🔥 LIMPA O CANAL E O CHAT
           if (servidorAtivo && servidorAtivo.servidor.id === s.id) {
             servidorAtivo = null;
             canalAtivo = null;
             document.getElementById('sidebar-canais').style.display = 'none';
-            document.getElementById('chat-canal').innerHTML = '';
+            document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
             document.getElementById('titulo-main').textContent = 'Selecione um canal';
-            telaAtual = 'home';
             document.getElementById('app').classList.remove('canal-ativo');
+            document.getElementById('tela-canal').classList.remove('tem-canal');
+            telaAtual = 'home';
             esconderTelasMain();
             document.getElementById('tela-canal').classList.add('ativa');
-            document.getElementById('tela-canal').classList.remove('tem-canal');
+
+            try {
+              const salvo = localStorage.getItem('void-ultima-tela');
+              if (salvo) {
+                const dados = JSON.parse(salvo);
+                if (dados.servidorId === s.id) localStorage.removeItem('void-ultima-tela');
+              }
+            } catch (e) {}
           }
           renderizarServidores();
+
+          if (servidores.length > 0) {
+            setTimeout(() => abrirServidor(servidores[0].id), 200);
+          }
         },
       }]),
     ],
@@ -3865,7 +3941,6 @@ window.addEventListener('load', async () => {
   montarEmojiPicker();
   montarPickerReacao();
 
-  // 🔥 Configura drag & drop
   setTimeout(configurarDragDrop, 500);
 
   window.addEventListener('storage', (e) => {

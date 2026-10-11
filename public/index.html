@@ -2000,6 +2000,270 @@
   z-index: 100;
   text-shadow: 0 2px 8px rgba(255,255,255,0.9);
 }
+/* ============================================================
+   🌙 MODO ESCURO — FRUTIGER AERO DARK
+   ============================================================ */
+
+body.tema-escuro {
+  --ceu-1: #0a1628;
+  --ceu-2: #0f1e3a;
+  --agua-1: #1e5a8e;
+  --agua-2: #2a7ab8;
+  --ciano: #0ea5e9;
+  --verde-1: #4ade80;
+  --verde-2: #22c55e;
+  --verde-3: #16a34a;
+  --vidro: rgba(20, 30, 50, 0.55);
+  --vidro-forte: rgba(20, 30, 50, 0.75);
+  --vidro-borda: rgba(100, 150, 200, 0.4);
+  --texto-escuro: #e0f2fe;
+  --texto-medio: #93c5fd;
+  --glow-ciano: 0 0 24px rgba(14, 165, 233, 0.7);
+  --glow-verde: 0 0 24px rgba(34, 197, 94, 0.7);
+}
+
+body.tema-escuro {
+  background: linear-gradient(180deg, #0a1628 0%, #0f1e3a 25%, #1a3050 50%, #0d2842 75%, #061626 100%);
+  color: var(--texto-escuro);
+}
+
+body.tema-escuro::before {
+  background: radial-gradient(ellipse, rgba(56, 189, 248, 0.25),
+    rgba(56, 189, 248, 0.08) 40%, transparent 70%);
+}
+
+body.tema-escuro .bolha {
+  background: radial-gradient(circle at 30% 30%,
+    rgba(56, 189, 248, 0.5), rgba(14, 165, 233, 0.2) 40%,
+    rgba(30, 90, 142, 0.15) 70%, transparent);
+  box-shadow: inset -4px -4px 8px rgba(56, 189, 248, 0.15),
+              inset 4px 4px 12px rgba(14, 165, 233, 0.25),
+              0 4px 20px rgba(56, 189, 248, 0.3);
+  opacity: 0.7;
+}
+
+body.tema-escuro input,
+body.tema-escuro textarea {
+  background: rgba(10, 20, 40, 0.85);
+  border-color: rgba(56, 189, 248, 0.3);
+  color: #e0f2fe;
+}
+body.tema-escuro input::placeholder,
+body.tema-escuro textarea::placeholder {
+  color: rgba(147, 197, 253, 0.5);
+}
+body.tema-escuro input:focus,
+body.tema-escuro textarea:focus {
+  background: rgba(10, 20, 40, 1);
+  border-color: var(--ciano);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.3), var(--glow-ciano);
+}
+
+body.tema-escuro button {
+  background: linear-gradient(180deg,
+    rgba(56, 189, 248, 0.5) 0%,
+    rgba(30, 90, 142, 0.9) 45%,
+    rgba(15, 40, 70, 1) 100%);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #e0f2fe;
+}
+
+body.tema-escuro button.secundario {
+  background: linear-gradient(180deg, rgba(30, 50, 80, 0.95), rgba(15, 30, 50, 0.9));
+  color: #93c5fd;
+}
+
+body.tema-escuro button.verde {
+  background: linear-gradient(180deg,
+    rgba(74, 222, 128, 0.5) 0%, #22c55e 45%, #15803d 100%);
+}
+
+body.tema-escuro button.perigo {
+  background: linear-gradient(180deg,
+    rgba(248, 113, 113, 0.5) 0%, #dc2626 45%, #991b1b 100%);
+}
+
+body.tema-escuro .auth-card {
+  background: linear-gradient(160deg,
+    rgba(20, 30, 50, 0.85) 0%, rgba(15, 25, 45, 0.7) 50%, rgba(10, 20, 40, 0.85) 100%);
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.2),
+              inset 0 -4px 12px rgba(14, 165, 233, 0.15),
+              0 20px 60px rgba(0, 0, 0, 0.6),
+              0 0 40px rgba(14, 165, 233, 0.2);
+}
+
+body.tema-escuro .auth-logo h1 {
+  color: #e0f2fe;
+  text-shadow: 0 2px 0 rgba(56, 189, 248, 0.3),
+               0 4px 12px rgba(14, 165, 233, 0.6),
+               0 0 30px rgba(14, 165, 233, 0.5);
+}
+
+body.tema-escuro .sidebar-servidores,
+body.tema-escuro .sidebar-canais {
+  background: linear-gradient(180deg, rgba(20, 30, 50, 0.7), rgba(10, 20, 40, 0.6));
+  border-color: rgba(56, 189, 248, 0.2);
+}
+
+body.tema-escuro .topo-servidor {
+  background: linear-gradient(135deg, rgba(30, 50, 80, 0.8), rgba(15, 30, 50, 0.7));
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+body.tema-escuro .topo-servidor .nome {
+  color: #e0f2fe;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+body.tema-escuro .topo-servidor .codigo {
+  color: #93c5fd;
+  background: rgba(10, 20, 40, 0.6);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+body.tema-escuro .servidor-icon {
+  background: linear-gradient(180deg, rgba(30, 50, 80, 0.8), rgba(15, 30, 50, 0.6));
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #93c5fd;
+}
+
+body.tema-escuro .servidor-icon.ativo {
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.4), var(--agua-1) 45%, var(--agua-2));
+  color: white;
+}
+
+body.tema-escuro .canal-item {
+  color: #93c5fd;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+body.tema-escuro .canal-item:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: #e0f2fe;
+}
+
+body.tema-escuro .canal-item.ativo {
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.3), rgba(30, 90, 142, 0.5));
+  color: #e0f2fe;
+}
+
+body.tema-escuro .main {
+  background: linear-gradient(180deg, rgba(15, 25, 45, 0.6), rgba(10, 20, 40, 0.7));
+}
+
+body.tema-escuro .topo-main {
+  background: linear-gradient(180deg, rgba(20, 30, 50, 0.7), rgba(15, 25, 45, 0.5));
+  border-color: rgba(56, 189, 248, 0.2);
+}
+
+body.tema-escuro .topo-main h3 {
+  color: #e0f2fe;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+body.tema-escuro .msg-com-avatar .msg-autor {
+  color: #7dd3fc;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+body.tema-escuro .msg-com-avatar .msg-hora {
+  color: rgba(147, 197, 253, 0.5);
+}
+
+body.tema-escuro .msg-com-avatar .msg-texto {
+  background: linear-gradient(160deg, rgba(30, 50, 80, 0.8), rgba(15, 30, 50, 0.7));
+  border-color: rgba(56, 189, 248, 0.3);
+  color: #e0f2fe;
+  box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.2),
+              0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+body.tema-escuro .barra-msg {
+  background: linear-gradient(180deg, rgba(20, 30, 50, 0.5), rgba(15, 25, 45, 0.7));
+  border-color: rgba(56, 189, 248, 0.2);
+}
+
+body.tema-escuro .lista li {
+  background: linear-gradient(160deg, rgba(30, 50, 80, 0.7), rgba(15, 30, 50, 0.6));
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+body.tema-escuro .lista li:hover {
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 8px 24px rgba(14, 165, 233, 0.3), var(--glow-ciano);
+}
+
+body.tema-escuro .nome {
+  color: #e0f2fe;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+body.tema-escuro .email,
+body.tema-escuro .preview {
+  color: #93c5fd;
+}
+
+body.tema-escuro .modal,
+body.tema-escuro .modal-servidor,
+body.tema-escuro .modal-editar-servidor {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+body.tema-escuro .modal-card {
+  background: linear-gradient(160deg,
+    rgba(20, 30, 50, 0.95), rgba(15, 25, 45, 0.9));
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+body.tema-escuro .membro-item {
+  color: #93c5fd;
+}
+
+body.tema-escuro .membro-item:hover {
+  background: rgba(56, 189, 248, 0.15);
+}
+
+body.tema-escuro .notif {
+  background: linear-gradient(160deg, rgba(30, 50, 80, 0.95), rgba(15, 30, 50, 0.9));
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+body.tema-escuro .notif-titulo {
+  color: #e0f2fe;
+}
+
+body.tema-escuro .notif-onde,
+body.tema-escuro .notif-texto {
+  color: #93c5fd;
+}
+
+body.tema-escuro .emoji-picker {
+  background: linear-gradient(180deg, rgba(20, 30, 50, 0.98), rgba(15, 25, 45, 0.95));
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+body.tema-escuro .emoji-grid span:hover {
+  background: rgba(56, 189, 248, 0.3);
+}
+
+body.tema-escuro ::-webkit-scrollbar-track {
+  background: rgba(10, 20, 40, 0.4);
+}
+body.tema-escuro ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.7), rgba(30, 90, 142, 0.6));
+}
+
+body.tema-escuro .avatar {
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: inset 0 1px 0 rgba(56, 189, 248, 0.2),
+              0 2px 8px rgba(14, 165, 233, 0.3);
+}
+
+body.tema-escuro ::selection {
+  background: rgba(56, 189, 248, 0.4);
+  color: #e0f2fe;
+}
   </style>
 </head>
 <body>
@@ -2363,6 +2627,12 @@
             <div><div>Mostrar "digitando"</div><span class="config-desc">Vê quando alguém está digitando</span></div>
           </div>
           <div class="toggle"><input type="checkbox" id="cfg-digitando"><span class="slider"></span></div>
+          <div class="config-item">
+  <label class="config-label">
+    <span>🌙 Modo escuro (Frutiger Aero Dark)</span>
+    <input type="checkbox" id="cfg-dark-mode">
+  </label>
+</div>
         </label>
       </div>
       <div class="acoes">
