@@ -123,7 +123,8 @@ function exigirAuth(req, res, next) {
   if (!u) return res.status(401).json({ erro: 'Não logado' });
   const usuarioAtual = db.buscarUsuarioPorId(u.id);
   if (!usuarioAtual) {
-    limparCookies(res);
+    // 🔥 CORREÇÃO: passa req
+    limparCookies(req, res);
     return res.status(401).json({ erro: 'Usuário não existe' });
   }
   req.usuario = u;
@@ -148,9 +149,21 @@ function setarCookieToken(req, res, token) {
   });
 }
 
-function limparCookies(res) {
-  res.clearCookie('token', { path: '/' });
-  res.clearCookie('connect.sid', { path: '/' });
+// 🔥 CORREÇÃO: limparCookies recebe req pra pegar o host correto
+function limparCookies(req, res) {
+  const host = req.headers.host || '';
+  const hostSemPorta = host.split(':')[0];
+  const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
+
+  const opcoes = {
+    path: '/',
+    secure: !ehLocalhost,
+    sameSite: 'strict',
+    ...(ehLocalhost ? {} : { domain: hostSemPorta }),
+  };
+
+  res.clearCookie('token', opcoes);
+  res.clearCookie('connect.sid', opcoes);
 }
 
 // ========== UPLOAD ==========
@@ -196,7 +209,8 @@ app.post('/api/cadastro', async (req, res) => {
     const senhaHash = await auth.hashearSenha(senha);
     const usuario = db.criarUsuario({ nome, email, senhaHash });
     const token = auth.gerarToken(usuario);
-    limparCookies(res);
+    // 🔥 CORREÇÃO: passa req
+    limparCookies(req, res);
     setarCookieToken(req, res, token);
     res.json({ ok: true, usuario });
   } catch (e) {
@@ -213,7 +227,8 @@ app.post('/api/login', async (req, res) => {
   const ok = await auth.verificarSenha(senha, usuario.senha_hash);
   if (!ok) return res.status(400).json({ erro: 'Email ou senha inválidos' });
 
-  limparCookies(res);
+  // 🔥 CORREÇÃO: passa req
+  limparCookies(req, res);
 
   const token = auth.gerarToken(usuario);
   setarCookieToken(req, res, token);
@@ -231,7 +246,8 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
-  limparCookies(res);
+  // 🔥 CORREÇÃO: passa req
+  limparCookies(req, res);
   res.json({ ok: true });
 });
 
@@ -240,7 +256,8 @@ app.get('/api/eu', (req, res) => {
   if (!u) return res.status(401).json({ erro: 'Não logado' });
   const usuario = db.buscarUsuarioPorId(u.id);
   if (!usuario) {
-    limparCookies(res);
+    // 🔥 CORREÇÃO: passa req
+    limparCookies(req, res);
     return res.status(401).json({ erro: 'Usuário não existe' });
   }
   res.json({
