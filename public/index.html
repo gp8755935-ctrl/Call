@@ -1972,6 +1972,34 @@
       backdrop-filter: blur(4px); z-index: 400;
     }
     .overlay-mobile.ativo { display: block; }
+    /* 🔥 Drag & drop */
+.chat-area.drag-over,
+.barra-msg.drag-over {
+  outline: 3px dashed var(--agua-1);
+  outline-offset: -8px;
+  background: rgba(56, 189, 248, 0.1) !important;
+  transition: all 0.2s;
+}
+
+.chat-area,
+.barra-msg {
+  position: relative;
+}
+
+.chat-area.drag-over::after,
+.barra-msg.drag-over::after {
+  content: '📎 Solte o arquivo aqui';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--agua-2);
+  pointer-events: none;
+  z-index: 100;
+  text-shadow: 0 2px 8px rgba(255,255,255,0.9);
+}
   </style>
 </head>
 <body>
@@ -2405,4 +2433,4 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/app.js"></script>
 </body>
-</html>
+</html> 

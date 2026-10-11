@@ -875,7 +875,10 @@ async function fazerCadastro() {
 async function fazerLogout() {
   if (!confirm('Sair?')) return;
   try { await fetch('/api/logout', { method: 'POST' }); } catch (e) {}
-  try { localStorage.setItem('void-logout', Date.now()); } catch (e) {}
+  try {
+    localStorage.setItem('void-logout', Date.now());
+    localStorage.removeItem('void-ultima-tela');
+  } catch (e) {}
   if (socket) { socket.disconnect(); socket = null; }
   location.reload();
 }
@@ -894,6 +897,11 @@ function entrarNoApp(usuario) {
   carregarServidores();
   carregarAmizades();
   pedirPermissaoNotificacoes();
+
+  // 🔥 Tenta restaurar a última tela
+  setTimeout(async () => {
+    await restaurarUltimaTela();
+  }, 1200);
 }
 
 // ============================================================
@@ -1189,7 +1197,15 @@ function conectarSocket() {
     servidores = servidores.filter((s) => s.id !== servidor_id);
     if (servidorAtivo && servidorAtivo.servidor.id === servidor_id) {
       servidorAtivo = null;
+      canalAtivo = null;
       document.getElementById('sidebar-canais').style.display = 'none';
+      document.getElementById('chat-canal').innerHTML = '';
+      document.getElementById('titulo-main').textContent = 'Selecione um canal';
+      telaAtual = 'home';
+      document.getElementById('app').classList.remove('canal-ativo');
+      esconderTelasMain();
+      document.getElementById('tela-canal').classList.add('ativa');
+      document.getElementById('tela-canal').classList.remove('tem-canal');
     }
     renderizarServidores();
     mostrarNotificacaoVisual({
@@ -1725,7 +1741,15 @@ function abrirMenuServidor(event, s) {
           servidores = servidores.filter((x) => x.id !== s.id);
           if (servidorAtivo && servidorAtivo.servidor.id === s.id) {
             servidorAtivo = null;
+            canalAtivo = null;
             document.getElementById('sidebar-canais').style.display = 'none';
+            document.getElementById('chat-canal').innerHTML = '';
+            document.getElementById('titulo-main').textContent = 'Selecione um canal';
+            telaAtual = 'home';
+            document.getElementById('app').classList.remove('canal-ativo');
+            esconderTelasMain();
+            document.getElementById('tela-canal').classList.add('ativa');
+            document.getElementById('tela-canal').classList.remove('tem-canal');
           }
           renderizarServidores();
         },
@@ -1740,7 +1764,15 @@ function abrirMenuServidor(event, s) {
           servidores = servidores.filter((x) => x.id !== s.id);
           if (servidorAtivo && servidorAtivo.servidor.id === s.id) {
             servidorAtivo = null;
+            canalAtivo = null;
             document.getElementById('sidebar-canais').style.display = 'none';
+            document.getElementById('chat-canal').innerHTML = '';
+            document.getElementById('titulo-main').textContent = 'Selecione um canal';
+            telaAtual = 'home';
+            document.getElementById('app').classList.remove('canal-ativo');
+            esconderTelasMain();
+            document.getElementById('tela-canal').classList.add('ativa');
+            document.getElementById('tela-canal').classList.remove('tem-canal');
           }
           renderizarServidores();
         },
@@ -1901,6 +1933,8 @@ async function abrirCanal(canal) {
   telaCanal.classList.add('ativa');
 
   if (window.innerWidth <= 768) fecharSidebarMobile();
+
+  setTimeout(() => salvarUltimaTela(), 100);
 }
 
 async function criarCanalPrompt() {
@@ -1992,6 +2026,14 @@ function criarElMsg(m, chatId, contexto) {
   const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(usuarioMsg).replace(/"/g, '&quot;')})`;
   const textoHTML = m.texto ? `<div class="msg-texto">${escapeHtml(m.texto)}</div>` : '';
 
+  // 🔥 Só mostra botão editar se tiver texto
+  const temTextoEditavel = m.texto && m.texto.trim().length > 0;
+
+  const botoesExtras = ehMinha ? `
+    ${temTextoEditavel ? `<button onclick="iniciarEdicao('${chatId}', ${m.id}, '${contexto}')" title="Editar">✏️</button>` : ''}
+    <button class="perigo" onclick="deletarMsg('${chatId}', ${m.id}, '${contexto}')" title="Deletar">🗑️</button>
+  ` : '';
+
   div.innerHTML = `
     <div class="msg-reply-hint">↩️</div>
     ${avatarHTML(usuarioMsg, '', onclickAttr)}
@@ -2008,10 +2050,7 @@ function criarElMsg(m, chatId, contexto) {
     </div>
     <div class="msg-acoes">
       <button class="btn-reagir" onclick="abrirPickerReacao(event, this, '${contexto}', ${m.id})" title="Reagir">😀</button>
-      ${ehMinha ? `
-        <button onclick="iniciarEdicao('${chatId}', ${m.id}, '${contexto}')" title="Editar">✏️</button>
-        <button class="perigo" onclick="deletarMsg('${chatId}', ${m.id}, '${contexto}')" title="Deletar">🗑️</button>
-      ` : ''}
+      ${botoesExtras}
     </div>
   `;
 
@@ -2604,6 +2643,8 @@ async function abrirConversa(amigo) {
   el.innerHTML = '';
   (d2.mensagens || []).forEach(adicionarMsgDM);
   document.getElementById('input-dm').focus();
+
+  setTimeout(() => salvarUltimaTela(), 100);
 }
 
 async function enviarMsgDM() {
@@ -3596,6 +3637,133 @@ function fecharSidebarMobile() {
 }
 
 // ============================================================
+// 🔥 DRAG & DROP de arquivos
+// ============================================================
+
+function configurarDragDrop() {
+  const alvos = [
+    { el: document.querySelector('#tela-canal .chat-area'), contexto: 'canal' },
+    { el: document.getElementById('chat-canal'), contexto: 'canal' },
+    { el: document.getElementById('chat-dm'), contexto: 'dm' },
+    { el: document.querySelector('#tela-conversa .chat-area'), contexto: 'dm' },
+    { el: document.getElementById('input-canal'), contexto: 'canal' },
+    { el: document.getElementById('input-dm'), contexto: 'dm' },
+  ];
+
+  alvos.forEach(({ el, contexto }) => {
+    if (!el || el.dataset.dragConfigurado === '1') return;
+    el.dataset.dragConfigurado = '1';
+
+    el.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.add('drag-over');
+    });
+
+    el.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.remove('drag-over');
+    });
+
+    el.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.remove('drag-over');
+
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+
+      for (const file of files) {
+        await processarArquivoDrop(file, contexto);
+      }
+    });
+  });
+}
+
+async function processarArquivoDrop(file, contexto) {
+  const mime = file.type || '';
+  let tipo = 'arquivo';
+
+  if (mime.startsWith('image/')) tipo = 'foto';
+  else if (mime.startsWith('video/')) tipo = 'video';
+
+  mostrarNotificacaoVisual({
+    tipo: 'dm',
+    deNome: 'Enviando arquivo...',
+    ondeTexto: `📎 ${file.name}`,
+    texto: `${(file.size / 1024).toFixed(1)} KB`,
+    silencioso: true,
+    acoes: null,
+  });
+
+  await enviarComUpload(file, tipo, contexto);
+}
+
+// ============================================================
+// 🔥 RESTAURAR ÚLTIMA TELA
+// ============================================================
+
+function salvarUltimaTela() {
+  try {
+    if (telaAtual === 'canal' && canalAtivo) {
+      localStorage.setItem('void-ultima-tela', JSON.stringify({
+        tipo: 'canal',
+        canalId: canalAtivo.id,
+        servidorId: servidorAtivo?.servidor?.id || null,
+      }));
+    } else if (telaAtual === 'conversa' && conversaAtual) {
+      localStorage.setItem('void-ultima-tela', JSON.stringify({
+        tipo: 'dm',
+        amigoId: conversaAtual.amigo.id,
+        conversaId: conversaAtual.conversa_id,
+      }));
+    }
+  } catch (e) {}
+}
+
+async function restaurarUltimaTela() {
+  try {
+    const salvo = localStorage.getItem('void-ultima-tela');
+    if (!salvo) return false;
+    const dados = JSON.parse(salvo);
+
+    if (dados.tipo === 'canal' && dados.canalId) {
+      const r = await fetch(`/api/canais/${dados.canalId}/mensagens`);
+      if (!r.ok) {
+        localStorage.removeItem('void-ultima-tela');
+        return false;
+      }
+      const s = servidores.find((x) => x.id === dados.servidorId);
+      if (!s) {
+        localStorage.removeItem('void-ultima-tela');
+        return false;
+      }
+      await abrirServidor(dados.servidorId);
+      const canal = servidorAtivo?.canais?.find((c) => c.id === dados.canalId);
+      if (canal) {
+        await abrirCanal(canal);
+        return true;
+      }
+    } else if (dados.tipo === 'dm' && dados.amigoId) {
+      const r = await fetch('/api/amizades');
+      if (!r.ok) return false;
+      const amz = await r.json();
+      const amigo = amz.amigos.find((a) => a.id === dados.amigoId);
+      if (!amigo) {
+        localStorage.removeItem('void-ultima-tela');
+        return false;
+      }
+      await abrirConversa(amigo);
+      return true;
+    }
+  } catch (e) {
+    console.warn('Erro ao restaurar última tela:', e);
+  }
+  return false;
+}
+
+// ============================================================
 // 🔥 KEEP-ALIVE — Mantém a conexão viva no celular
 // ============================================================
 
@@ -3696,6 +3864,9 @@ window.addEventListener('load', async () => {
 
   montarEmojiPicker();
   montarPickerReacao();
+
+  // 🔥 Configura drag & drop
+  setTimeout(configurarDragDrop, 500);
 
   window.addEventListener('storage', (e) => {
     if (e.key === 'void-logout') {
