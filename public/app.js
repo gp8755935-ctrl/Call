@@ -1450,12 +1450,22 @@ function montarEmojiPicker() {
     }
     el.innerHTML = html;
 
-    el.addEventListener('click', (e) => {
-      const span = e.target.closest('span[data-emoji]');
-      if (!span) return;
-      e.stopPropagation();
-      inserirEmoji(id, span.getAttribute('data-emoji'));
-    });
+   el.addEventListener('click', async (e) => {
+  if (e.target.closest('.notif-close') || e.target.closest('.notif-acoes button')) return;
+  if (moveu) return;
+  
+  // 🔥 Fecha a notificação ANTES de navegar (não bloqueia)
+  fecharNotif();
+  
+  // 🔥 Aguarda o clique fazer a navegação
+  if (typeof aoClicar === 'function') {
+    try {
+      await aoClicar();
+    } catch (err) {
+      console.warn('Erro ao clicar na notificação:', err);
+    }
+  }
+});
   });
 }
 
