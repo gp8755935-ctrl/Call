@@ -632,10 +632,19 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   filter: none !important;
   opacity: 1 !important;
   position: relative;
+  box-sizing: border-box;
 }
 .avatar.mini { width: 28px; height: 28px; font-size: 12px; border-width: 1.5px; }
 .avatar.grande { width: 96px; height: 96px; font-size: 36px; border-width: 3px; }
-.avatar.gigante { width: 110px; height: 110px; font-size: 40px; border-width: 4px; }
+.avatar.gigante {
+  width: 110px;
+  height: 110px;
+  font-size: 40px;
+  border-width: 4px;
+  max-width: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+}
 .avatar img {
   width: 100%; height: 100%; object-fit: cover;
   display: block; filter: none !important;
@@ -1190,7 +1199,7 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
 .fechar-img:hover { background: white; transform: scale(1.1); }
 
 /* ============================================================
-   MODAL CONFIG — CORRIGIDO (scroll DENTRO do modal)
+   MODAL CONFIG
    ============================================================ */
 .config-lista {
   display: flex; flex-direction: column; gap: 6px;
@@ -1517,7 +1526,7 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
 }
 
 /* ============================================================
-   MODAIS BASE — CORRIGIDOS (scroll DENTRO do modal)
+   MODAIS BASE
    ============================================================ */
 .modal-bg {
   display: none; position: fixed; inset: 0;
@@ -1579,7 +1588,6 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   margin-top: 20px; position: relative; z-index: 1;
 }
 
-/* Scroll interno da lista de config */
 .modal .config-lista {
   overflow-y: auto;
   overflow-x: hidden;
@@ -1607,7 +1615,7 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
 }
 
 /* ============================================================
-   PERFIL — ESTILO ANTIGO (Frutiger Aero)
+   PERFIL
    ============================================================ */
 .modal-perfil {
   padding: 0 !important;
@@ -1665,28 +1673,42 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   text-shadow: 0 1px 3px rgba(0,0,0,0.4);
   z-index: 2;
 }
+
+/* 🔥 WRAPPER DO AVATAR — força tamanho quadrado */
 .perfil-avatar-wrapper {
   margin-top: -55px;
   margin-left: 28px;
   position: relative;
   z-index: 2;
-  display: inline-block;
+  display: block;
+  width: 110px;
+  height: 110px;
   flex-shrink: 0;
 }
-/* 🔥 CORREÇÃO: overflow hidden pra cortar o overlay na forma da bolinha */
+
+/* 🔥 CONTAINER DO AVATAR — quadrado, redondo, corta o overlay */
 .perfil-avatar-wrapper .avatar-container {
   cursor: pointer;
   position: relative;
   border-radius: 50%;
   overflow: hidden;
   transition: transform 0.2s;
+  width: 110px;
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 .perfil-avatar-wrapper .avatar-container:hover { transform: scale(1.03); }
 
-/* 🔥 CORREÇÃO: overlay dentro da bolinha, sem vazar */
+/* 🔥 OVERLAY DO AVATAR — círculo exato, dentro da bolinha */
 .avatar-overlay {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 110px;
+  height: 110px;
   border-radius: 50%;
   overflow: hidden;
   background: rgba(2, 132, 199, 0.55);
@@ -1699,9 +1721,9 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   transition: opacity 0.2s;
   pointer-events: none;
   z-index: 3;
-  width: 100%;
-  height: 100%;
+  box-sizing: border-box;
 }
+
 .perfil-info {
   padding: 14px 28px 8px;
   position: relative;
@@ -2078,12 +2100,31 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   .tela-main h3 { font-size: 20px; }
   .auth-card { padding: 28px 22px; border-radius: 24px; }
   .auth-logo h1 { font-size: 38px; }
-  .avatar.gigante { width: 90px; height: 90px; font-size: 32px; }
+  .avatar.gigante {
+    width: 90px;
+    height: 90px;
+    font-size: 32px;
+    max-width: 100%;
+    max-height: 100%;
+  }
+  .perfil-avatar-wrapper {
+    width: 90px;
+    height: 90px;
+    margin-top: -45px;
+    margin-left: 20px;
+  }
+  .perfil-avatar-wrapper .avatar-container {
+    width: 90px;
+    height: 90px;
+  }
+  .avatar-overlay {
+    width: 90px;
+    height: 90px;
+  }
   .barra-usuario { left: 10px; bottom: 10px; width: 48px; height: 48px; }
   .barra-usuario .avatar { width: 38px; height: 38px; }
   .modal-perfil { max-width: 100% !important; margin: 10px; }
   .perfil-banner { height: 110px; }
-  .perfil-avatar-wrapper { margin-top: -45px; margin-left: 20px; }
   .editor-preview-wrapper { padding: 10px; margin: 10px 0; }
   .modal-editor { max-width: 100% !important; margin: 10px; }
   .msg-acoes { top: -14px; right: 4px; padding: 6px 10px; }
@@ -2122,7 +2163,7 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
 .overlay-mobile.ativo { display: block; }
 
 /* ============================================================
-   🌙 MODO ESCURO — FRUTIGER AERO DARK
+   🌙 MODO ESCURO
    ============================================================ */
 body.tema-escuro {
   --ceu-1: #0a1628;
@@ -2417,9 +2458,8 @@ body.tema-escuro .modal-fechar:hover {
 }
 
 /* ============================================================
-   🌙 AJUSTES FINOS DO MODO ESCURO — V3
+   🌙 AJUSTES FINOS DO MODO ESCURO
    ============================================================ */
-
 body.tema-escuro .barra-msg {
   border-top: 2px solid rgba(56, 189, 248, 0.25) !important;
   box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.1) !important;
