@@ -11,7 +11,15 @@ const auth = require('./auth');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+
+// 🔥 FORÇA websocket puro + CORS (evita problemas de polling entre instâncias)
+const io = new Server(server, {
+  transports: ['websocket'],
+  cors: {
+    origin: true,
+    credentials: true,
+  },
+});
 
 // 🔥 Detecta se está em produção (atrás de proxy)
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -40,18 +48,31 @@ const TIPOS_PERMITIDOS = {
 const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } });
 
 // ============================================================
-// 🔥 CORREÇÃO CRÍTICA — Anti-cache + headers de segurança
+// 🔥 ANTI-CACHE AGRESSIVO (prioridade máxima)
 // ============================================================
 app.use((req, res, next) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.setHeader('Surrogate-Control', 'no-store');
-  res.setHeader('CDN-Cache-Control', 'no-store'); // 🔥 NOVO — específico do Render
-  // 🔥 Segurança extra
+  res.setHeader('CDN-Cache-Control', 'no-store');
+  res.setHeader('Cloudflare-CDN-Cache-Control', 'no-store');
+  res.setHeader('Vary', 'Cookie, Authorization');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
+
+// 🔥 ANTI-CACHE AINDA MAIS AGRESSIVO pra /api/*
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  res.setHeader('CDN-Cache-Control', 'no-store');
+  res.setHeader('Cloudflare-CDN-Cache-Control', 'no-store');
+  res.setHeader('Vary', 'Cookie, Authorization');
   next();
 });
 
@@ -69,7 +90,6 @@ app.use((req, res, next) => {
   const host = req.headers.host || '';
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
 
-  // Se não for local, exige HTTPS
   if (!ehLocalhost) {
     const proto = req.headers['x-forwarded-proto'] || req.protocol;
     if (proto !== 'https') {
@@ -111,17 +131,20 @@ function exigirAuth(req, res, next) {
   next();
 }
 
-// 🔥 Cookie mais seguro — sempre Secure quando não for localhost, SameSite STRICT
+// 🔥 Cookie SEGURO — host específico, sem Domain=.onrender.com
 function setarCookieToken(req, res, token) {
   const host = req.headers.host || '';
+  const hostSemPorta = host.split(':')[0];
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
 
   res.cookie('token', token, {
     httpOnly: true,
-    sameSite: 'strict',   // 🔥 MUDOU DE 'lax' PRA 'strict'
-    secure: !ehLocalhost, // 🔥 Secure sempre que não for local
+    sameSite: 'strict',
+    secure: !ehLocalhost,
     maxAge: 30 * 24 * 60 * 60 * 1000,
     path: '/',
+    // 🔥 Especifica o host exato pra evitar vazamento entre subdomínios
+    ...(ehLocalhost ? {} : { domain: hostSemPorta }),
   });
 }
 
@@ -173,7 +196,6 @@ app.post('/api/cadastro', async (req, res) => {
     const senhaHash = await auth.hashearSenha(senha);
     const usuario = db.criarUsuario({ nome, email, senhaHash });
     const token = auth.gerarToken(usuario);
-    // 🔥 Limpa cookies antigos ANTES de setar o novo
     limparCookies(res);
     setarCookieToken(req, res, token);
     res.json({ ok: true, usuario });
@@ -191,7 +213,6 @@ app.post('/api/login', async (req, res) => {
   const ok = await auth.verificarSenha(senha, usuario.senha_hash);
   if (!ok) return res.status(400).json({ erro: 'Email ou senha inválidos' });
 
-  // 🔥 Limpa cookies antigos ANTES de setar o novo
   limparCookies(res);
 
   const token = auth.gerarToken(usuario);
