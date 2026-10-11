@@ -2406,6 +2406,308 @@ body.tema-escuro .modal-fechar:hover {
   background: rgba(56, 189, 248, 0.3);
   color: #e0f2fe;
 }
+/* ============================================================
+   🌙 AJUSTES FINOS DO MODO ESCURO — V2
+   ============================================================ */
+
+/* 1. Modal h3 (títulos) no dark */
+body.tema-escuro .modal h3,
+body.tema-escuro #modal-config h3 {
+  color: #e0f2fe !important;
+  text-shadow: 0 2px 0 rgba(56, 189, 248, 0.3),
+               0 4px 12px rgba(14, 165, 233, 0.5) !important;
+}
+
+/* 2. Remover "glow branco" dos textos no dark */
+body.tema-escuro .config-label,
+body.tema-escuro .topo-servidor .nome,
+body.tema-escuro .secao,
+body.tema-escuro .canal-item,
+body.tema-escuro .email,
+body.tema-escuro .preview,
+body.tema-escuro .info,
+body.tema-escuro .nome,
+body.tema-escuro .tela-main h3,
+body.tema-escuro .tela-main h4,
+body.tema-escuro .digitando-bar,
+body.tema-escuro .media-tempo,
+body.tema-escuro .painel-membros-topo h4 {
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5) !important;
+}
+
+/* 3. Botões secundários nos modais */
+body.tema-escuro .modal .acoes button.secundario,
+body.tema-escuro .perfil-acoes button.silenciar,
+body.tema-escuro .notif-acoes .btn-recusar {
+  background: linear-gradient(180deg, rgba(30, 50, 80, 0.95), rgba(15, 30, 50, 0.9)) !important;
+  color: #93c5fd !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+}
+body.tema-escuro .modal .acoes button.secundario:hover,
+body.tema-escuro .perfil-acoes button.silenciar:hover,
+body.tema-escuro .notif-acoes .btn-recusar:hover {
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.3), rgba(30, 90, 142, 0.6)) !important;
+  color: #e0f2fe !important;
+}
+
+/* 4. Menu de contexto e menu de anexo */
+body.tema-escuro #menu-contexto,
+body.tema-escuro #menu-anexo {
+  background: linear-gradient(180deg,
+    rgba(20, 30, 50, 0.98) 0%,
+    rgba(10, 20, 40, 0.95) 100%) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7),
+              0 0 30px rgba(14, 165, 233, 0.25) !important;
+}
+body.tema-escuro #menu-contexto .menu-titulo {
+  color: #93c5fd !important;
+  border-bottom-color: rgba(56, 189, 248, 0.3) !important;
+}
+body.tema-escuro #menu-contexto button,
+body.tema-escuro #menu-anexo button {
+  color: #93c5fd !important;
+  text-shadow: none !important;
+  background: transparent !important;
+  border: none !important;
+}
+body.tema-escuro #menu-contexto button:hover,
+body.tema-escuro #menu-anexo button:hover {
+  background: rgba(56, 189, 248, 0.15) !important;
+  color: #e0f2fe !important;
+}
+body.tema-escuro #menu-contexto button.perigo {
+  color: #fca5a5 !important;
+}
+body.tema-escuro #menu-contexto button.perigo:hover {
+  background: rgba(220, 38, 38, 0.2) !important;
+  color: #fecaca !important;
+}
+body.tema-escuro #menu-anexo button .menu-emoji {
+  color: #93c5fd !important;
+}
+body.tema-escuro #menu-anexo button .menu-desc {
+  color: #93c5fd !important;
+}
+
+/* 5. Barra de "digitando..." */
+body.tema-escuro .digitando-bar {
+  background: linear-gradient(180deg, rgba(20, 30, 50, 0.4), rgba(15, 25, 45, 0.1)) !important;
+  color: #93c5fd !important;
+}
+body.tema-escuro .digitando-dots span {
+  background: #93c5fd !important;
+}
+
+/* 6. Media player */
+body.tema-escuro .media-player,
+body.tema-escuro .media-player-video-wrap {
+  background: linear-gradient(160deg, rgba(30, 50, 80, 0.9), rgba(15, 30, 50, 0.8)) !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+  box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.15),
+              inset 0 -2px 6px rgba(0, 0, 0, 0.3),
+              0 4px 14px rgba(0, 0, 0, 0.4) !important;
+}
+body.tema-escuro .media-progresso-track,
+body.tema-escuro .media-volume-track {
+  background: rgba(10, 20, 40, 0.7) !important;
+}
+body.tema-escuro .media-tempo {
+  color: #93c5fd !important;
+}
+body.tema-escuro .media-player-video-wrap .media-player {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* 7. Painel de membros */
+body.tema-escuro .painel-membros {
+  background: linear-gradient(180deg,
+    rgba(20, 30, 50, 0.98) 0%,
+    rgba(10, 20, 40, 0.95) 100%) !important;
+  border-left-color: rgba(56, 189, 248, 0.3) !important;
+  box-shadow: -8px 0 40px rgba(0, 0, 0, 0.7) !important;
+}
+body.tema-escuro .painel-membros-topo {
+  background: linear-gradient(135deg, rgba(30, 50, 80, 0.9), rgba(15, 30, 50, 0.8)) !important;
+  border-bottom-color: rgba(56, 189, 248, 0.3) !important;
+}
+body.tema-escuro .painel-membros-topo h4 {
+  color: #e0f2fe !important;
+}
+body.tema-escuro .painel-membros-topo .btn-fechar-painel {
+  background: rgba(30, 50, 80, 0.8) !important;
+  color: #93c5fd !important;
+}
+body.tema-escuro .painel-membros-topo .btn-fechar-painel:hover {
+  background: rgba(56, 189, 248, 0.3) !important;
+  color: #e0f2fe !important;
+}
+
+/* 8. Hover da lista */
+body.tema-escuro .lista li:hover {
+  background: linear-gradient(160deg, rgba(56, 189, 248, 0.2), rgba(30, 50, 80, 0.8)) !important;
+  border-color: rgba(56, 189, 248, 0.6) !important;
+}
+
+/* 9. Notificações */
+body.tema-escuro .notif-close {
+  background: rgba(56, 189, 248, 0.15) !important;
+  color: #93c5fd !important;
+}
+body.tema-escuro .notif-close:hover {
+  background: rgba(56, 189, 248, 0.3) !important;
+  color: #e0f2fe !important;
+}
+
+/* 10. Botões do chat */
+body.tema-escuro .barra-msg button {
+  box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.4),
+              inset 0 -2px 4px rgba(0, 0, 0, 0.3),
+              0 4px 12px rgba(14, 165, 233, 0.4) !important;
+}
+body.tema-escuro .anexo-btn,
+body.tema-escuro .emoji-btn {
+  color: #93c5fd !important;
+}
+body.tema-escuro .anexo-btn:hover,
+body.tema-escuro .emoji-btn:hover {
+  background: rgba(56, 189, 248, 0.2) !important;
+}
+
+/* 11. Botão hamburger e membros */
+body.tema-escuro .btn-hamburger {
+  background: linear-gradient(180deg, rgba(30, 50, 80, 0.9), rgba(15, 30, 50, 0.8)) !important;
+  color: #93c5fd !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+}
+body.tema-escuro .btn-membros-servidor {
+  background: rgba(30, 50, 80, 0.8) !important;
+  color: #93c5fd !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+}
+body.tema-escuro .btn-membros-servidor:hover {
+  background: rgba(56, 189, 248, 0.3) !important;
+  color: #e0f2fe !important;
+}
+
+/* 12. Seção de canais */
+body.tema-escuro .secao {
+  color: #93c5fd !important;
+}
+
+/* 13. Auth card no dark */
+body.tema-escuro .auth-logo p {
+  color: #93c5fd !important;
+}
+body.tema-escuro .abas-auth {
+  background: rgba(30, 50, 80, 0.6) !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+}
+body.tema-escuro .aba-auth {
+  color: #93c5fd !important;
+}
+body.tema-escuro .aba-auth.ativa {
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.5), var(--agua-1) 45%, var(--agua-2)) !important;
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* 14. Erros no dark */
+body.tema-escuro .erro {
+  color: #fca5a5 !important;
+}
+
+/* 15. Digitando bar */
+body.tema-escuro .digitando-bar {
+  background: linear-gradient(180deg, rgba(20, 30, 50, 0.4), rgba(15, 25, 45, 0.1)) !important;
+}
+
+/* 16. Botão "Fechar" do modal */
+body.tema-escuro .modal .acoes button.secundario {
+  background: linear-gradient(180deg, rgba(30, 50, 80, 0.95), rgba(15, 30, 50, 0.9)) !important;
+  color: #93c5fd !important;
+}
+
+/* 17. Editor de imagem */
+body.tema-escuro .editor-preview-wrapper {
+  background: rgba(10, 20, 40, 0.6) !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+}
+body.tema-escuro #editor-canvas {
+  background: rgba(20, 30, 50, 0.6) !important;
+}
+
+/* 18. Botões de reação no dark */
+body.tema-escuro .reacao-pill {
+  background: rgba(30, 50, 80, 0.85) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4) !important;
+}
+body.tema-escuro .reacao-pill.minha {
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.4), rgba(30, 90, 142, 0.6)) !important;
+  border-color: var(--agua-1) !important;
+}
+body.tema-escuro .reacao-pill .reacao-count {
+  color: #93c5fd !important;
+}
+
+/* 19. Reacao picker */
+body.tema-escuro #reacao-picker-global {
+  background: linear-gradient(180deg, rgba(20, 30, 50, 0.98), rgba(15, 25, 45, 0.95)) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+}
+
+/* 20. Msg anexo arquivo */
+body.tema-escuro .msg-anexo-arquivo {
+  background: linear-gradient(160deg, rgba(30, 50, 80, 0.8), rgba(15, 30, 50, 0.7)) !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+  color: #e0f2fe !important;
+}
+body.tema-escuro .msg-anexo-arquivo .arquivo-tam {
+  color: #93c5fd !important;
+}
+
+/* 21. Reply citação */
+body.tema-escuro .msg-reply-citacao {
+  background: rgba(30, 50, 80, 0.5) !important;
+  color: #93c5fd !important;
+}
+body.tema-escuro .msg-reply-citacao .reply-autor {
+  color: #7dd3fc !important;
+}
+body.tema-escuro .barra-reply {
+  background: linear-gradient(180deg, rgba(20, 30, 50, 0.6), rgba(30, 90, 142, 0.4)) !important;
+  color: #93c5fd !important;
+}
+
+/* 22. Barra de upload */
+body.tema-escuro .upload-barra {
+  background: linear-gradient(180deg, rgba(30, 50, 80, 0.9), rgba(15, 30, 50, 0.85)) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+}
+body.tema-escuro .upload-barra .upload-label {
+  color: #e0f2fe !important;
+}
+body.tema-escuro .upload-barra .upload-track {
+  background: rgba(10, 20, 40, 0.6) !important;
+}
+
+/* 23. Barra de gravação */
+body.tema-escuro .barra-gravacao {
+  background: linear-gradient(180deg, rgba(20, 30, 50, 0.5), rgba(15, 25, 45, 0.7)) !important;
+  border-color: rgba(56, 189, 248, 0.2) !important;
+}
+body.tema-escuro .gravacao-timer {
+  color: #e0f2fe !important;
+}
+body.tema-escuro .gravacao-dica {
+  color: #93c5fd !important;
+}
+body.tema-escuro .gravacao-acoes .btn-cancelar-grav {
+  background: rgba(30, 50, 80, 0.8) !important;
+  color: #93c5fd !important;
+}
   </style>
 </head>
 <body>
