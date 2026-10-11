@@ -254,6 +254,7 @@
     /* SIDEBAR SERVIDORES */
     .sidebar-servidores {
       width: 80px;
+      position: relative;
       background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(186,230,253,0.35));
       backdrop-filter: blur(20px) saturate(180%);
       border-right: 2px solid rgba(255,255,255,0.6);
@@ -320,6 +321,26 @@
       width: 100%; height: 100%;
       object-fit: cover; border-radius: 50%;
       display: block;
+    }
+
+    /* 🔥 Avatar do usuário fixo no rodapé da sidebar */
+    .sidebar-servidores #avatar-usuario {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 48px;
+      height: 48px;
+      cursor: pointer;
+      z-index: 10;
+      border: 3px solid rgba(255, 255, 255, 0.95);
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      transition: transform 0.2s;
+    }
+    .sidebar-servidores #avatar-usuario:hover {
+      transform: translateX(-50%) scale(1.1);
+      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.6);
     }
 
     /* SIDEBAR CANAIS */
@@ -474,6 +495,37 @@
     }
     .topo-main .acoes { display: flex; gap: 8px; flex-wrap: wrap; }
 
+    /* 🔥 BOTÕES DO TOPO — corrigidos */
+    .topo-main .acoes button,
+    .topo-main .acoes button.mini {
+      padding: 8px 16px;
+      font-size: 13px;
+      border-radius: 999px;
+      background: linear-gradient(180deg,
+        rgba(255, 255, 255, 0.85) 0%,
+        rgba(186, 230, 253, 0.8) 100%) !important;
+      color: var(--agua-2) !important;
+      border: 2px solid rgba(255, 255, 255, 0.95) !important;
+      font-weight: 800;
+      text-shadow: none !important;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 1),
+                  0 2px 8px rgba(2, 132, 199, 0.2) !important;
+      position: relative;
+      overflow: hidden;
+      min-width: auto;
+      transition: all 0.2s;
+    }
+    .topo-main .acoes button::before { display: none !important; }
+    .topo-main .acoes button:hover {
+      background: linear-gradient(180deg,
+        rgba(255, 255, 255, 1) 0%,
+        rgba(125, 211, 252, 0.9) 100%) !important;
+      color: var(--agua-2) !important;
+      transform: translateY(-2px);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 1),
+                  0 4px 12px rgba(2, 132, 199, 0.35) !important;
+    }
+
     .tela-main { display: none; flex: 1; overflow: hidden; padding: 24px; min-height: 0; }
     #tela-canal.ativa,
     #tela-conversa.ativa {
@@ -526,8 +578,7 @@
       background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.3));
       flex-shrink: 0;
     }
-
-    .avatar {
+        .avatar {
       width: 40px; height: 40px;
       border-radius: 50%;
       object-fit: cover;
@@ -1160,13 +1211,197 @@
       background-clip: padding-box;
     }
 
+    /* 🔥 NOTIFICAÇÕES — CORRIGIDAS */
+    #notif-stack {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 3000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 360px;
+      width: 100%;
+      pointer-events: none;
+    }
+
+    .notif {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px;
+      background: linear-gradient(160deg,
+        rgba(255, 255, 255, 0.98) 0%,
+        rgba(224, 242, 254, 0.95) 100%);
+      border: 2px solid rgba(255, 255, 255, 0.95);
+      border-radius: 18px;
+      box-shadow: 0 10px 30px rgba(2, 132, 199, 0.35),
+                  inset 0 2px 0 rgba(255, 255, 255, 1);
+      pointer-events: auto;
+      cursor: pointer;
+      position: relative;
+      width: 100%;
+      box-sizing: border-box;
+      transition: transform 0.2s, opacity 0.2s;
+      animation: notifIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes notifIn {
+      from { transform: translateX(120%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    .notif.entrando { animation: notifIn 0.3s; }
+    .notif.fechando { transition: transform 0.25s, opacity 0.25s; }
+
+    .notif-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: linear-gradient(180deg, #38bdf8, #0284c7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 900;
+      color: white;
+      flex-shrink: 0;
+      overflow: hidden;
+      border: 2px solid rgba(255, 255, 255, 0.9);
+    }
+
+    .notif-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .notif-corpo {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .notif-titulo {
+      font-weight: 900;
+      color: var(--texto-escuro);
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .notif-onde {
+      font-size: 11px;
+      color: var(--texto-medio);
+      font-weight: 700;
+    }
+
+    .notif-texto {
+      font-size: 13px;
+      color: var(--texto-medio);
+      font-weight: 600;
+      margin-top: 2px;
+      word-break: break-word;
+    }
+
+    .notif-acoes {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .notif-acoes button {
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 999px;
+      background: linear-gradient(180deg,
+        rgba(255,255,255,0.5) 0%,
+        rgba(56,189,248,0.9) 45%,
+        rgba(2,132,199,1) 100%);
+      color: white;
+      border: 1.5px solid rgba(255,255,255,0.7);
+      font-weight: 800;
+      cursor: pointer;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.7),
+                  0 2px 8px rgba(2,132,199,0.35);
+      min-width: auto;
+      width: auto;
+    }
+
+    .notif-acoes button::before { display: none; }
+
+    .notif-acoes button:hover {
+      transform: translateY(-1px);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.9),
+                  0 4px 12px rgba(2,132,199,0.5);
+    }
+
+    .notif-close {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border-radius: 50%;
+      background: rgba(2, 132, 199, 0.15);
+      color: var(--texto-medio);
+      border: none;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: none;
+      min-width: auto;
+    }
+
+    .notif-close::before { display: none; }
+    .notif-close:hover {
+      background: rgba(2, 132, 199, 0.3);
+      color: var(--texto-escuro);
+      transform: scale(1.1);
+    }
+
+    /* 🔥 Drag & drop */
+    .chat-area.drag-over,
+    .barra-msg.drag-over {
+      outline: 3px dashed var(--agua-1);
+      outline-offset: -8px;
+      background: rgba(56, 189, 248, 0.1) !important;
+      transition: all 0.2s;
+    }
+
+    .chat-area,
+    .barra-msg {
+      position: relative;
+    }
+
+    .chat-area.drag-over::after,
+    .barra-msg.drag-over::after {
+      content: '📎 Solte o arquivo aqui';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 20px;
+      font-weight: 900;
+      color: var(--agua-2);
+      pointer-events: none;
+      z-index: 100;
+      text-shadow: 0 2px 8px rgba(255,255,255,0.9);
+    }
+
     /* Responsivo Mobile */
     @media (max-width: 768px) {
       .sidebar-canais { width: 220px; }
       .sidebar-servidores { width: 68px; }
     }
-
-    /* ============================================================
+        /* ============================================================
        🌙 MODO ESCURO — FRUTIGER AERO DARK
        ============================================================ */
 
@@ -1299,6 +1534,12 @@
       color: white;
     }
 
+    body.tema-escuro .sidebar-servidores #avatar-usuario {
+      border-color: rgba(56, 189, 248, 0.6);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5),
+                  0 0 12px rgba(14, 165, 233, 0.4);
+    }
+
     body.tema-escuro .canal-item {
       color: #93c5fd;
       text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
@@ -1318,14 +1559,38 @@
       background: linear-gradient(180deg, rgba(15, 25, 45, 0.6), rgba(10, 20, 40, 0.7));
     }
 
+    /* 🔥 Barra do topo — sem branco no modo escuro */
     body.tema-escuro .topo-main {
-      background: linear-gradient(180deg, rgba(20, 30, 50, 0.7), rgba(15, 25, 45, 0.5));
-      border-color: rgba(56, 189, 248, 0.2);
+      background: linear-gradient(180deg,
+        rgba(15, 25, 45, 0.8) 0%,
+        rgba(10, 20, 40, 0.6) 100%) !important;
+      border-bottom: 2px solid rgba(56, 189, 248, 0.3) !important;
+      box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.1) !important;
     }
 
     body.tema-escuro .topo-main h3 {
-      color: #e0f2fe;
-      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+      color: #e0f2fe !important;
+      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6) !important;
+    }
+
+    /* 🔥 Botões do topo no modo escuro */
+    body.tema-escuro .topo-main .acoes button,
+    body.tema-escuro .topo-main .acoes button.mini {
+      background: linear-gradient(180deg,
+        rgba(30, 50, 80, 0.9) 0%,
+        rgba(15, 30, 50, 0.8) 100%) !important;
+      color: #93c5fd !important;
+      border-color: rgba(56, 189, 248, 0.4) !important;
+      box-shadow: inset 0 1px 0 rgba(56, 189, 248, 0.2),
+                  0 2px 8px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    body.tema-escuro .topo-main .acoes button:hover {
+      background: linear-gradient(180deg,
+        rgba(56, 189, 248, 0.3) 0%,
+        rgba(30, 90, 142, 0.6) 100%) !important;
+      color: #e0f2fe !important;
+      border-color: rgba(56, 189, 248, 0.7) !important;
     }
 
     body.tema-escuro .msg-com-avatar .msg-autor {
@@ -1388,9 +1653,15 @@
       background: rgba(56, 189, 248, 0.15);
     }
 
+    /* 🔥 Notificações no modo escuro */
     body.tema-escuro .notif {
-      background: linear-gradient(160deg, rgba(30, 50, 80, 0.95), rgba(15, 30, 50, 0.9));
-      border-color: rgba(56, 189, 248, 0.4);
+      background: linear-gradient(160deg,
+        rgba(20, 30, 50, 0.98) 0%,
+        rgba(10, 20, 40, 0.95) 100%);
+      border-color: rgba(56, 189, 248, 0.5);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7),
+                  0 0 20px rgba(14, 165, 233, 0.2),
+                  inset 0 2px 0 rgba(56, 189, 248, 0.2);
     }
 
     body.tema-escuro .notif-titulo {
@@ -1400,6 +1671,16 @@
     body.tema-escuro .notif-onde,
     body.tema-escuro .notif-texto {
       color: #93c5fd;
+    }
+
+    body.tema-escuro .notif-close {
+      background: rgba(56, 189, 248, 0.2);
+      color: #93c5fd;
+    }
+
+    body.tema-escuro .notif-close:hover {
+      background: rgba(56, 189, 248, 0.4);
+      color: #e0f2fe;
     }
 
     body.tema-escuro .emoji-picker {
@@ -1429,8 +1710,7 @@
       color: #e0f2fe;
     }
 
-    /* 🔥 AJUSTES FINOS DO MODO ESCURO */
-
+    /* AJUSTES FINOS DO MODO ESCURO */
     body.tema-escuro .config-item {
       background: linear-gradient(160deg,
         rgba(30, 50, 80, 0.85) 0%,
@@ -1673,6 +1953,8 @@
     <!-- SIDEBAR SERVIDORES -->
     <div class="sidebar-servidores">
       <div id="lista-servidores"></div>
+      <!-- 🔥 Avatar do usuário fixo no rodapé -->
+      <div id="avatar-usuario" class="avatar" onclick="abrirModalPerfil()" title="Meu perfil"></div>
     </div>
 
     <!-- SIDEBAR CANAIS -->
@@ -1829,7 +2111,7 @@
           </label>
         </div>
 
-        <!-- 🔥 MODO ESCURO — TOGGLE CORRETO -->
+        <!-- 🔥 MODO ESCURO — toggle correto -->
         <div class="config-item">
           <div class="config-icon">🌙</div>
           <div class="config-info">
@@ -2013,9 +2295,8 @@
   <input type="file" id="input-anexo" style="display:none">
 
   <!-- NOTIFICAÇÕES -->
-  <div id="notif-stack" style="position:fixed;top:16px;right:16px;z-index:3000;display:flex;flex-direction:column;gap:8px;pointer-events:none;"></div>
-
-  <!-- 🔥 BOLHAS ANIMADAS (fundo) -->
+  <div id="notif-stack"></div>
+    <!-- 🔥 BOLHAS ANIMADAS (fundo) -->
   <script>
     (function criarBolhas() {
       const container = document.getElementById('bolhas');
