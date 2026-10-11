@@ -12,7 +12,6 @@ const auth = require('./auth');
 const app = express();
 const server = http.createServer(app);
 
-// 🔥 FORÇA websocket puro + CORS (evita problemas de polling entre instâncias)
 const io = new Server(server, {
   transports: ['websocket'],
   cors: {
@@ -21,10 +20,8 @@ const io = new Server(server, {
   },
 });
 
-// 🔥 Detecta se está em produção (atrás de proxy)
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-// 🔥 Confia no proxy (Render/Cloudflare/ngrok) pra pegar IP e protocolo reais
 app.set('trust proxy', 1);
 
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
@@ -64,7 +61,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// 🔥 ANTI-CACHE AINDA MAIS AGRESSIVO pra /api/*
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
   res.setHeader('Pragma', 'no-cache');
@@ -76,7 +72,6 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-// 🔥 Log de debug pra todas as chamadas /api/*
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
     const temCookie = req.cookies && req.cookies.token ? 'SIM' : 'NÃO';
@@ -85,7 +80,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// 🔥 Valida HTTPS quando atrás de proxy
 app.use((req, res, next) => {
   const host = req.headers.host || '';
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
@@ -123,7 +117,6 @@ function exigirAuth(req, res, next) {
   if (!u) return res.status(401).json({ erro: 'Não logado' });
   const usuarioAtual = db.buscarUsuarioPorId(u.id);
   if (!usuarioAtual) {
-    // 🔥 CORREÇÃO: passa req
     limparCookies(req, res);
     return res.status(401).json({ erro: 'Usuário não existe' });
   }
@@ -138,32 +131,45 @@ function setarCookieToken(req, res, token) {
   const hostSemPorta = host.split(':')[0];
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
 
+  // 🔥 SEM domain explícito — o cookie fica restrito ao host exato que setou.
+  // Isso evita vazamento entre subdomínios (ex: dois apps diferentes no *.onrender.com)
   res.cookie('token', token, {
     httpOnly: true,
     sameSite: 'strict',
     secure: !ehLocalhost,
     maxAge: 30 * 24 * 60 * 60 * 1000,
     path: '/',
-    // 🔥 Especifica o host exato pra evitar vazamento entre subdomínios
-    ...(ehLocalhost ? {} : { domain: hostSemPorta }),
   });
 }
 
-// 🔥 CORREÇÃO: limparCookies recebe req pra pegar o host correto
+// 🔥 limparCookies robusto — limpa com VÁRIAS combinações de opções
 function limparCookies(req, res) {
   const host = req.headers.host || '';
   const hostSemPorta = host.split(':')[0];
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
 
-  const opcoes = {
+  // 1) Limpa com as opções originais (com domain, caso exista)
+  const opcoesCompletas = {
     path: '/',
     secure: !ehLocalhost,
     sameSite: 'strict',
     ...(ehLocalhost ? {} : { domain: hostSemPorta }),
   };
+  res.clearCookie('token', opcoesCompletas);
+  res.clearCookie('connect.sid', opcoesCompletas);
 
-  res.clearCookie('token', opcoes);
-  res.clearCookie('connect.sid', opcoes);
+  // 2) Limpa SEM domain (garante que apaga mesmo se o cookie foi setado sem domain)
+  res.clearCookie('token', { path: '/', secure: !ehLocalhost, sameSite: 'strict' });
+  res.clearCookie('connect.sid', { path: '/', secure: !ehLocalhost, sameSite: 'strict' });
+
+  // 3) Limpa SEM secure/samesite (fallback pra navegadores antigos)
+  res.clearCookie('token', { path: '/' });
+  res.clearCookie('connect.sid', { path: '/' });
+
+  // 🔥 Força no-store na resposta do logout
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 }
 
 // ========== UPLOAD ==========
@@ -209,7 +215,6 @@ app.post('/api/cadastro', async (req, res) => {
     const senhaHash = await auth.hashearSenha(senha);
     const usuario = db.criarUsuario({ nome, email, senhaHash });
     const token = auth.gerarToken(usuario);
-    // 🔥 CORREÇÃO: passa req
     limparCookies(req, res);
     setarCookieToken(req, res, token);
     res.json({ ok: true, usuario });
@@ -227,7 +232,6 @@ app.post('/api/login', async (req, res) => {
   const ok = await auth.verificarSenha(senha, usuario.senha_hash);
   if (!ok) return res.status(400).json({ erro: 'Email ou senha inválidos' });
 
-  // 🔥 CORREÇÃO: passa req
   limparCookies(req, res);
 
   const token = auth.gerarToken(usuario);
@@ -246,7 +250,6 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
-  // 🔥 CORREÇÃO: passa req
   limparCookies(req, res);
   res.json({ ok: true });
 });
@@ -256,7 +259,6 @@ app.get('/api/eu', (req, res) => {
   if (!u) return res.status(401).json({ erro: 'Não logado' });
   const usuario = db.buscarUsuarioPorId(u.id);
   if (!usuario) {
-    // 🔥 CORREÇÃO: passa req
     limparCookies(req, res);
     return res.status(401).json({ erro: 'Usuário não existe' });
   }
@@ -817,7 +819,6 @@ app.delete('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) 
 
 // ========== SOCKET.IO ==========
 
-// 🔥 Middleware de auth do socket — pega o ÚLTIMO cookie token
 io.use((socket, next) => {
   try {
     const cookies = socket.request.headers.cookie || '';

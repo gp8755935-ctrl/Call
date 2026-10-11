@@ -911,15 +911,38 @@ async function fazerCadastro() {
   } catch (e) { erroEl.textContent = 'Erro de conexão'; }
 }
 
+// 🔥 LOGOUT CORRIGIDO — evita relogar sozinho
 async function fazerLogout() {
   if (!confirm('Sair?')) return;
-  try { await fetch('/api/logout', { method: 'POST' }); } catch (e) {}
+
+  // 1) Desconecta o socket PRIMEIRO (senão ele reconecta com o cookie antigo)
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+
+  // 2) Chama o logout com credentials e no-store
+  try {
+    const r = await fetch('/api/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    await r.json();
+  } catch (e) {
+    console.warn('Erro no logout:', e);
+  }
+
+  // 3) Limpa estado local
   try {
     localStorage.setItem('void-logout', Date.now());
     localStorage.removeItem('void-ultima-tela');
   } catch (e) {}
-  if (socket) { socket.disconnect(); socket = null; }
-  location.reload();
+
+  // 4) Delay + navegação limpa (não usa location.reload, que pode cachear)
+  setTimeout(() => {
+    window.location.href = '/';
+  }, 300);
 }
 
 function entrarNoApp(usuario) {
@@ -1853,7 +1876,6 @@ function abrirMenuServidor(event, s) {
           if (!r.ok) { alert('Erro ao sair'); return; }
           servidores = servidores.filter((x) => x.id !== s.id);
 
-          // 🔥 LIMPA O CANAL E O CHAT
           if (servidorAtivo && servidorAtivo.servidor.id === s.id) {
             servidorAtivo = null;
             canalAtivo = null;
@@ -2130,7 +2152,6 @@ function criarElMsg(m, chatId, contexto) {
   const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(usuarioMsg).replace(/"/g, '&quot;')})`;
   const textoHTML = m.texto ? `<div class="msg-texto">${escapeHtml(m.texto)}</div>` : '';
 
-  // 🔥 Só mostra botão editar se tiver texto
   const temTextoEditavel = m.texto && m.texto.trim().length > 0;
 
   const botoesExtras = ehMinha ? `

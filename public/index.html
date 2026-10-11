@@ -10,10 +10,6 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
 :root {
   --ceu-1: #bae6fd;
   --ceu-2: #7dd3fc;
@@ -1677,22 +1673,34 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   display: inline-block;
   flex-shrink: 0;
 }
+/* 🔥 CORREÇÃO: overflow hidden pra cortar o overlay na forma da bolinha */
 .perfil-avatar-wrapper .avatar-container {
   cursor: pointer;
   position: relative;
   border-radius: 50%;
+  overflow: hidden;
   transition: transform 0.2s;
 }
 .perfil-avatar-wrapper .avatar-container:hover { transform: scale(1.03); }
+
+/* 🔥 CORREÇÃO: overlay dentro da bolinha, sem vazar */
 .avatar-overlay {
-  position: absolute; inset: 0;
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
-  background: rgba(2, 132, 199, 0.35);
-  display: flex; align-items: center; justify-content: center;
-  color: white; font-size: 28px;
-  opacity: 0; transition: opacity 0.2s;
+  overflow: hidden;
+  background: rgba(2, 132, 199, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 28px;
+  opacity: 0;
+  transition: opacity 0.2s;
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
 }
 .perfil-info {
   padding: 14px 28px 8px;
@@ -2412,63 +2420,42 @@ body.tema-escuro .modal-fechar:hover {
    🌙 AJUSTES FINOS DO MODO ESCURO — V3
    ============================================================ */
 
-/* 🔥 CORREÇÃO 1: Linha branca ACIMA da barra de digitar (border-top do .barra-msg) */
 body.tema-escuro .barra-msg {
   border-top: 2px solid rgba(56, 189, 248, 0.25) !important;
   box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.1) !important;
 }
-
-/* 🔥 CORREÇÃO 2: Linha branca NO TOPO da lista de canais (box-shadow do .topo-servidor) */
 body.tema-escuro .topo-servidor {
   box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.15) !important;
   border-bottom: 2px solid rgba(56, 189, 248, 0.25) !important;
 }
-
-/* 🔥 CORREÇÃO 3: Linha branca no topo da .topo-conversa (border-bottom) */
 body.tema-escuro .topo-conversa {
   border-bottom: 2px solid rgba(56, 189, 248, 0.25) !important;
   box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.1) !important;
 }
-
-/* 🔥 CORREÇÃO 4: Linha branca na .barra-reply (border-top) */
 body.tema-escuro .barra-reply {
   border-top: 2px solid rgba(56, 189, 248, 0.25) !important;
 }
-
-/* 🔥 CORREÇÃO 5: Linha branca na .barra-gravacao (border-top) */
 body.tema-escuro .barra-gravacao {
   border-top: 2px solid rgba(56, 189, 248, 0.25) !important;
   box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.1) !important;
 }
-
-/* 🔥 CORREÇÃO 6: Painel de membros — borda esquerda */
 body.tema-escuro .painel-membros {
   border-left: 2px solid rgba(56, 189, 248, 0.25) !important;
 }
-
-/* 🔥 CORREÇÃO 7: Modal — hr (divisória) */
 body.tema-escuro .modal hr {
   border-top: 2px solid rgba(56, 189, 248, 0.25) !important;
 }
-
-/* 🔥 CORREÇÃO 8: Sidebar servidores — borda direita */
 body.tema-escuro .sidebar-servidores {
   border-right: 2px solid rgba(56, 189, 248, 0.2) !important;
 }
-
-/* 🔥 CORREÇÃO 9: Sidebar canais — borda direita */
 body.tema-escuro .sidebar-canais {
   border-right: 2px solid rgba(56, 189, 248, 0.2) !important;
 }
-
-/* 🔥 CORREÇÃO 10: Modal h3 (título) */
 body.tema-escuro .modal h3 {
   color: #e0f2fe !important;
   text-shadow: 0 2px 0 rgba(56, 189, 248, 0.3),
                0 4px 12px rgba(14, 165, 233, 0.5) !important;
 }
-
-/* 🔥 CORREÇÃO 11: Remover glow branco dos textos */
 body.tema-escuro .config-label,
 body.tema-escuro .topo-servidor .nome,
 body.tema-escuro .secao,
@@ -2484,8 +2471,6 @@ body.tema-escuro .media-tempo,
 body.tema-escuro .painel-membros-topo h4 {
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5) !important;
 }
-
-/* 🔥 CORREÇÃO 12: Botões secundários nos modais */
 body.tema-escuro .modal .acoes button.secundario,
 body.tema-escuro .perfil-acoes button.silenciar,
 body.tema-escuro .notif-acoes .btn-recusar {
@@ -2499,8 +2484,6 @@ body.tema-escuro .notif-acoes .btn-recusar:hover {
   background: linear-gradient(180deg, rgba(56, 189, 248, 0.3), rgba(30, 90, 142, 0.6)) !important;
   color: #e0f2fe !important;
 }
-
-/* 🔥 CORREÇÃO 13: Menu de contexto e menu de anexo */
 body.tema-escuro #menu-contexto,
 body.tema-escuro #menu-anexo {
   background: linear-gradient(180deg,
@@ -2539,8 +2522,6 @@ body.tema-escuro #menu-anexo button .menu-emoji {
 body.tema-escuro #menu-anexo button .menu-desc {
   color: #93c5fd !important;
 }
-
-/* 🔥 CORREÇÃO 14: Barra de "digitando..." */
 body.tema-escuro .digitando-bar {
   background: linear-gradient(180deg, rgba(20, 30, 50, 0.4), rgba(15, 25, 45, 0.1)) !important;
   color: #93c5fd !important;
@@ -2548,8 +2529,6 @@ body.tema-escuro .digitando-bar {
 body.tema-escuro .digitando-dots span {
   background: #93c5fd !important;
 }
-
-/* 🔥 CORREÇÃO 15: Media player */
 body.tema-escuro .media-player,
 body.tema-escuro .media-player-video-wrap {
   background: linear-gradient(160deg, rgba(30, 50, 80, 0.9), rgba(15, 30, 50, 0.8)) !important;
@@ -2569,8 +2548,6 @@ body.tema-escuro .media-player-video-wrap .media-player {
   background: transparent !important;
   box-shadow: none !important;
 }
-
-/* 🔥 CORREÇÃO 16: Painel de membros */
 body.tema-escuro .painel-membros {
   background: linear-gradient(180deg,
     rgba(20, 30, 50, 0.98) 0%,
@@ -2593,14 +2570,10 @@ body.tema-escuro .painel-membros-topo .btn-fechar-painel:hover {
   background: rgba(56, 189, 248, 0.3) !important;
   color: #e0f2fe !important;
 }
-
-/* 🔥 CORREÇÃO 17: Hover da lista */
 body.tema-escuro .lista li:hover {
   background: linear-gradient(160deg, rgba(56, 189, 248, 0.2), rgba(30, 50, 80, 0.8)) !important;
   border-color: rgba(56, 189, 248, 0.6) !important;
 }
-
-/* 🔥 CORREÇÃO 18: Notificações */
 body.tema-escuro .notif-close {
   background: rgba(56, 189, 248, 0.15) !important;
   color: #93c5fd !important;
@@ -2609,8 +2582,6 @@ body.tema-escuro .notif-close:hover {
   background: rgba(56, 189, 248, 0.3) !important;
   color: #e0f2fe !important;
 }
-
-/* 🔥 CORREÇÃO 19: Botões do chat */
 body.tema-escuro .barra-msg button {
   box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.4),
               inset 0 -2px 4px rgba(0, 0, 0, 0.3),
@@ -2624,8 +2595,6 @@ body.tema-escuro .anexo-btn:hover,
 body.tema-escuro .emoji-btn:hover {
   background: rgba(56, 189, 248, 0.2) !important;
 }
-
-/* 🔥 CORREÇÃO 20: Botão hamburger e membros */
 body.tema-escuro .btn-hamburger {
   background: linear-gradient(180deg, rgba(30, 50, 80, 0.9), rgba(15, 30, 50, 0.8)) !important;
   color: #93c5fd !important;
@@ -2640,13 +2609,9 @@ body.tema-escuro .btn-membros-servidor:hover {
   background: rgba(56, 189, 248, 0.3) !important;
   color: #e0f2fe !important;
 }
-
-/* 🔥 CORREÇÃO 21: Seção de canais */
 body.tema-escuro .secao {
   color: #93c5fd !important;
 }
-
-/* 🔥 CORREÇÃO 22: Auth card no dark */
 body.tema-escuro .auth-logo p {
   color: #93c5fd !important;
 }
@@ -2662,19 +2627,13 @@ body.tema-escuro .aba-auth.ativa {
   color: #ffffff !important;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important;
 }
-
-/* 🔥 CORREÇÃO 23: Erros no dark */
 body.tema-escuro .erro {
   color: #fca5a5 !important;
 }
-
-/* 🔥 CORREÇÃO 24: Botão "Fechar" do modal */
 body.tema-escuro .modal .acoes button.secundario {
   background: linear-gradient(180deg, rgba(30, 50, 80, 0.95), rgba(15, 30, 50, 0.9)) !important;
   color: #93c5fd !important;
 }
-
-/* 🔥 CORREÇÃO 25: Editor de imagem */
 body.tema-escuro .editor-preview-wrapper {
   background: rgba(10, 20, 40, 0.6) !important;
   border-color: rgba(56, 189, 248, 0.3) !important;
@@ -2682,8 +2641,6 @@ body.tema-escuro .editor-preview-wrapper {
 body.tema-escuro #editor-canvas {
   background: rgba(20, 30, 50, 0.6) !important;
 }
-
-/* 🔥 CORREÇÃO 26: Botões de reação no dark */
 body.tema-escuro .reacao-pill {
   background: rgba(30, 50, 80, 0.85) !important;
   border-color: rgba(56, 189, 248, 0.4) !important;
@@ -2696,14 +2653,10 @@ body.tema-escuro .reacao-pill.minha {
 body.tema-escuro .reacao-pill .reacao-count {
   color: #93c5fd !important;
 }
-
-/* 🔥 CORREÇÃO 27: Reacao picker */
 body.tema-escuro #reacao-picker-global {
   background: linear-gradient(180deg, rgba(20, 30, 50, 0.98), rgba(15, 25, 45, 0.95)) !important;
   border-color: rgba(56, 189, 248, 0.4) !important;
 }
-
-/* 🔥 CORREÇÃO 28: Msg anexo arquivo */
 body.tema-escuro .msg-anexo-arquivo {
   background: linear-gradient(160deg, rgba(30, 50, 80, 0.8), rgba(15, 30, 50, 0.7)) !important;
   border-color: rgba(56, 189, 248, 0.3) !important;
@@ -2712,8 +2665,6 @@ body.tema-escuro .msg-anexo-arquivo {
 body.tema-escuro .msg-anexo-arquivo .arquivo-tam {
   color: #93c5fd !important;
 }
-
-/* 🔥 CORREÇÃO 29: Reply citação */
 body.tema-escuro .msg-reply-citacao {
   background: rgba(30, 50, 80, 0.5) !important;
   color: #93c5fd !important;
@@ -2725,8 +2676,6 @@ body.tema-escuro .barra-reply {
   background: linear-gradient(180deg, rgba(20, 30, 50, 0.6), rgba(30, 90, 142, 0.4)) !important;
   color: #93c5fd !important;
 }
-
-/* 🔥 CORREÇÃO 30: Barra de upload */
 body.tema-escuro .upload-barra {
   background: linear-gradient(180deg, rgba(30, 50, 80, 0.9), rgba(15, 30, 50, 0.85)) !important;
   border-color: rgba(56, 189, 248, 0.4) !important;
@@ -2737,8 +2686,6 @@ body.tema-escuro .upload-barra .upload-label {
 body.tema-escuro .upload-barra .upload-track {
   background: rgba(10, 20, 40, 0.6) !important;
 }
-
-/* 🔥 CORREÇÃO 31: Barra de gravação */
 body.tema-escuro .barra-gravacao {
   background: linear-gradient(180deg, rgba(20, 30, 50, 0.5), rgba(15, 25, 45, 0.7)) !important;
   border-color: rgba(56, 189, 248, 0.2) !important;
@@ -3122,7 +3069,6 @@ body.tema-escuro .gravacao-acoes .btn-cancelar-grav {
           <div class="toggle"><input type="checkbox" id="cfg-digitando"><span class="slider"></span></div>
         </label>
 
-        <!-- 🔥 Modo escuro — mesmo padrão dos outros -->
         <label class="config-item">
           <div class="config-label">
             <span class="config-icone">🌙</span>
@@ -3200,4 +3146,4 @@ body.tema-escuro .gravacao-acoes .btn-cancelar-grav {
   <script src="/socket.io/socket.io.js"></script>
   <script src="/app.js"></script>
 </body>
-</html> 
+</html>
