@@ -3812,7 +3812,7 @@ function capturarFoto() {
   cameraEstado._tentativas++;
 
   if (cameraEstado._tentativas > 30) {
-    alert('Não foi possível capturar a imagem. Verifique se a câmera está funcionando.');
+    alert('Não foi possível capturar a imagem.');
     cameraEstado._tentativas = 0;
     return;
   }
@@ -3822,6 +3822,7 @@ function capturarFoto() {
     return;
   }
 
+  // 🔥 Desenha no canvas
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d');
@@ -3832,6 +3833,7 @@ function capturarFoto() {
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   ctx.restore();
 
+  // 🔥 Confirma que tem pixels não-pretos
   let temConteudo = false;
   try {
     const w = canvas.width, h = canvas.height;
@@ -3839,7 +3841,6 @@ function capturarFoto() {
       [w*0.5, h*0.5],
       [w*0.25, h*0.25], [w*0.75, h*0.25],
       [w*0.25, h*0.75], [w*0.75, h*0.75],
-      [w*0.5, h*0.25], [w*0.5, h*0.75],
     ];
     for (const [x, y] of pontos) {
       const px = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
@@ -3859,26 +3860,16 @@ function capturarFoto() {
 
   cameraEstado._tentativas = 0;
   cameraEstado.fotoBase64 = canvas.toDataURL('image/jpeg', 0.92);
-  wrap.classList.add('mostrando-foto');
-  controlesCamera.style.display = 'none';
-  controlesFoto.style.display = 'flex';
-}
 
-function tirarOutraFoto() {
-  const wrap = document.getElementById('camera-preview-wrap');
-  const controlesCamera = document.getElementById('camera-controles');
-  const controlesFoto = document.getElementById('camera-controles-foto');
-  const video = document.getElementById('camera-video');
-  cameraEstado.fotoBase64 = null;
-  cameraEstado._tentativas = 0;
-  wrap.classList.remove('mostrando-foto');
-  controlesCamera.style.display = 'flex';
-  controlesFoto.style.display = 'none';
-
-  if (cameraEstado.stream && video) {
-    video.srcObject = cameraEstado.stream;
-    video.play().catch(() => {});
-  }
+  // 🔥 SÓ DEPOIS de desenhar, mostra o preview
+  // Força o navegador a renderizar o canvas antes de trocar a tela
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      wrap.classList.add('mostrando-foto');
+      controlesCamera.style.display = 'none';
+      controlesFoto.style.display = 'flex';
+    });
+  });
 }
 
 async function enviarFotoCapturada() {
