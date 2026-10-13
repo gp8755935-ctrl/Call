@@ -269,15 +269,15 @@ app.get('/api/eu', (req, res) => {
   });
 });
 
-// 🔥 Rotas de perfil com validação e emit direcionado (não vaza para todos)
+// 🔥 Rotas de perfil — NÃO emitem socket aqui.
+//    O frontend emite via 'perfil-atualizado-local' depois de confirmar,
+//    evitando condição de corrida e payload duplicado.
 app.post('/api/avatar', exigirAuth, (req, res) => {
   const { avatar } = req.body;
   if (!avatar) return res.status(400).json({ erro: 'Avatar vazio' });
   if (avatar.length > 800000) return res.status(400).json({ erro: 'Imagem muito grande' });
   db.atualizarAvatar(req.usuario.id, avatar);
-  // 🔥 Manda para TODOS os sockets conectados (incluindo o próprio) — o frontend filtra por usuario_id
-  io.emit('perfil-atualizado', { usuario_id: req.usuario.id, avatar });
-  res.json({ ok: true });
+  res.json({ ok: true, usuario_id: req.usuario.id });
 });
 
 app.post('/api/banner', exigirAuth, (req, res) => {
@@ -285,8 +285,8 @@ app.post('/api/banner', exigirAuth, (req, res) => {
   if (!banner) return res.status(400).json({ erro: 'Banner vazio' });
   if (banner.length > 2500000) return res.status(400).json({ erro: 'Imagem muito grande' });
   db.atualizarBanner(req.usuario.id, banner);
-  io.emit('perfil-atualizado', { usuario_id: req.usuario.id, banner });
-  res.json({ ok: true });
+  // 🔥 NÃO emite aqui — o frontend emite via socket 'perfil-atualizado-local'
+  res.json({ ok: true, usuario_id: req.usuario.id });
 });
 
 app.post('/api/bio', exigirAuth, (req, res) => {
@@ -294,8 +294,8 @@ app.post('/api/bio', exigirAuth, (req, res) => {
   if (typeof bio !== 'string') return res.status(400).json({ erro: 'Bio inválida' });
   if (bio.length > 200) return res.status(400).json({ erro: 'Bio muito longa (máx 200)' });
   db.atualizarBio(req.usuario.id, bio);
-  io.emit('perfil-atualizado', { usuario_id: req.usuario.id, bio });
-  res.json({ ok: true });
+  // 🔥 NÃO emite aqui — o frontend emite via socket 'perfil-atualizado-local'
+  res.json({ ok: true, usuario_id: req.usuario.id });
 });
 
 // ========== AMIZADES ==========
@@ -869,6 +869,29 @@ io.on('connection', (socket) => {
   });
 
   notificarListaOnline();
+
+  // 🔥 Handler que o frontend usa pra avisar os outros sobre mudança de perfil.
+  //    Valida que o usuário só pode emitir sobre si mesmo (socket.usuario.id).
+  //    Atualiza o Map `online` e reemite `perfil-atualizado` pra todos.
+  socket.on('perfil-atualizado-local', ({ usuario_id, avatar, banner, bio }) => {
+    if (Number(usuario_id) !== Number(socket.usuario.id)) return;
+
+    const payload = { usuario_id: Number(usuario_id) };
+    if (avatar !== undefined) payload.avatar = avatar;
+    if (banner !== undefined) payload.banner = banner;
+    if (bio !== undefined) payload.bio = bio;
+
+    // Atualiza o Map `online` com os novos dados (pra lista-online ficar consistente)
+    const meuOnline = online.get(socket.id);
+    if (meuOnline) {
+      if (avatar !== undefined) meuOnline.avatar = avatar;
+      if (banner !== undefined) meuOnline.banner = banner;
+      if (bio !== undefined) meuOnline.bio = bio;
+    }
+
+    // Manda pra TODOS (inclusive o emissor, pra confirmar)
+    io.emit('perfil-atualizado', payload);
+  });
 
   socket.on('entrar-servidores', () => {
     const servidores = db.listarServidoresDoUsuario(socket.usuario.id);

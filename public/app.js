@@ -485,7 +485,6 @@ document.addEventListener('click', (e) => {
   fecharMenuAnexo();
 });
 
-// 🔥 Scroll automático (não fecha o menu de anexo)
 let scrollAutomatico = false;
 
 function scrollarChat(chatId) {
@@ -1092,27 +1091,51 @@ function conectarSocket() {
   });
 
   socket.on('perfil-atualizado', ({ usuario_id, avatar, banner, bio }) => {
+    // 1) Atualiza meu usuário local (sem sobrescrever com undefined)
     if (usuario_id === meuUsuario.id) {
       if (avatar !== undefined) meuUsuario.avatar = avatar;
       if (banner !== undefined) meuUsuario.banner = banner;
       if (bio !== undefined) meuUsuario.bio = bio;
       atualizarAvataresNaUI();
+      atualizarPreviewAvatar(meuUsuario);
+      atualizarPreviewBanner(meuUsuario);
     }
-    if (conversaAtual && conversaAtual.amigo.id === usuario_id) {
+
+    // 2) Atualiza o amigo da conversa atual
+    if (conversaAtual && conversaAtual.amigo && conversaAtual.amigo.id === usuario_id) {
       if (avatar !== undefined) conversaAtual.amigo.avatar = avatar;
       if (banner !== undefined) conversaAtual.amigo.banner = banner;
       if (bio !== undefined) conversaAtual.amigo.bio = bio;
     }
 
+    // 3) Atualiza TODAS as mensagens já renderizadas (canal + dm)
     atualizarAvataresNasMensagens(usuario_id, avatar, banner, bio);
 
-    if (servidorAtivo) {
-      fetch('/api/servidores/' + servidorAtivo.servidor.id).then(async (r) => {
-        if (r.ok) { servidorAtivo = await r.json(); renderizarMembros(); }
+    // 4) Atualiza painel de membros do servidor (SEM refetch — usa o estado local)
+    if (servidorAtivo && servidorAtivo.membros) {
+      let mudou = false;
+      servidorAtivo.membros = servidorAtivo.membros.map((m) => {
+        if (m.id !== usuario_id) return m;
+        mudou = true;
+        return {
+          ...m,
+          avatar: avatar !== undefined ? avatar : m.avatar,
+          banner: banner !== undefined ? banner : m.banner,
+          bio: bio !== undefined ? bio : m.bio,
+        };
       });
+      if (mudou) renderizarMembros();
     }
-    carregarConversas();
-    carregarAmizades();
+
+    // 5) Atualiza listas (DMs, amigos, pedidos, busca) usando o estado local
+    atualizarListasComPerfil(usuario_id, avatar, banner, bio);
+
+    // 6) Refetch APÓS um pequeno delay pra dar tempo do banco comitar
+    //    (evita o "flash" de avatar antigo e o "volta pra antiga depois de um tempo")
+    setTimeout(() => {
+      carregarConversas();
+      carregarAmizades();
+    }, 300);
   });
 
   socket.on('dm-nova', ({ conversa_id, mensagem }) => {
@@ -1395,22 +1418,8 @@ function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
     }
   });
 
-  if (servidorAtivo) {
-    servidorAtivo.membros = servidorAtivo.membros.map((m) => {
-      if (m.id === usuarioId) {
-        return {
-          ...m,
-          avatar: avatar !== undefined ? avatar : m.avatar,
-          banner: banner !== undefined ? banner : m.banner,
-          bio: bio !== undefined ? bio : m.bio,
-        };
-      }
-      return m;
-    });
-    renderizarMembros();
-  }
-
-  carregarConversas();
+  // 🔥 NÃO chama mais carregarConversas() aqui — isso causava race condition.
+  //    O socket handler já chama carregarConversas() com delay de 300ms.
 
   if (perfilVisitadoAtual && perfilVisitadoAtual.id === usuarioId) {
     if (avatar !== undefined) perfilVisitadoAtual.avatar = avatar;
@@ -1418,6 +1427,66 @@ function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
     if (bio !== undefined) perfilVisitadoAtual.bio = bio;
     abrirPerfilVisitado(perfilVisitadoAtual);
   }
+}
+
+// ============================================================
+// 🔥 NOVO — Atualizar listas (DMs, amigos, pedidos, busca, bloqueados)
+//    SEM refetch. Evita o "flash" de avatar antigo e o
+//    "volta pra antiga depois de um tempo".
+// ============================================================
+
+function atualizarListasComPerfil(usuarioId, avatar, banner, bio) {
+  const alvos = [
+    'lista-conversas',
+    'lista-amigos',
+    'lista-pedidos',
+    'lista-enviados',
+    'lista-busca',
+    'lista-bloqueados',
+  ];
+
+  alvos.forEach((listaId) => {
+    const ul = document.getElementById(listaId);
+    if (!ul) return;
+    ul.querySelectorAll('.avatar').forEach((avatarEl) => {
+      const pai = avatarEl.closest('[onclick]');
+      if (!pai) return;
+      const onclick = pai.getAttribute('onclick') || '';
+      // Verifica se o onclick contém o id do usuário
+      const bate = onclick.includes(`"id":${usuarioId}`) ||
+                   onclick.includes(`"id": ${usuarioId}`) ||
+                   onclick.includes(`\\"id\\":${usuarioId}`);
+      if (!bate) return;
+
+      if (avatar !== undefined) {
+        if (avatar) {
+          avatarEl.classList.add('com-imagem');
+          avatarEl.innerHTML = `<img src="${avatar}" alt="">`;
+        } else {
+          avatarEl.classList.remove('com-imagem');
+          const inicial = (pai.textContent || '?').trim().charAt(0).toUpperCase();
+          avatarEl.innerHTML = inicial;
+        }
+      }
+    });
+  });
+
+  // Atualiza notificações visuais abertas que mostram esse usuário
+  notificacoesAbertas.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const img = el.querySelector('.notif-avatar img');
+    if (img && avatar !== undefined) {
+      if (avatar) img.src = avatar;
+      else {
+        const span = document.createElement('span');
+        span.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-weight:900;';
+        const nome = el.querySelector('.notif-titulo')?.textContent || '?';
+        span.textContent = nome.charAt(0).toUpperCase();
+        img.replaceWith(span);
+      }
+    }
+  });
 }
 
 // ============================================================
@@ -3369,9 +3438,26 @@ async function salvarEdicao() {
   });
   if (!r.ok) { alert('Erro ao salvar'); return; }
 
+  // 🔥 Atualiza TUDO localmente na hora (sem esperar o socket)
   meuUsuario[chave] = base64;
-  if (tipo === 'avatar') { atualizarPreviewAvatar(meuUsuario); atualizarAvataresNaUI(); }
-  else { atualizarPreviewBanner(meuUsuario); }
+
+  if (tipo === 'avatar') {
+    atualizarPreviewAvatar(meuUsuario);
+    atualizarAvataresNaUI();
+    atualizarAvataresNasMensagens(meuUsuario.id, base64, undefined, undefined);
+    atualizarListasComPerfil(meuUsuario.id, base64, undefined, undefined);
+  } else {
+    atualizarPreviewBanner(meuUsuario);
+  }
+
+  // 🔥 Avisa os OUTROS usuários (e confirma pra si mesmo) via socket
+  if (socket && socket.connected) {
+    socket.emit('perfil-atualizado-local', {
+      usuario_id: meuUsuario.id,
+      [chave]: base64,
+    });
+  }
+
   tocarSom();
   fecharEditor();
   document.getElementById('modal-perfil').classList.add('ativo');
@@ -3822,7 +3908,6 @@ function capturarFoto() {
     return;
   }
 
-  // 🔥 Desenha no canvas
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d');
@@ -3833,7 +3918,6 @@ function capturarFoto() {
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   ctx.restore();
 
-  // 🔥 Confirma que tem pixels não-pretos
   let temConteudo = false;
   try {
     const w = canvas.width, h = canvas.height;
@@ -3861,8 +3945,6 @@ function capturarFoto() {
   cameraEstado._tentativas = 0;
   cameraEstado.fotoBase64 = canvas.toDataURL('image/jpeg', 0.92);
 
-  // 🔥 SÓ DEPOIS de desenhar, mostra o preview
-  // Força o navegador a renderizar o canvas antes de trocar a tela
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       wrap.classList.add('mostrando-foto');
