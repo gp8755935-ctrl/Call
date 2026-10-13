@@ -1064,23 +1064,79 @@ function conectarSocket() {
 
   // ============ PERFIL ============
   socket.on('perfil-atualizado', ({ usuario_id, avatar, banner, bio }) => {
-    if (usuario_id === meuUsuario.id) {
-      if (avatar !== undefined) meuUsuario.avatar = avatar;
-      if (banner !== undefined) meuUsuario.banner = banner;
-      if (bio !== undefined) meuUsuario.bio = bio;
-      atualizarAvataresNaUI();
+  if (usuario_id === meuUsuario.id) {
+    if (avatar !== undefined) meuUsuario.avatar = avatar;
+    if (banner !== undefined) meuUsuario.banner = banner;
+    if (bio !== undefined) meuUsuario.bio = bio;
+    atualizarAvataresNaUI();
+  }
+  if (conversaAtual && conversaAtual.amigo.id === usuario_id) {
+    if (avatar !== undefined) conversaAtual.amigo.avatar = avatar;
+    if (banner !== undefined) conversaAtual.amigo.banner = banner;
+    if (bio !== undefined) conversaAtual.amigo.bio = bio;
+  }
+
+  // 🔥 CORREÇÃO: Atualiza avatares nas mensagens JÁ RENDERIZADAS
+  atualizarAvataresNasMensagens(usuario_id, avatar, banner, bio);
+
+  if (servidorAtivo) {
+    fetch('/api/servidores/' + servidorAtivo.servidor.id).then(async (r) => {
+      if (r.ok) { servidorAtivo = await r.json(); renderizarMembros(); }
+    });
+  }
+  carregarConversas();
+  carregarAmizades();
+});
+
+// 🔥 NOVA FUNÇÃO: Atualiza avatares nas mensagens já renderizadas
+function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
+  document.querySelectorAll('.msg-com-avatar').forEach((msgEl) => {
+    const msgId = msgEl.dataset.msgId;
+    if (!msgId) return;
+
+    // Verifica se a mensagem é desse usuário
+    const avatarEl = msgEl.querySelector('.avatar');
+    if (!avatarEl) return;
+
+    // Tenta descobrir o ID do usuário da mensagem
+    const autorEl = msgEl.querySelector('.msg-autor');
+    if (!autorEl) return;
+
+    // Se o avatar atual for uma imagem, e o usuário mudou, atualiza
+    const imgEl = avatarEl.querySelector('img');
+    if (avatar !== undefined) {
+      if (avatar) {
+        if (imgEl) {
+          imgEl.src = avatar;
+        } else {
+          // Era um avatar padrão, agora virou imagem
+          avatarEl.classList.add('com-imagem');
+          avatarEl.innerHTML = `<img src="${avatar}" alt="">`;
+        }
+      } else {
+        // Removeu a imagem
+        if (imgEl) {
+          avatarEl.classList.remove('com-imagem');
+          avatarEl.innerHTML = (autorEl.textContent || '?').charAt(0).toUpperCase();
+        }
+      }
     }
-    if (conversaAtual && conversaAtual.amigo.id === usuario_id) {
-      if (avatar !== undefined) conversaAtual.amigo.avatar = avatar;
-    }
-    if (servidorAtivo) {
-      fetch('/api/servidores/' + servidorAtivo.servidor.id).then(async (r) => {
-        if (r.ok) { servidorAtivo = await r.json(); renderizarMembros(); }
-      });
-    }
-    carregarConversas();
-    carregarAmizades();
   });
+
+  // Atualiza também na lista de membros
+  if (servidorAtivo) {
+    servidorAtivo.membros = servidorAtivo.membros.map((m) => {
+      if (m.id === usuarioId) {
+        return { ...m, avatar: avatar !== undefined ? avatar : m.avatar, banner: banner !== undefined ? banner : m.banner, bio: bio !== undefined ? bio : m.bio };
+      }
+      return m;
+    });
+    renderizarMembros();
+  }
+
+  // Atualiza na lista de conversas
+  carregarConversas();
+}
 
   // ============ DM ============
   socket.on('dm-nova', ({ conversa_id, mensagem }) => {
@@ -3678,27 +3734,33 @@ function capturarFoto() {
   const wrap = document.getElementById('camera-preview-wrap');
   const controlesCamera = document.getElementById('camera-controles');
   const controlesFoto = document.getElementById('camera-controles-foto');
-  if (!video.videoWidth || !video.videoHeight) return;
+
+  // 🔥 CORREÇÃO: Espera o vídeo estar pronto (readyState >= 2) e ter dimensões
+  if (!video || !video.videoWidth || !video.videoHeight || video.readyState < 2) {
+    // Tenta de novo em 200ms se ainda não estiver pronto
+    setTimeout(capturarFoto, 200);
+    return;
+  }
+
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d');
   ctx.translate(canvas.width, 0);
   ctx.scale(-1, 1);
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  // 🔥 Verifica se o canvas não ficou preto (compara com preto puro)
+  const testData = ctx.getImageData(0, 0, 1, 1).data;
+  if (testData[0] === 0 && testData[1] === 0 && testData[2] === 0 && testData[3] === 255) {
+    // Canvas preto — vídeo ainda não renderizou
+    setTimeout(capturarFoto, 200);
+    return;
+  }
+
   cameraEstado.fotoBase64 = canvas.toDataURL('image/jpeg', 0.92);
   wrap.classList.add('mostrando-foto');
   controlesCamera.style.display = 'none';
   controlesFoto.style.display = 'flex';
-}
-
-function tirarOutraFoto() {
-  const wrap = document.getElementById('camera-preview-wrap');
-  const controlesCamera = document.getElementById('camera-controles');
-  const controlesFoto = document.getElementById('camera-controles-foto');
-  cameraEstado.fotoBase64 = null;
-  wrap.classList.remove('mostrando-foto');
-  controlesCamera.style.display = 'flex';
-  controlesFoto.style.display = 'none';
 }
 
 async function enviarFotoCapturada() {

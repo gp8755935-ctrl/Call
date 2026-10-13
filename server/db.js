@@ -9,6 +9,49 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 // ============================================================
+// 🔥 MIGRAÇÃO — Corrige o erro "no such column: usuario_a"
+// ============================================================
+function migrarBanco() {
+  try {
+    // Verifica se a tabela amizades existe
+    const tabelaExiste = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='amizades'"
+    ).get();
+
+    if (tabelaExiste) {
+      // Verifica se as colunas usuario_a e usuario_b existem
+      const colunas = db.prepare("PRAGMA table_info(amizades)").all();
+      const nomesColunas = colunas.map(c => c.name);
+
+      if (!nomesColunas.includes('usuario_a') || !nomesColunas.includes('usuario_b')) {
+        console.log('🔧 Migrando tabela amizades...');
+        db.exec('DROP TABLE IF EXISTS amizades');
+      }
+    }
+
+    // Mesma verificação para outras tabelas que podem ter schema antigo
+    const tabelasParaVerificar = ['bloqueios', 'silenciados', 'conversas', 'mensagens', 'servidores', 'membros_servidor', 'canais', 'mensagens_canal', 'reacoes'];
+    for (const t of tabelasParaVerificar) {
+      const existe = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+      ).get(t);
+      if (existe) {
+        const cols = db.prepare(`PRAGMA table_info(${t})`).all();
+        const nomes = cols.map(c => c.name);
+        // Se a tabela tem colunas antigas (ex: 'usuario_id' em vez de 'usuario_a'), dropa
+        if (t === 'amizades' && !nomes.includes('usuario_a')) {
+          db.exec(`DROP TABLE IF EXISTS ${t}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Aviso na migração:', e.message);
+  }
+}
+
+migrarBanco();
+
+// ============================================================
 // CRIAÇÃO DAS TABELAS
 // ============================================================
 
@@ -384,7 +427,6 @@ function salvarMensagem({ conversaId, deId, texto, replyId, replyAutor, replyTex
   return buscarMensagemPorId(info.lastInsertRowid);
 }
 
-// 🔥 JOIN pra trazer de_nome e de_avatar
 function buscarMensagemPorId(id) {
   const m = db.prepare(
     `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
@@ -398,7 +440,6 @@ function buscarMensagemPorId(id) {
   return m;
 }
 
-// 🔥 JOIN pra trazer de_nome e de_avatar em TODAS as mensagens
 function listarMensagens(conversaId) {
   const msgs = db.prepare(
     `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
@@ -583,7 +624,6 @@ function salvarMensagemCanal({ canalId, deId, texto, replyId, replyAutor, replyT
   return buscarMensagemCanalPorId(info.lastInsertRowid);
 }
 
-// 🔥 JOIN pra trazer de_nome e de_avatar
 function buscarMensagemCanalPorId(id) {
   const m = db.prepare(
     `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
@@ -597,7 +637,6 @@ function buscarMensagemCanalPorId(id) {
   return m;
 }
 
-// 🔥 JOIN pra trazer de_nome e de_avatar em TODAS as mensagens
 function listarMensagensCanal(canalId) {
   const msgs = db.prepare(
     `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar

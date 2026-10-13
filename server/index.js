@@ -13,7 +13,7 @@ const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  transports: ['websocket'],
+  transports: ['websocket', 'polling'],
   cors: {
     origin: true,
     credentials: true,
@@ -128,14 +128,12 @@ function exigirAuth(req, res, next) {
 // 🔥 Cookie SEGURO — host específico, sem Domain=.onrender.com
 function setarCookieToken(req, res, token) {
   const host = req.headers.host || '';
-  const hostSemPorta = host.split(':')[0];
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
 
   // 🔥 SEM domain explícito — o cookie fica restrito ao host exato que setou.
-  // Isso evita vazamento entre subdomínios (ex: dois apps diferentes no *.onrender.com)
   res.cookie('token', token, {
     httpOnly: true,
-    sameSite: 'strict',
+    sameSite: 'lax',
     secure: !ehLocalhost,
     maxAge: 30 * 24 * 60 * 60 * 1000,
     path: '/',
@@ -148,21 +146,21 @@ function limparCookies(req, res) {
   const hostSemPorta = host.split(':')[0];
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
 
-  // 1) Limpa com as opções originais (com domain, caso exista)
+  // 1) Limpa com as opções originais
   const opcoesCompletas = {
     path: '/',
     secure: !ehLocalhost,
-    sameSite: 'strict',
+    sameSite: 'lax',
     ...(ehLocalhost ? {} : { domain: hostSemPorta }),
   };
   res.clearCookie('token', opcoesCompletas);
   res.clearCookie('connect.sid', opcoesCompletas);
 
-  // 2) Limpa SEM domain (garante que apaga mesmo se o cookie foi setado sem domain)
-  res.clearCookie('token', { path: '/', secure: !ehLocalhost, sameSite: 'strict' });
-  res.clearCookie('connect.sid', { path: '/', secure: !ehLocalhost, sameSite: 'strict' });
+  // 2) Limpa SEM domain
+  res.clearCookie('token', { path: '/', secure: !ehLocalhost, sameSite: 'lax' });
+  res.clearCookie('connect.sid', { path: '/', secure: !ehLocalhost, sameSite: 'lax' });
 
-  // 3) Limpa SEM secure/samesite (fallback pra navegadores antigos)
+  // 3) Limpa SEM secure/samesite
   res.clearCookie('token', { path: '/' });
   res.clearCookie('connect.sid', { path: '/' });
 
@@ -279,6 +277,7 @@ app.post('/api/avatar', exigirAuth, (req, res) => {
   if (!avatar) return res.status(400).json({ erro: 'Avatar vazio' });
   if (avatar.length > 800000) return res.status(400).json({ erro: 'Imagem muito grande' });
   db.atualizarAvatar(req.usuario.id, avatar);
+  // 🔥 Notifica todos os sockets (inclusive o próprio) para atualizar em tempo real
   io.emit('perfil-atualizado', { usuario_id: req.usuario.id, avatar });
   res.json({ ok: true });
 });
