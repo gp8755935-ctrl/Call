@@ -20,8 +20,6 @@ const io = new Server(server, {
   },
 });
 
-const IS_PROD = process.env.NODE_ENV === 'production';
-
 app.set('trust proxy', 1);
 
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
@@ -45,7 +43,7 @@ const TIPOS_PERMITIDOS = {
 const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } });
 
 // ============================================================
-// 🔥 ANTI-CACHE AGRESSIVO (prioridade máxima)
+// ANTI-CACHE
 // ============================================================
 app.use((req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
@@ -120,17 +118,21 @@ function exigirAuth(req, res, next) {
     limparCookies(req, res);
     return res.status(401).json({ erro: 'Usuário não existe' });
   }
-  req.usuario = u;
+  // 🔥 SOBRESCREVE o req.usuario com os dados do banco (fonte da verdade)
+  req.usuario = {
+    id: usuarioAtual.id,
+    nome: usuarioAtual.nome,
+    email: usuarioAtual.email,
+  };
   req.usuarioAtual = usuarioAtual;
   next();
 }
 
-// 🔥 Cookie SEGURO — host específico, sem Domain=.onrender.com
+// 🔥 Cookie SEGURO — host específico, sem Domain
 function setarCookieToken(req, res, token) {
   const host = req.headers.host || '';
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
 
-  // 🔥 SEM domain explícito — o cookie fica restrito ao host exato que setou.
   res.cookie('token', token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -140,13 +142,11 @@ function setarCookieToken(req, res, token) {
   });
 }
 
-// 🔥 limparCookies robusto — limpa com VÁRIAS combinações de opções
 function limparCookies(req, res) {
   const host = req.headers.host || '';
   const hostSemPorta = host.split(':')[0];
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
 
-  // 1) Limpa com as opções originais
   const opcoesCompletas = {
     path: '/',
     secure: !ehLocalhost,
@@ -156,15 +156,12 @@ function limparCookies(req, res) {
   res.clearCookie('token', opcoesCompletas);
   res.clearCookie('connect.sid', opcoesCompletas);
 
-  // 2) Limpa SEM domain
   res.clearCookie('token', { path: '/', secure: !ehLocalhost, sameSite: 'lax' });
   res.clearCookie('connect.sid', { path: '/', secure: !ehLocalhost, sameSite: 'lax' });
 
-  // 3) Limpa SEM secure/samesite
   res.clearCookie('token', { path: '/' });
   res.clearCookie('connect.sid', { path: '/' });
 
-  // 🔥 Força no-store na resposta do logout
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -272,12 +269,13 @@ app.get('/api/eu', (req, res) => {
   });
 });
 
+// 🔥 Rotas de perfil com validação e emit direcionado (não vaza para todos)
 app.post('/api/avatar', exigirAuth, (req, res) => {
   const { avatar } = req.body;
   if (!avatar) return res.status(400).json({ erro: 'Avatar vazio' });
   if (avatar.length > 800000) return res.status(400).json({ erro: 'Imagem muito grande' });
   db.atualizarAvatar(req.usuario.id, avatar);
-  // 🔥 Notifica todos os sockets (inclusive o próprio) para atualizar em tempo real
+  // 🔥 Manda para TODOS os sockets conectados (incluindo o próprio) — o frontend filtra por usuario_id
   io.emit('perfil-atualizado', { usuario_id: req.usuario.id, avatar });
   res.json({ ok: true });
 });
@@ -833,6 +831,7 @@ io.use((socket, next) => {
     const usuarioAtual = db.buscarUsuarioPorId(payload.id);
     if (!usuarioAtual) return next(new Error('Usuário não existe'));
 
+    // 🔥 SEMPRE usa dados do banco (fonte da verdade)
     socket.usuario = {
       id: usuarioAtual.id,
       nome: usuarioAtual.nome,
