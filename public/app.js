@@ -66,32 +66,20 @@ let perfilVisitadoAtual = null;
 const CONFIG_PADRAO = { somMsg: true, somReacao: true, notifVisual: true, notifSistema: true, digitando: true, darkMode: false };
 let config = { ...CONFIG_PADRAO };
 
-// 🔥 Aplica o tema (claro/escuro) e atualiza avatares
-function aplicarTema(escuro) {
-  if (escuro) {
-    document.body.classList.add('tema-escuro');
-  } else {
-    document.body.classList.remove('tema-escuro');
-  }
+// ============================================================
+// TEMA
+// ============================================================
 
-  if (typeof atualizarAvataresNaUI === 'function' && meuUsuario) {
-    atualizarAvataresNaUI();
-  }
-  if (typeof renderizarMembros === 'function' && servidorAtivo) {
-    renderizarMembros();
-  }
-  if (typeof carregarAmizades === 'function' && meuUsuario) {
-    carregarAmizades();
-  }
-  if (typeof carregarConversas === 'function' && meuUsuario) {
-    carregarConversas();
-  }
-  if (typeof atualizarPreviewAvatar === 'function' && meuUsuario) {
-    atualizarPreviewAvatar(meuUsuario);
-  }
-  if (typeof renderizarServidores === 'function') {
-    renderizarServidores();
-  }
+function aplicarTema(escuro) {
+  if (escuro) document.body.classList.add('tema-escuro');
+  else document.body.classList.remove('tema-escuro');
+
+  if (typeof atualizarAvataresNaUI === 'function' && meuUsuario) atualizarAvataresNaUI();
+  if (typeof renderizarMembros === 'function' && servidorAtivo) renderizarMembros();
+  if (typeof carregarAmizades === 'function' && meuUsuario) carregarAmizades();
+  if (typeof carregarConversas === 'function' && meuUsuario) carregarConversas();
+  if (typeof atualizarPreviewAvatar === 'function' && meuUsuario) atualizarPreviewAvatar(meuUsuario);
+  if (typeof renderizarServidores === 'function') renderizarServidores();
 
   if (canalAtivo) {
     fetch(`/api/canais/${canalAtivo.id}/mensagens`)
@@ -497,8 +485,26 @@ document.addEventListener('click', (e) => {
   fecharMenuAnexo();
 });
 
+// 🔥 Scroll automático (não fecha o menu de anexo)
+let scrollAutomatico = false;
+
+function scrollarChat(chatId) {
+  const el = document.getElementById(chatId);
+  if (!el) return;
+  scrollAutomatico = true;
+  el.scrollTop = el.scrollHeight;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => { scrollAutomatico = false; }, 100);
+    });
+  });
+}
+
 document.addEventListener('scroll', (e) => {
-  if (e.target && e.target.closest && e.target.closest('.chat-area')) fecharMenuAnexo();
+  if (scrollAutomatico) return;
+  if (!e.target || !e.target.closest) return;
+  if (!e.target.closest('.chat-area')) return;
+  fecharMenuAnexo();
 }, true);
 
 // ============================================================
@@ -535,10 +541,12 @@ function enviarComUpload(file, tipo, contexto) {
     const chatId = contexto === 'canal' ? 'chat-canal' : 'chat-dm';
     const chatEl = document.getElementById(chatId);
     const barra = criarBarraUpload(file.name);
-    if (chatEl) { chatEl.appendChild(barra); chatEl.scrollTop = chatEl.scrollHeight; }
+    if (chatEl) { chatEl.appendChild(barra); scrollarChat(chatId); }
 
     const fill = barra.querySelector('.upload-fill');
     const pct = barra.querySelector('.upload-pct');
+
+    pct.textContent = 'Enviando...';
 
     const formData = new FormData();
     formData.append('arquivo', file);
@@ -546,19 +554,33 @@ function enviarComUpload(file, tipo, contexto) {
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload');
+
+    let progressoRecebido = false;
+    const tempoInicio = Date.now();
+
     xhr.upload.onprogress = (ev) => {
-      if (ev.lengthComputable) {
+      if (ev.lengthComputable && ev.total > 0) {
+        progressoRecebido = true;
         const p = Math.round((ev.loaded / ev.total) * 100);
         fill.style.width = p + '%';
         pct.textContent = p + '%';
       }
     };
+
+    const intervalTempo = setInterval(() => {
+      if (progressoRecebido) { clearInterval(intervalTempo); return; }
+      const seg = Math.floor((Date.now() - tempoInicio) / 1000);
+      pct.textContent = `Enviando... ${seg}s`;
+    }, 1000);
+
     xhr.onload = async () => {
+      clearInterval(intervalTempo);
       if (xhr.status !== 200) {
         let msg = 'Erro no upload';
         try { const data = JSON.parse(xhr.responseText); if (data.erro) msg = data.erro; } catch (e2) {}
         barra.classList.add('erro');
         pct.textContent = '❌ ' + msg;
+        fill.style.width = '100%';
         setTimeout(() => barra.remove(), 4000);
         resolve(null); return;
       }
@@ -570,16 +592,22 @@ function enviarComUpload(file, tipo, contexto) {
         setTimeout(() => barra.remove(), 4000);
         resolve(null); return;
       }
-      barra.remove();
+      fill.style.width = '100%';
+      pct.textContent = '✅ Enviado';
+      setTimeout(() => barra.remove(), 400);
       await enviarMensagemComAnexo(contexto, anexo);
       resolve(anexo);
     };
+
     xhr.onerror = () => {
+      clearInterval(intervalTempo);
       barra.classList.add('erro');
       pct.textContent = '❌ Erro de conexão';
+      fill.style.width = '100%';
       setTimeout(() => barra.remove(), 4000);
       resolve(null);
     };
+
     xhr.send(formData);
   });
 }
@@ -597,8 +625,7 @@ async function enviarMensagemComAnexo(contexto, anexo) {
       body: JSON.stringify({ texto, anexo }),
     });
     if (!r.ok) { alert('Erro ao enviar anexo'); return; }
-    const el = document.getElementById('chat-canal');
-    setTimeout(() => { el.scrollTop = el.scrollHeight; }, 100);
+    setTimeout(() => { scrollarChat('chat-canal'); }, 100);
   } else if (contexto === 'dm') {
     if (!conversaAtual) return;
     const r = await fetch(`/api/conversas/${conversaAtual.conversa_id}/mensagens`, {
@@ -947,12 +974,11 @@ async function fazerLogout() {
   }
 
   try {
-    const r = await fetch('/api/logout', {
+    await fetch('/api/logout', {
       method: 'POST',
       credentials: 'same-origin',
       cache: 'no-store',
     });
-    await r.json();
   } catch (e) {
     console.warn('Erro no logout:', e);
   }
@@ -962,9 +988,7 @@ async function fazerLogout() {
     localStorage.removeItem('void-ultima-tela');
   } catch (e) {}
 
-  setTimeout(() => {
-    window.location.href = '/';
-  }, 300);
+  setTimeout(() => { window.location.href = '/'; }, 300);
 }
 
 function entrarNoApp(usuario) {
@@ -982,9 +1006,7 @@ function entrarNoApp(usuario) {
   carregarAmizades();
   pedirPermissaoNotificacoes();
 
-  setTimeout(async () => {
-    await restaurarUltimaTela();
-  }, 1200);
+  setTimeout(async () => { await restaurarUltimaTela(); }, 1200);
 }
 
 // ============================================================
@@ -1018,17 +1040,9 @@ function conectarSocket() {
     if (canalAtivo) socket.emit('entrar-canal', { canalId: canalAtivo.id });
   });
 
-  socket.on('disconnect', (motivo) => {
-    console.log('Desconectado:', motivo);
-  });
-
-  socket.io.on('reconnect', (tentativa) => {
-    console.log('Reconectado após', tentativa, 'tentativas');
-  });
-
-  socket.on('connect_error', (err) => {
-    console.error('Erro de conexão socket:', err.message);
-  });
+  socket.on('disconnect', (motivo) => console.log('Desconectado:', motivo));
+  socket.io.on('reconnect', (t) => console.log('Reconectado após', t, 'tentativas'));
+  socket.on('connect_error', (err) => console.error('Erro de conexão socket:', err.message));
 
   socket.on('lista-online', (users) => {
     onlineIds = new Set(users.map((u) => u.id));
@@ -1036,7 +1050,6 @@ function conectarSocket() {
     carregarAmizades();
   });
 
-  // ============ AMIZADE ============
   socket.on('amizade-nova', (payload) => {
     const paraId = payload?.paraId;
     const pedido = payload?.pedido;
@@ -1044,9 +1057,7 @@ function conectarSocket() {
 
     mostrarNotificacaoVisual({
       tipo: 'amizade',
-      deNome: pedido.nome,
-      deAvatar: pedido.avatar,
-      deId: pedido.id,
+      deNome: pedido.nome, deAvatar: pedido.avatar, deId: pedido.id,
       ondeTexto: '👥 Pedido de amizade',
       texto: pedido.email || 'quer ser seu amigo',
       acoes: [
@@ -1074,17 +1085,12 @@ function conectarSocket() {
   socket.on('amizade-aceita', ({ por }) => {
     carregarAmizades();
     mostrarNotificacaoVisual({
-      tipo: 'amizade',
-      deNome: por.nome,
-      deAvatar: por.avatar,
-      deId: por.id,
-      ondeTexto: '👥 Nova amizade',
-      texto: `${por.nome} aceitou seu pedido!`,
+      tipo: 'amizade', deNome: por.nome, deAvatar: por.avatar, deId: por.id,
+      ondeTexto: '👥 Nova amizade', texto: `${por.nome} aceitou seu pedido!`,
       aoClicar: () => abrirAmigos(),
     });
   });
 
-  // ============ PERFIL ============
   socket.on('perfil-atualizado', ({ usuario_id, avatar, banner, bio }) => {
     if (usuario_id === meuUsuario.id) {
       if (avatar !== undefined) meuUsuario.avatar = avatar;
@@ -1109,7 +1115,6 @@ function conectarSocket() {
     carregarAmizades();
   });
 
-  // ============ DM ============
   socket.on('dm-nova', ({ conversa_id, mensagem }) => {
     if (estaBloqueadoLocal(mensagem.de_id)) return;
     const silenciado = estaSilenciadoLocal('usuario', mensagem.de_id);
@@ -1137,10 +1142,8 @@ function conectarSocket() {
     }
 
     mostrarNotificacaoVisual({
-      tipo: 'dm',
-      deNome: nomeAmigo, deAvatar: avatarAmigo, deId: amigoId,
-      ondeTexto: 'Mensagem direta',
-      texto: previewTexto, silencioso: silenciado,
+      tipo: 'dm', deNome: nomeAmigo, deAvatar: avatarAmigo, deId: amigoId,
+      ondeTexto: 'Mensagem direta', texto: previewTexto, silencioso: silenciado,
       aoClicar: async () => {
         const amigo = { id: amigoId, nome: nomeAmigo, avatar: avatarAmigo };
         await abrirConversa(amigo);
@@ -1170,7 +1173,6 @@ function conectarSocket() {
     }
   });
 
-  // ============ CANAL ============
   socket.on('canal-nova-msg', ({ canal_id, mensagem }) => {
     let silenciado = estaSilenciadoLocal('usuario', mensagem.de_id);
     if (!silenciado && servidorAtivo) {
@@ -1198,8 +1200,7 @@ function conectarSocket() {
     mostrarNotificacaoVisual({
       tipo: 'canal',
       deNome: mensagem.de_nome, deAvatar: mensagem.de_avatar, deId: mensagem.de_id,
-      ondeTexto: nomeCanal,
-      texto: previewTexto, silencioso: silenciado,
+      ondeTexto: nomeCanal, texto: previewTexto, silencioso: silenciado,
       aoClicar: async () => {
         if (servidorAtivo) {
           const c = servidorAtivo.canais.find((x) => x.id === canal_id);
@@ -1226,7 +1227,6 @@ function conectarSocket() {
     atualizarReacoesNaTela(chatId, alvoId, reacoes);
   });
 
-  // ============ CANAL/SERVIDOR ============
   socket.on('canal-criado', ({ canal }) => {
     if (servidorAtivo && servidorAtivo.servidor.id === canal.servidor_id) {
       servidorAtivo.canais.push(canal);
@@ -1330,8 +1330,7 @@ function conectarSocket() {
     renderizarServidores();
 
     mostrarNotificacaoVisual({
-      tipo: 'amizade',
-      deNome: 'Sistema',
+      tipo: 'amizade', deNome: 'Sistema',
       ondeTexto: '⚠️ Removido',
       texto: `Você foi removido de "${servidor_nome}"`,
       silencioso: false,
@@ -1342,7 +1341,6 @@ function conectarSocket() {
     }
   });
 
-  // ============ DIGITANDO ============
   socket.on('alguem-digitando-canal', ({ canalId, nome, usuarioId }) => {
     if (!config.digitando) return;
     if (!estouNoCanal(canalId)) return;
@@ -1368,10 +1366,10 @@ function conectarSocket() {
     if (usuarioId === meuUsuario.id) return;
     esconderDigitando('dm');
   });
-} // 🔥 FIM do conectarSocket()
+}
 
 // ============================================================
-// 🔥 ATUALIZAR AVATARES NAS MENSAGENS
+// ATUALIZAR AVATARES NAS MENSAGENS
 // ============================================================
 
 function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
@@ -1382,9 +1380,8 @@ function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
     if (avatar !== undefined) {
       const imgEl = avatarEl.querySelector('img');
       if (avatar) {
-        if (imgEl) {
-          imgEl.src = avatar;
-        } else {
+        if (imgEl) imgEl.src = avatar;
+        else {
           avatarEl.classList.add('com-imagem');
           avatarEl.innerHTML = `<img src="${avatar}" alt="">`;
         }
@@ -1619,7 +1616,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ============================================================
-// REAÇÕES — PICKER GLOBAL
+// REAÇÕES
 // ============================================================
 
 function montarPickerReacao() {
@@ -1683,7 +1680,7 @@ document.addEventListener('scroll', (e) => {
 }, true);
 
 // ============================================================
-// LONG PRESS (mensagens)
+// LONG PRESS
 // ============================================================
 
 function iniciarLongPress(e, msgEl) {
@@ -1848,7 +1845,7 @@ async function carregarServidores() {
 
 function renderizarServidores() {
   const el = document.getElementById('lista-servidores');
-  if (!el) return; // 🔥 proteção
+  if (!el) return;
   el.innerHTML = '';
 
   servidores.forEach((s) => {
@@ -2187,8 +2184,7 @@ function enviarMsgCanal() {
     body: JSON.stringify(body),
   }).then(async (r) => {
     if (!r.ok) { alert('Erro ao enviar'); return; }
-    const el = document.getElementById('chat-canal');
-    setTimeout(() => { el.scrollTop = el.scrollHeight; }, 100);
+    setTimeout(() => { scrollarChat('chat-canal'); }, 100);
   });
 }
 
@@ -2273,7 +2269,7 @@ function adicionarMsgCanal(m) {
   const div = criarElMsg(m, 'chat-canal', 'canal');
   el.appendChild(div);
   inicializarMediaPlayers(div);
-  el.scrollTop = el.scrollHeight;
+  scrollarChat('chat-canal');
 }
 
 function adicionarMsgDM(m) {
@@ -2281,7 +2277,7 @@ function adicionarMsgDM(m) {
   const div = criarElMsg(m, 'chat-dm', 'dm');
   el.appendChild(div);
   inicializarMediaPlayers(div);
-  el.scrollTop = el.scrollHeight;
+  scrollarChat('chat-dm');
 }
 
 function atualizarMsgNaTela(chatId, msgId, novoTexto, editado) {
@@ -2731,7 +2727,7 @@ async function pedirAmizade(paraId) {
 // ============================================================
 
 async function carregarConversas() {
-  if (!meuUsuario) return; // 🔥 proteção
+  if (!meuUsuario) return;
   const r = await fetch('/api/conversas');
   const data = await r.json();
   const ul = document.getElementById('lista-conversas');
@@ -2891,8 +2887,7 @@ async function enviarMsgDM() {
   if (!r.ok) { alert(data.erro || 'Erro'); return; }
   adicionarMsgDM(data.mensagem);
 
-  const el = document.getElementById('chat-dm');
-  setTimeout(() => { el.scrollTop = el.scrollHeight; }, 100);
+  setTimeout(() => { scrollarChat('chat-dm'); }, 100);
 }
 
 // ============================================================
@@ -3700,7 +3695,7 @@ function finalizarGravacaoEstado() {
 // CÂMERA
 // ============================================================
 
-let cameraEstado = { stream: null, fotoBase64: null, contexto: null };
+let cameraEstado = { stream: null, fotoBase64: null, contexto: null, _tentativas: 0 };
 
 function abrirCameraDoContexto() {
   const contexto = anexoContexto || (telaAtual === 'canal' ? 'canal' : 'dm');
@@ -3719,10 +3714,15 @@ async function abrirCamera(contexto) {
 
   cameraEstado.fotoBase64 = null;
   cameraEstado.contexto = contexto;
+  cameraEstado._tentativas = 0;
   wrap.classList.remove('mostrando-foto');
   controlesCamera.style.display = 'flex';
   controlesFoto.style.display = 'none';
   canvas.style.display = 'none';
+
+  modal.classList.add('ativo');
+
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
   const tentativas = [
     { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
@@ -3740,10 +3740,11 @@ async function abrirCamera(contexto) {
   }
 
   if (!stream) {
+    modal.classList.remove('ativo');
     let msg = 'Não foi possível acessar a câmera.\n\n';
     if (ultimoErro) {
       msg += 'Erro: ' + ultimoErro.name + '\n';
-      if (ultimoErro.name === 'NotAllowedError') msg += 'Permita o acesso nas configurações.';
+      if (ultimoErro.name === 'NotAllowedError') msg += 'Permita o acesso nas configurações do navegador.';
       else if (ultimoErro.name === 'NotFoundError') msg += 'Nenhuma câmera encontrada.';
       else if (ultimoErro.name === 'NotReadableError') msg += 'Câmera em uso por outro programa.';
       else msg += ultimoErro.message || 'Erro desconhecido';
@@ -3753,23 +3754,13 @@ async function abrirCamera(contexto) {
   }
 
   cameraEstado.stream = stream;
-
-  // 🔥 IMPORTANTE: limpa o video ANTES de setar o srcObject
   video.srcObject = null;
   video.muted = true;
   video.setAttribute('playsinline', '');
   video.setAttribute('autoplay', '');
-
-  // 🔥 Abre o modal ANTES de setar o srcObject (o vídeo precisa estar no DOM visível)
-  modal.classList.add('ativo');
-
-  // 🔥 Espera um tick pra o modal renderizar
-  await new Promise(r => setTimeout(r, 50));
-
-  // 🔥 Agora seta o srcObject
+  video.setAttribute('webkit-playsinline', '');
   video.srcObject = stream;
 
-  // 🔥 Espera metadata + primeiro frame
   await new Promise((resolve) => {
     let resolvido = false;
     const finalizar = () => {
@@ -3778,41 +3769,99 @@ async function abrirCamera(contexto) {
       resolve();
     };
 
-    const tentarTocar = () => {
-      // Força o play
-      const p = video.play();
-      if (p && typeof p.then === 'function') {
-        p.then(() => {
-          // Espera o primeiro frame real
-          const verificarFrame = () => {
-            if (video.videoWidth > 0 && video.readyState >= 2) {
-              finalizar();
-            } else {
-              setTimeout(verificarFrame, 100);
-            }
-          };
-          verificarFrame();
-        }).catch((err) => {
-          console.warn('play() falhou:', err);
-          // Tenta de novo
-          setTimeout(tentarTocar, 300);
-        });
-      } else {
-        setTimeout(finalizar, 500);
+    const tentarPlay = async () => {
+      try {
+        await video.play();
+      } catch (e) {
+        setTimeout(tentarPlay, 300);
+        return;
       }
+
+      const verificarFrame = () => {
+        if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) {
+          finalizar();
+        } else {
+          setTimeout(verificarFrame, 100);
+        }
+      };
+      verificarFrame();
     };
 
     if (video.readyState >= 2 && video.videoWidth > 0) {
-      tentarTocar();
+      tentarPlay();
     } else {
-      video.onloadedmetadata = tentarTocar;
+      video.onloadedmetadata = tentarPlay;
     }
 
-    setTimeout(finalizar, 5000);
+    setTimeout(finalizar, 8000);
   });
 
-  // 🔥 Delay extra pra garantir
-  await new Promise(r => setTimeout(r, 600));
+  await new Promise(r => setTimeout(r, 1000));
+}
+
+function capturarFoto() {
+  const video = document.getElementById('camera-video');
+  const canvas = document.getElementById('camera-canvas');
+  const wrap = document.getElementById('camera-preview-wrap');
+  const controlesCamera = document.getElementById('camera-controles');
+  const controlesFoto = document.getElementById('camera-controles-foto');
+
+  if (!video) return;
+
+  if (!cameraEstado._tentativas) cameraEstado._tentativas = 0;
+  cameraEstado._tentativas++;
+
+  if (cameraEstado._tentativas > 30) {
+    alert('Não foi possível capturar a imagem. Verifique se a câmera está funcionando.');
+    cameraEstado._tentativas = 0;
+    return;
+  }
+
+  if (!video.videoWidth || !video.videoHeight || video.readyState < 2) {
+    setTimeout(capturarFoto, 300);
+    return;
+  }
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+
+  ctx.save();
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  ctx.restore();
+
+  let temConteudo = false;
+  try {
+    const w = canvas.width, h = canvas.height;
+    const pontos = [
+      [w*0.5, h*0.5],
+      [w*0.25, h*0.25], [w*0.75, h*0.25],
+      [w*0.25, h*0.75], [w*0.75, h*0.75],
+      [w*0.5, h*0.25], [w*0.5, h*0.75],
+    ];
+    for (const [x, y] of pontos) {
+      const px = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+      if (px[0] > 15 || px[1] > 15 || px[2] > 15) {
+        temConteudo = true;
+        break;
+      }
+    }
+  } catch (e) {
+    temConteudo = true;
+  }
+
+  if (!temConteudo) {
+    setTimeout(capturarFoto, 300);
+    return;
+  }
+
+  cameraEstado._tentativas = 0;
+  cameraEstado.fotoBase64 = canvas.toDataURL('image/jpeg', 0.92);
+  wrap.classList.add('mostrando-foto');
+  controlesCamera.style.display = 'none';
+  controlesFoto.style.display = 'flex';
 }
 
 function tirarOutraFoto() {
@@ -3821,6 +3870,7 @@ function tirarOutraFoto() {
   const controlesFoto = document.getElementById('camera-controles-foto');
   const video = document.getElementById('camera-video');
   cameraEstado.fotoBase64 = null;
+  cameraEstado._tentativas = 0;
   wrap.classList.remove('mostrando-foto');
   controlesCamera.style.display = 'flex';
   controlesFoto.style.display = 'none';
@@ -3848,11 +3898,15 @@ async function enviarFotoCapturada() {
 }
 
 function fecharCamera() {
-  document.getElementById('modal-camera').classList.remove('ativo');
+  const modal = document.getElementById('modal-camera');
+  if (modal) modal.classList.remove('ativo');
   const video = document.getElementById('camera-video');
-  if (cameraEstado.stream) cameraEstado.stream.getTracks().forEach((t) => t.stop());
+  if (cameraEstado.stream) {
+    cameraEstado.stream.getTracks().forEach((t) => t.stop());
+  }
   cameraEstado.stream = null;
   cameraEstado.fotoBase64 = null;
+  cameraEstado._tentativas = 0;
   if (video) video.srcObject = null;
 }
 
@@ -3915,7 +3969,7 @@ function fecharSidebarMobile() {
 }
 
 // ============================================================
-// 🔥 DRAG & DROP de arquivos
+// DRAG & DROP
 // ============================================================
 
 function configurarDragDrop() {
@@ -3979,7 +4033,7 @@ async function processarArquivoDrop(file, contexto) {
 }
 
 // ============================================================
-// 🔥 RESTAURAR ÚLTIMA TELA
+// RESTAURAR ÚLTIMA TELA
 // ============================================================
 
 function salvarUltimaTela() {
@@ -4042,17 +4096,12 @@ async function restaurarUltimaTela() {
 }
 
 // ============================================================
-// 🔥 KEEP-ALIVE
+// KEEP-ALIVE
 // ============================================================
 
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
-    console.log('[VISIBILITY] Aba voltou ao foco');
-
-    if (socket && !socket.connected) {
-      console.log('[VISIBILITY] Socket morto, reconectando...');
-      socket.connect();
-    }
+    if (socket && !socket.connected) socket.connect();
 
     if (conversaAtual) {
       fetch(`/api/conversas/${conversaAtual.conversa_id}/mensagens`)
@@ -4088,14 +4137,10 @@ document.addEventListener('visibilitychange', () => {
 });
 
 setInterval(() => {
-  if (socket && !socket.connected) {
-    console.log('[HEARTBEAT] Socket morto, reconectando...');
-    socket.connect();
-  }
+  if (socket && !socket.connected) socket.connect();
 }, 20000);
 
 window.addEventListener('online', () => {
-  console.log('[ONLINE] Voltou a ter internet');
   if (socket && !socket.connected) socket.connect();
 });
 
@@ -4146,8 +4191,6 @@ window.addEventListener('load', async () => {
   setTimeout(configurarDragDrop, 500);
 
   window.addEventListener('storage', (e) => {
-    if (e.key === 'void-logout') {
-      location.reload();
-    }
+    if (e.key === 'void-logout') location.reload();
   });
 });
