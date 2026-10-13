@@ -1848,6 +1848,7 @@ async function carregarServidores() {
 
 function renderizarServidores() {
   const el = document.getElementById('lista-servidores');
+  if (!el) return; // 🔥 proteção
   el.innerHTML = '';
 
   servidores.forEach((s) => {
@@ -2016,6 +2017,7 @@ async function abrirServidor(id) {
 
 function renderizarCanais() {
   const el = document.getElementById('lista-canais');
+  if (!el) return;
   el.innerHTML = '';
   if (!servidorAtivo) return;
 
@@ -2080,25 +2082,30 @@ function atualizarMembrosOnline() {
 
 function togglePainelMembros() {
   const painel = document.getElementById('painel-membros');
+  if (!painel) return;
   painel.classList.toggle('aberto');
   painelMembrosAberto = painel.classList.contains('aberto');
   if (painelMembrosAberto) renderizarMembros();
 }
 
 function abrirPainelMembros() {
-  document.getElementById('painel-membros').classList.add('aberto');
+  const painel = document.getElementById('painel-membros');
+  if (!painel) return;
+  painel.classList.add('aberto');
   painelMembrosAberto = true;
   renderizarMembros();
 }
 
 function fecharPainelMembros() {
-  document.getElementById('painel-membros').classList.remove('aberto');
+  const painel = document.getElementById('painel-membros');
+  if (!painel) return;
+  painel.classList.remove('aberto');
   painelMembrosAberto = false;
 }
 
 document.addEventListener('click', (e) => {
   const painel = document.getElementById('painel-membros');
-  if (!painel.classList.contains('aberto')) return;
+  if (!painel || !painel.classList.contains('aberto')) return;
   if (e.target.closest('#painel-membros')) return;
   if (e.target.closest('.btn-membros-servidor')) return;
   fecharPainelMembros();
@@ -2542,6 +2549,7 @@ function voltarDMs() {
 // ============================================================
 
 async function carregarAmizades() {
+  if (!meuUsuario) return;
   try {
     const r = await fetch('/api/amizades');
     if (!r.ok) return;
@@ -2554,6 +2562,7 @@ async function carregarAmizades() {
 
 function renderizarPedidos(pedidos) {
   const ul = document.getElementById('lista-pedidos');
+  if (!ul) return;
   ul.innerHTML = '';
   if (pedidos.length === 0) { ul.innerHTML = '<div class="vazio">Sem pedidos</div>'; return; }
   pedidos.forEach((p) => {
@@ -2583,6 +2592,7 @@ function renderizarPedidos(pedidos) {
 
 function renderizarAmigos(amigos) {
   const ul = document.getElementById('lista-amigos');
+  if (!ul) return;
   ul.innerHTML = '';
   if (amigos.length === 0) { ul.innerHTML = '<div class="vazio">Sem amigos ainda</div>'; return; }
   amigos.forEach((a) => {
@@ -2617,6 +2627,7 @@ function renderizarAmigos(amigos) {
 
 function renderizarEnviados(enviados) {
   const ul = document.getElementById('lista-enviados');
+  if (!ul) return;
   ul.innerHTML = '';
   if (enviados.length === 0) { ul.innerHTML = '<div class="vazio">Sem pedidos enviados</div>'; return; }
   enviados.forEach((p) => {
@@ -2663,6 +2674,7 @@ function buscarUsuarios() {
   timeoutBusca = setTimeout(async () => {
     const q = document.getElementById('busca-input').value.trim();
     const ul = document.getElementById('lista-busca');
+    if (!ul) return;
     if (q.length < 1) { ul.innerHTML = '<div class="vazio">Digite pra buscar</div>'; return; }
     const r = await fetch('/api/usuarios/buscar?q=' + encodeURIComponent(q));
     const data = await r.json();
@@ -2719,9 +2731,11 @@ async function pedirAmizade(paraId) {
 // ============================================================
 
 async function carregarConversas() {
+  if (!meuUsuario) return; // 🔥 proteção
   const r = await fetch('/api/conversas');
   const data = await r.json();
   const ul = document.getElementById('lista-conversas');
+  if (!ul) return;
   ul.innerHTML = '';
   if (!data.conversas || data.conversas.length === 0) {
     ul.innerHTML = '<div class="vazio">Nenhuma conversa. Vá em Amigos e clique em Conversar.</div>';
@@ -2923,6 +2937,7 @@ function fecharBloqueados() {
 
 async function carregarListaBloqueados() {
   const ul = document.getElementById('lista-bloqueados');
+  if (!ul) return;
   ul.innerHTML = '<div class="vazio">Carregando...</div>';
   const r = await fetch('/api/bloqueados');
   const data = await r.json();
@@ -2986,6 +3001,7 @@ function atualizarPreviewAvatar(usuario) {
 
 function atualizarPreviewBanner(usuario) {
   const el = document.getElementById('perfil-banner');
+  if (!el) return;
   if (usuario.banner) el.style.backgroundImage = `url(${usuario.banner})`;
   else el.style.backgroundImage = '';
 }
@@ -3737,12 +3753,11 @@ async function abrirCamera(contexto) {
   }
 
   cameraEstado.stream = stream;
-video.muted = true;
-video.setAttribute('playsinline', '');
-video.setAttribute('autoplay', '');
-video.srcObject = stream;
+  video.muted = true;
+  video.setAttribute('playsinline', '');
+  video.setAttribute('autoplay', '');
+  video.srcObject = stream;
 
-  // 🔥 Espera o vídeo ter frame real antes de mostrar o modal
   await new Promise((resolve) => {
     let resolvido = false;
     const finalizar = () => {
@@ -3906,13 +3921,17 @@ document.addEventListener('input', (e) => {
 // ============================================================
 
 function abrirSidebarMobile() {
-  document.getElementById('sidebar-canais').classList.add('aberto');
-  document.getElementById('overlay-mobile').classList.add('ativo');
+  const el = document.getElementById('sidebar-canais');
+  if (el) el.classList.add('aberto');
+  const ov = document.getElementById('overlay-mobile');
+  if (ov) ov.classList.add('ativo');
 }
 
 function fecharSidebarMobile() {
-  document.getElementById('sidebar-canais').classList.remove('aberto');
-  document.getElementById('overlay-mobile').classList.remove('ativo');
+  const el = document.getElementById('sidebar-canais');
+  if (el) el.classList.remove('aberto');
+  const ov = document.getElementById('overlay-mobile');
+  if (ov) ov.classList.remove('ativo');
 }
 
 // ============================================================
