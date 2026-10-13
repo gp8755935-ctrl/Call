@@ -10,8 +10,6 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
 :root {
   --ceu-1: #bae6fd;
   --ceu-2: #7dd3fc;
@@ -2830,6 +2828,31 @@ body.tema-escuro #status-conversa { color: #93c5fd !important; }
 body.tema-escuro .vazio {
   color: #93c5fd !important;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5) !important;
+}
+/* 🔥 Corrige alinhamento da bolinha de online no botão de usuário */
+.barra-usuario .status-pontinho {
+  bottom: 2px !important;
+  right: 2px !important;
+  width: 13px !important;
+  height: 13px !important;
+  z-index: 5;
+}
+
+/* 🔥 Garante que o avatar do botão de usuário não saia do lugar */
+.barra-usuario .avatar {
+  width: 42px !important;
+  height: 42px !important;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.barra-usuario .avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
 }
   </style>
 </head>

@@ -3753,11 +3753,23 @@ async function abrirCamera(contexto) {
   }
 
   cameraEstado.stream = stream;
+
+  // 🔥 IMPORTANTE: limpa o video ANTES de setar o srcObject
+  video.srcObject = null;
   video.muted = true;
   video.setAttribute('playsinline', '');
   video.setAttribute('autoplay', '');
+
+  // 🔥 Abre o modal ANTES de setar o srcObject (o vídeo precisa estar no DOM visível)
+  modal.classList.add('ativo');
+
+  // 🔥 Espera um tick pra o modal renderizar
+  await new Promise(r => setTimeout(r, 50));
+
+  // 🔥 Agora seta o srcObject
   video.srcObject = stream;
 
+  // 🔥 Espera metadata + primeiro frame
   await new Promise((resolve) => {
     let resolvido = false;
     const finalizar = () => {
@@ -3766,73 +3778,41 @@ async function abrirCamera(contexto) {
       resolve();
     };
 
-    if (video.readyState >= 2 && video.videoWidth > 0) {
-      video.play().then(finalizar).catch(finalizar);
-      return;
-    }
-
-    video.onloadedmetadata = () => {
-      video.play().then(finalizar).catch(finalizar);
+    const tentarTocar = () => {
+      // Força o play
+      const p = video.play();
+      if (p && typeof p.then === 'function') {
+        p.then(() => {
+          // Espera o primeiro frame real
+          const verificarFrame = () => {
+            if (video.videoWidth > 0 && video.readyState >= 2) {
+              finalizar();
+            } else {
+              setTimeout(verificarFrame, 100);
+            }
+          };
+          verificarFrame();
+        }).catch((err) => {
+          console.warn('play() falhou:', err);
+          // Tenta de novo
+          setTimeout(tentarTocar, 300);
+        });
+      } else {
+        setTimeout(finalizar, 500);
+      }
     };
 
-    setTimeout(finalizar, 3000);
+    if (video.readyState >= 2 && video.videoWidth > 0) {
+      tentarTocar();
+    } else {
+      video.onloadedmetadata = tentarTocar;
+    }
+
+    setTimeout(finalizar, 5000);
   });
 
-  await new Promise(r => setTimeout(r, 500));
-
-  modal.classList.add('ativo');
-}
-
-function capturarFoto() {
-  const video = document.getElementById('camera-video');
-  const canvas = document.getElementById('camera-canvas');
-  const wrap = document.getElementById('camera-preview-wrap');
-  const controlesCamera = document.getElementById('camera-controles');
-  const controlesFoto = document.getElementById('camera-controles-foto');
-
-  if (!video) return;
-
-  if (!video.videoWidth || !video.videoHeight || video.readyState < 2) {
-    setTimeout(capturarFoto, 300);
-    return;
-  }
-
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.save();
-  ctx.translate(canvas.width, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  ctx.restore();
-
-  let temConteudo = false;
-  try {
-    const amostra = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    const passo = 4 * 100;
-    for (let i = 0; i < amostra.length; i += passo) {
-      if (amostra[i] > 10 || amostra[i + 1] > 10 || amostra[i + 2] > 10) {
-        temConteudo = true;
-        break;
-      }
-    }
-  } catch (e) {
-    temConteudo = true;
-  }
-
-  if (!temConteudo) {
-    setTimeout(capturarFoto, 300);
-    return;
-  }
-
-  cameraEstado.fotoBase64 = canvas.toDataURL('image/jpeg', 0.92);
-  wrap.classList.add('mostrando-foto');
-  controlesCamera.style.display = 'none';
-  controlesFoto.style.display = 'flex';
+  // 🔥 Delay extra pra garantir
+  await new Promise(r => setTimeout(r, 600));
 }
 
 function tirarOutraFoto() {
