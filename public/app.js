@@ -92,6 +92,32 @@ function aplicarTema(escuro) {
   if (typeof renderizarServidores === 'function') {
     renderizarServidores();
   }
+
+  // 🔥 NOVO: Re-renderiza as mensagens do chat para atualizar avatares padrão
+  if (canalAtivo) {
+    fetch(`/api/canais/${canalAtivo.id}/mensagens`)
+      .then(r => r.json())
+      .then(data => {
+        const el = document.getElementById('chat-canal');
+        if (el && data.mensagens) {
+          el.innerHTML = '';
+          data.mensagens.forEach(adicionarMsgCanal);
+        }
+      })
+      .catch(() => {});
+  }
+  if (conversaAtual) {
+    fetch(`/api/conversas/${conversaAtual.conversa_id}/mensagens`)
+      .then(r => r.json())
+      .then(data => {
+        const el = document.getElementById('chat-dm');
+        if (el && data.mensagens) {
+          el.innerHTML = '';
+          data.mensagens.forEach(adicionarMsgDM);
+        }
+      })
+      .catch(() => {});
+  }
 }
 
 function carregarConfig() {
@@ -205,6 +231,13 @@ function mostrarNotificacaoVisual({
   let startX = 0, startY = 0;
   let moveu = false;
 
+  const fecharNotif = () => {
+    el.classList.add('fechando');
+    el.style.transform = 'translateX(120%)';
+    el.style.opacity = '0';
+    setTimeout(() => { el.remove(); notificacoesAbertas.delete(id); }, 220);
+  };
+
   const iniciar = (x, y) => { arrastando = true; startX = x; startY = y; moveu = false; el.style.transition = 'none'; };
   const mover = (x, y) => {
     if (!arrastando) return;
@@ -242,11 +275,13 @@ function mostrarNotificacaoVisual({
   }, { passive: true });
   el.addEventListener('touchend', terminar);
 
-  el.addEventListener('click', (e) => {
+  el.addEventListener('click', async (e) => {
     if (e.target.closest('.notif-close') || e.target.closest('.notif-acoes button')) return;
     if (moveu) return;
-    if (typeof aoClicar === 'function') aoClicar();
     fecharNotif();
+    if (typeof aoClicar === 'function') {
+      try { await aoClicar(); } catch (err) { console.warn('Erro ao clicar na notificação:', err); }
+    }
   });
 
   if (temAcoes) {
@@ -264,13 +299,6 @@ function mostrarNotificacaoVisual({
   }
 
   el.querySelector('.notif-close').addEventListener('click', (e) => { e.stopPropagation(); fecharNotif(); });
-
-  const fecharNotif = () => {
-    el.classList.add('fechando');
-    el.style.transform = 'translateX(120%)';
-    el.style.opacity = '0';
-    setTimeout(() => { el.remove(); notificacoesAbertas.delete(id); }, 220);
-  };
 
   stack.appendChild(el);
   setTimeout(() => { if (document.body.contains(el)) fecharNotif(); }, temAcoes ? 8000 : 5000);
@@ -915,13 +943,11 @@ async function fazerCadastro() {
 async function fazerLogout() {
   if (!confirm('Sair?')) return;
 
-  // 1) Desconecta o socket PRIMEIRO (senão ele reconecta com o cookie antigo)
   if (socket) {
     socket.disconnect();
     socket = null;
   }
 
-  // 2) Chama o logout com credentials e no-store
   try {
     const r = await fetch('/api/logout', {
       method: 'POST',
@@ -933,13 +959,11 @@ async function fazerLogout() {
     console.warn('Erro no logout:', e);
   }
 
-  // 3) Limpa estado local
   try {
     localStorage.setItem('void-logout', Date.now());
     localStorage.removeItem('void-ultima-tela');
   } catch (e) {}
 
-  // 4) Delay + navegação limpa (não usa location.reload, que pode cachear)
   setTimeout(() => {
     window.location.href = '/';
   }, 300);
@@ -1014,7 +1038,7 @@ function conectarSocket() {
     carregarAmizades();
   });
 
-    // ============ AMIZADE ============
+  // ============ AMIZADE ============
   socket.on('amizade-nova', (payload) => {
     const paraId = payload?.paraId;
     const pedido = payload?.pedido;
@@ -1064,79 +1088,29 @@ function conectarSocket() {
 
   // ============ PERFIL ============
   socket.on('perfil-atualizado', ({ usuario_id, avatar, banner, bio }) => {
-  if (usuario_id === meuUsuario.id) {
-    if (avatar !== undefined) meuUsuario.avatar = avatar;
-    if (banner !== undefined) meuUsuario.banner = banner;
-    if (bio !== undefined) meuUsuario.bio = bio;
-    atualizarAvataresNaUI();
-  }
-  if (conversaAtual && conversaAtual.amigo.id === usuario_id) {
-    if (avatar !== undefined) conversaAtual.amigo.avatar = avatar;
-    if (banner !== undefined) conversaAtual.amigo.banner = banner;
-    if (bio !== undefined) conversaAtual.amigo.bio = bio;
-  }
-
-  // 🔥 CORREÇÃO: Atualiza avatares nas mensagens JÁ RENDERIZADAS
-  atualizarAvataresNasMensagens(usuario_id, avatar, banner, bio);
-
-  if (servidorAtivo) {
-    fetch('/api/servidores/' + servidorAtivo.servidor.id).then(async (r) => {
-      if (r.ok) { servidorAtivo = await r.json(); renderizarMembros(); }
-    });
-  }
-  carregarConversas();
-  carregarAmizades();
-});
-
-// 🔥 NOVA FUNÇÃO: Atualiza avatares nas mensagens já renderizadas
-function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
-  document.querySelectorAll('.msg-com-avatar').forEach((msgEl) => {
-    const msgId = msgEl.dataset.msgId;
-    if (!msgId) return;
-
-    // Verifica se a mensagem é desse usuário
-    const avatarEl = msgEl.querySelector('.avatar');
-    if (!avatarEl) return;
-
-    // Tenta descobrir o ID do usuário da mensagem
-    const autorEl = msgEl.querySelector('.msg-autor');
-    if (!autorEl) return;
-
-    // Se o avatar atual for uma imagem, e o usuário mudou, atualiza
-    const imgEl = avatarEl.querySelector('img');
-    if (avatar !== undefined) {
-      if (avatar) {
-        if (imgEl) {
-          imgEl.src = avatar;
-        } else {
-          // Era um avatar padrão, agora virou imagem
-          avatarEl.classList.add('com-imagem');
-          avatarEl.innerHTML = `<img src="${avatar}" alt="">`;
-        }
-      } else {
-        // Removeu a imagem
-        if (imgEl) {
-          avatarEl.classList.remove('com-imagem');
-          avatarEl.innerHTML = (autorEl.textContent || '?').charAt(0).toUpperCase();
-        }
-      }
+    if (usuario_id === meuUsuario.id) {
+      if (avatar !== undefined) meuUsuario.avatar = avatar;
+      if (banner !== undefined) meuUsuario.banner = banner;
+      if (bio !== undefined) meuUsuario.bio = bio;
+      atualizarAvataresNaUI();
     }
+    if (conversaAtual && conversaAtual.amigo.id === usuario_id) {
+      if (avatar !== undefined) conversaAtual.amigo.avatar = avatar;
+      if (banner !== undefined) conversaAtual.amigo.banner = banner;
+      if (bio !== undefined) conversaAtual.amigo.bio = bio;
+    }
+
+    // 🔥 Só atualiza as mensagens DO usuário que mudou
+    atualizarAvataresNasMensagens(usuario_id, avatar, banner, bio);
+
+    if (servidorAtivo) {
+      fetch('/api/servidores/' + servidorAtivo.servidor.id).then(async (r) => {
+        if (r.ok) { servidorAtivo = await r.json(); renderizarMembros(); }
+      });
+    }
+    carregarConversas();
+    carregarAmizades();
   });
-
-  // Atualiza também na lista de membros
-  if (servidorAtivo) {
-    servidorAtivo.membros = servidorAtivo.membros.map((m) => {
-      if (m.id === usuarioId) {
-        return { ...m, avatar: avatar !== undefined ? avatar : m.avatar, banner: banner !== undefined ? banner : m.banner, bio: bio !== undefined ? bio : m.bio };
-      }
-      return m;
-    });
-    renderizarMembros();
-  }
-
-  // Atualiza na lista de conversas
-  carregarConversas();
-}
 
   // ============ DM ============
   socket.on('dm-nova', ({ conversa_id, mensagem }) => {
@@ -1399,6 +1373,66 @@ function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
     if (usuarioId === meuUsuario.id) return;
     esconderDigitando('dm');
   });
+} // 🔥 FIM do conectarSocket()
+
+// ============================================================
+// 🔥 ATUALIZAR AVATARES NAS MENSAGENS (fora do conectarSocket)
+// ============================================================
+
+// 🔥 CORRIGIDO: só atualiza o avatar das mensagens cujo autor é o usuário que mudou
+function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
+  // Atualiza SÓ as mensagens cujo data-user-id == usuarioId
+  document.querySelectorAll(`.msg-com-avatar[data-user-id="${usuarioId}"]`).forEach((msgEl) => {
+    const avatarEl = msgEl.querySelector('.avatar');
+    if (!avatarEl) return;
+
+    if (avatar !== undefined) {
+      const imgEl = avatarEl.querySelector('img');
+      if (avatar) {
+        if (imgEl) {
+          imgEl.src = avatar;
+        } else {
+          // Era um avatar padrão, agora virou imagem
+          avatarEl.classList.add('com-imagem');
+          avatarEl.innerHTML = `<img src="${avatar}" alt="">`;
+        }
+      } else {
+        // Removeu a imagem → volta pra inicial
+        if (imgEl) {
+          avatarEl.classList.remove('com-imagem');
+          const autor = msgEl.querySelector('.msg-autor')?.textContent || '?';
+          avatarEl.innerHTML = autor.charAt(0).toUpperCase();
+        }
+      }
+    }
+  });
+
+  // Atualiza a lista de membros do servidor (se tiver aberto)
+  if (servidorAtivo) {
+    servidorAtivo.membros = servidorAtivo.membros.map((m) => {
+      if (m.id === usuarioId) {
+        return {
+          ...m,
+          avatar: avatar !== undefined ? avatar : m.avatar,
+          banner: banner !== undefined ? banner : m.banner,
+          bio: bio !== undefined ? bio : m.bio,
+        };
+      }
+      return m;
+    });
+    renderizarMembros();
+  }
+
+  // Atualiza a lista de conversas
+  carregarConversas();
+
+  // Se o perfil visitado atual for desse usuário, atualiza
+  if (perfilVisitadoAtual && perfilVisitadoAtual.id === usuarioId) {
+    if (avatar !== undefined) perfilVisitadoAtual.avatar = avatar;
+    if (banner !== undefined) perfilVisitadoAtual.banner = banner;
+    if (bio !== undefined) perfilVisitadoAtual.bio = bio;
+    abrirPerfilVisitado(perfilVisitadoAtual);
+  }
 }
 
 // ============================================================
@@ -1506,22 +1540,12 @@ function montarEmojiPicker() {
     }
     el.innerHTML = html;
 
-   el.addEventListener('click', async (e) => {
-  if (e.target.closest('.notif-close') || e.target.closest('.notif-acoes button')) return;
-  if (moveu) return;
-  
-  // 🔥 Fecha a notificação ANTES de navegar (não bloqueia)
-  fecharNotif();
-  
-  // 🔥 Aguarda o clique fazer a navegação
-  if (typeof aoClicar === 'function') {
-    try {
-      await aoClicar();
-    } catch (err) {
-      console.warn('Erro ao clicar na notificação:', err);
-    }
-  }
-});
+    el.addEventListener('click', (e) => {
+      const span = e.target.closest('span[data-emoji]');
+      if (!span) return;
+      const emoji = span.getAttribute('data-emoji');
+      inserirEmoji(id, emoji);
+    });
   });
 }
 
@@ -2208,6 +2232,7 @@ function criarElMsg(m, chatId, contexto) {
   const div = document.createElement('div');
   div.className = 'msg-com-avatar' + (ehMinha ? ' minha' : '');
   div.dataset.msgId = m.id;
+  div.dataset.userId = m.de_id; // 🔥 NOVO: guarda ID do autor pra atualizar avatar certo
 
   const editadoTag = m.editado ? '<span class="msg-editada">(editado)</span>' : '';
   const reacoes = m.reacoes || {};
@@ -2351,6 +2376,8 @@ function iniciarEdicao(chatId, msgId, contexto) {
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
 
+  const cancelar = () => { wrap.remove(); textoEl.style.display = ''; };
+
   const salvar = async () => {
     const novoTexto = input.value.trim();
     if (!novoTexto || novoTexto === textoAtual) return cancelar();
@@ -2366,7 +2393,6 @@ function iniciarEdicao(chatId, msgId, contexto) {
     cancelar();
   };
 
-  const cancelar = () => { wrap.remove(); textoEl.style.display = ''; };
   wrap.querySelector('button.verde').onclick = salvar;
   wrap.querySelector('button.secundario').onclick = cancelar;
   input.addEventListener('keydown', (e) => {
@@ -3737,7 +3763,6 @@ function capturarFoto() {
 
   // 🔥 CORREÇÃO: Espera o vídeo estar pronto (readyState >= 2) e ter dimensões
   if (!video || !video.videoWidth || !video.videoHeight || video.readyState < 2) {
-    // Tenta de novo em 200ms se ainda não estiver pronto
     setTimeout(capturarFoto, 200);
     return;
   }
@@ -3750,17 +3775,30 @@ function capturarFoto() {
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
   // 🔥 Verifica se o canvas não ficou preto (compara com preto puro)
-  const testData = ctx.getImageData(0, 0, 1, 1).data;
-  if (testData[0] === 0 && testData[1] === 0 && testData[2] === 0 && testData[3] === 255) {
-    // Canvas preto — vídeo ainda não renderizou
-    setTimeout(capturarFoto, 200);
-    return;
+  try {
+    const testData = ctx.getImageData(0, 0, 1, 1).data;
+    if (testData[0] === 0 && testData[1] === 0 && testData[2] === 0 && testData[3] === 255) {
+      setTimeout(capturarFoto, 200);
+      return;
+    }
+  } catch (e) {
+    // getImageData pode falhar em alguns contextos — ignora
   }
 
   cameraEstado.fotoBase64 = canvas.toDataURL('image/jpeg', 0.92);
   wrap.classList.add('mostrando-foto');
   controlesCamera.style.display = 'none';
   controlesFoto.style.display = 'flex';
+}
+
+function tirarOutraFoto() {
+  const wrap = document.getElementById('camera-preview-wrap');
+  const controlesCamera = document.getElementById('camera-controles');
+  const controlesFoto = document.getElementById('camera-controles-foto');
+  cameraEstado.fotoBase64 = null;
+  wrap.classList.remove('mostrando-foto');
+  controlesCamera.style.display = 'flex';
+  controlesFoto.style.display = 'none';
 }
 
 async function enviarFotoCapturada() {
