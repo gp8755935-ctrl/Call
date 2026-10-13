@@ -93,7 +93,6 @@ function aplicarTema(escuro) {
     renderizarServidores();
   }
 
-  // 🔥 NOVO: Re-renderiza as mensagens do chat para atualizar avatares padrão
   if (canalAtivo) {
     fetch(`/api/canais/${canalAtivo.id}/mensagens`)
       .then(r => r.json())
@@ -212,7 +211,7 @@ function mostrarNotificacaoVisual({
 
   const avatarInner = deAvatar
     ? `<img src="${deAvatar}" alt="">`
-    : (deNome || '?').charAt(0).toUpperCase();
+    : `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-weight:900;">${(deNome || '?').charAt(0).toUpperCase()}</span>`;
 
   const temAcoes = Array.isArray(acoes) && acoes.length > 0;
 
@@ -939,7 +938,6 @@ async function fazerCadastro() {
   } catch (e) { erroEl.textContent = 'Erro de conexão'; }
 }
 
-// 🔥 LOGOUT CORRIGIDO — evita relogar sozinho
 async function fazerLogout() {
   if (!confirm('Sair?')) return;
 
@@ -1100,7 +1098,6 @@ function conectarSocket() {
       if (bio !== undefined) conversaAtual.amigo.bio = bio;
     }
 
-    // 🔥 Só atualiza as mensagens DO usuário que mudou
     atualizarAvataresNasMensagens(usuario_id, avatar, banner, bio);
 
     if (servidorAtivo) {
@@ -1258,7 +1255,6 @@ function conectarSocket() {
     renderizarServidores();
   });
 
-  // 🔥 SERVIDOR DELETADO — limpa tudo
   socket.on('servidor-deletado', ({ servidor_id }) => {
     servidores = servidores.filter((s) => s.id !== servidor_id);
 
@@ -1307,7 +1303,6 @@ function conectarSocket() {
     }
   });
 
-  // 🔥 VOCÊ FOI REMOVIDO — limpa tudo
   socket.on('voce-foi-removido', ({ servidor_id, servidor_nome }) => {
     servidores = servidores.filter((s) => s.id !== servidor_id);
 
@@ -1376,7 +1371,7 @@ function conectarSocket() {
 } // 🔥 FIM do conectarSocket()
 
 // ============================================================
-// 🔥 ATUALIZAR AVATARES NAS MENSAGENS (fora do conectarSocket)
+// 🔥 ATUALIZAR AVATARES NAS MENSAGENS
 // ============================================================
 
 function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
@@ -2225,7 +2220,7 @@ function criarElMsg(m, chatId, contexto) {
   const div = document.createElement('div');
   div.className = 'msg-com-avatar' + (ehMinha ? ' minha' : '');
   div.dataset.msgId = m.id;
-  div.dataset.userId = m.de_id; // 🔥 NOVO: guarda ID do autor pra atualizar avatar certo
+  div.dataset.userId = m.de_id;
 
   const editadoTag = m.editado ? '<span class="msg-editada">(editado)</span>' : '';
   const reacoes = m.reacoes || {};
@@ -3742,8 +3737,34 @@ async function abrirCamera(contexto) {
   }
 
   cameraEstado.stream = stream;
-  video.srcObject = stream;
-  video.onloadedmetadata = () => { video.play().catch(() => {}); };
+video.muted = true;
+video.setAttribute('playsinline', '');
+video.setAttribute('autoplay', '');
+video.srcObject = stream;
+
+  // 🔥 Espera o vídeo ter frame real antes de mostrar o modal
+  await new Promise((resolve) => {
+    let resolvido = false;
+    const finalizar = () => {
+      if (resolvido) return;
+      resolvido = true;
+      resolve();
+    };
+
+    if (video.readyState >= 2 && video.videoWidth > 0) {
+      video.play().then(finalizar).catch(finalizar);
+      return;
+    }
+
+    video.onloadedmetadata = () => {
+      video.play().then(finalizar).catch(finalizar);
+    };
+
+    setTimeout(finalizar, 3000);
+  });
+
+  await new Promise(r => setTimeout(r, 500));
+
   modal.classList.add('ativo');
 }
 
@@ -3754,54 +3775,43 @@ function capturarFoto() {
   const controlesCamera = document.getElementById('camera-controles');
   const controlesFoto = document.getElementById('camera-controles-foto');
 
-  // 🔥 Espera o vídeo estar pronto E ter frame renderizado
-  if (!video || !video.videoWidth || !video.videoHeight || video.readyState < 2) {
-    setTimeout(capturarFoto, 200);
+  if (!video) return;
+
+  if (!video.videoWidth || !video.videoHeight || video.readyState < 2) {
+    setTimeout(capturarFoto, 300);
     return;
   }
 
-  // 🔥 Força o navegador a decodificar um frame do vídeo antes de copiar
-  try {
-    if (video.requestVideoFrameCallback) {
-      video.requestVideoFrameCallback(() => {
-        desenharFrameNoCanvas(video, canvas, wrap, controlesCamera, controlesFoto);
-      });
-      return;
-    }
-  } catch (e) {}
-
-  // Fallback: só desenha
-  desenharFrameNoCanvas(video, canvas, wrap, controlesCamera, controlesFoto);
-}
-
-function desenharFrameNoCanvas(video, canvas, wrap, controlesCamera, controlesFoto) {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d');
 
-  // Limpa antes
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Espelha
   ctx.save();
   ctx.translate(canvas.width, 0);
   ctx.scale(-1, 1);
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   ctx.restore();
 
-  // 🔥 Confere se não ficou preto puro (amostra no meio)
+  let temConteudo = false;
   try {
-    const amostra = ctx.getImageData(
-      Math.floor(canvas.width / 2),
-      Math.floor(canvas.height / 2),
-      1, 1
-    ).data;
-    if (amostra[0] === 0 && amostra[1] === 0 && amostra[2] === 0 && amostra[3] === 255) {
-      setTimeout(() => capturarFoto(), 150);
-      return;
+    const amostra = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const passo = 4 * 100;
+    for (let i = 0; i < amostra.length; i += passo) {
+      if (amostra[i] > 10 || amostra[i + 1] > 10 || amostra[i + 2] > 10) {
+        temConteudo = true;
+        break;
+      }
     }
   } catch (e) {
-    // getImageData pode falhar por tainted canvas — segue em frente
+    temConteudo = true;
+  }
+
+  if (!temConteudo) {
+    setTimeout(capturarFoto, 300);
+    return;
   }
 
   cameraEstado.fotoBase64 = canvas.toDataURL('image/jpeg', 0.92);
@@ -3814,10 +3824,16 @@ function tirarOutraFoto() {
   const wrap = document.getElementById('camera-preview-wrap');
   const controlesCamera = document.getElementById('camera-controles');
   const controlesFoto = document.getElementById('camera-controles-foto');
+  const video = document.getElementById('camera-video');
   cameraEstado.fotoBase64 = null;
   wrap.classList.remove('mostrando-foto');
   controlesCamera.style.display = 'flex';
   controlesFoto.style.display = 'none';
+
+  if (cameraEstado.stream && video) {
+    video.srcObject = cameraEstado.stream;
+    video.play().catch(() => {});
+  }
 }
 
 async function enviarFotoCapturada() {
@@ -4027,7 +4043,7 @@ async function restaurarUltimaTela() {
 }
 
 // ============================================================
-// 🔥 KEEP-ALIVE — Mantém a conexão viva no celular
+// 🔥 KEEP-ALIVE
 // ============================================================
 
 document.addEventListener('visibilitychange', () => {
