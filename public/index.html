@@ -10,6 +10,8 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
 :root {
   --ceu-1: #bae6fd;
   --ceu-2: #7dd3fc;
@@ -1041,6 +1043,8 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   font-weight: 900; text-align: center;
   text-shadow: 0 2px 0 rgba(255,255,255,0.7);
 }
+
+/* 🔥 CORREÇÃO — câmera preta */
 .camera-preview-wrap {
   position: relative;
   background: #000;
@@ -1052,9 +1056,9 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   justify-content: center;
   border: 2px solid rgba(255,255,255,0.95);
   box-shadow: 0 8px 24px rgba(2,132,199,0.3);
+  min-height: 200px;
 }
-/* 🔥 CORREÇÃO — câmera preta */
-#camera-video, #camera-canvas {
+#camera-video {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1062,10 +1066,23 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   position: absolute;
   top: 0;
   left: 0;
+  z-index: 1;
+  background: #000;
 }
-#camera-canvas { display: none; object-fit: contain; }
+#camera-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  background: #000;
+}
 .camera-preview-wrap.mostrando-foto #camera-video { display: none; }
 .camera-preview-wrap.mostrando-foto #camera-canvas { display: block; }
+
 .camera-controles {
   display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
 }
@@ -2384,6 +2401,15 @@ body.tema-escuro .notif-onde,
 body.tema-escuro .notif-texto {
   color: #93c5fd;
 }
+
+/* 🔥 CORREÇÃO — avatar padrão da notificação no tema escuro */
+body.tema-escuro .notif-avatar {
+  background: linear-gradient(180deg, #1e5a8e, #0f2842) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  color: #e0f2fe !important;
+  box-shadow: 0 0 12px rgba(14, 165, 233, 0.4) !important;
+}
+
 body.tema-escuro .emoji-picker {
   background: linear-gradient(180deg, rgba(20, 30, 50, 0.98), rgba(15, 25, 45, 0.95));
   border-color: rgba(56, 189, 248, 0.4);
@@ -2753,7 +2779,6 @@ body.tema-escuro .gravacao-acoes .btn-cancelar-grav {
 /* 🔥 CORREÇÕES FINAIS — TEMA ESCURO                            */
 /* ============================================================ */
 
-/* 🔥 Barra de usuário (botão redondo inferior esquerdo) no tema escuro */
 body.tema-escuro .barra-usuario {
   background: linear-gradient(180deg, rgba(30, 50, 80, 0.95), rgba(15, 30, 50, 0.9)) !important;
   border: 3px solid rgba(56, 189, 248, 0.5) !important;
@@ -2770,7 +2795,6 @@ body.tema-escuro .barra-usuario .avatar {
   background: linear-gradient(180deg, #1e5a8e, #0f2842);
 }
 
-/* 🔥 Overlay do avatar no tema escuro */
 body.tema-escuro .avatar-overlay {
   background: rgba(10, 20, 40, 0.7) !important;
 }
