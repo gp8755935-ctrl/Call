@@ -1042,17 +1042,28 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   text-shadow: 0 2px 0 rgba(255,255,255,0.7);
 }
 .camera-preview-wrap {
-  position: relative; background: #000;
-  border-radius: 18px; overflow: hidden;
+  position: relative;
+  background: #000;
+  border-radius: 18px;
+  overflow: hidden;
   aspect-ratio: 4 / 3;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 2px solid rgba(255,255,255,0.95);
   box-shadow: 0 8px 24px rgba(2,132,199,0.3);
 }
+/* 🔥 CORREÇÃO — câmera preta */
 #camera-video, #camera-canvas {
-  width: 100%; height: 100%; object-fit: cover; display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
 }
-#camera-canvas { display: none; }
+#camera-canvas { display: none; object-fit: contain; }
 .camera-preview-wrap.mostrando-foto #camera-video { display: none; }
 .camera-preview-wrap.mostrando-foto #camera-canvas { display: block; }
 .camera-controles {
@@ -1674,7 +1685,6 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   z-index: 2;
 }
 
-/* 🔥 WRAPPER DO AVATAR — força tamanho quadrado */
 .perfil-avatar-wrapper {
   margin-top: -55px;
   margin-left: 28px;
@@ -1686,7 +1696,6 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   flex-shrink: 0;
 }
 
-/* 🔥 CONTAINER DO AVATAR — quadrado, redondo, corta o overlay */
 .perfil-avatar-wrapper .avatar-container {
   cursor: pointer;
   position: relative;
@@ -1702,7 +1711,6 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
 }
 .perfil-avatar-wrapper .avatar-container:hover { transform: scale(1.03); }
 
-/* 🔥 OVERLAY DO AVATAR — círculo exato, dentro da bolinha */
 .avatar-overlay {
   position: absolute;
   top: 0;
@@ -2739,6 +2747,65 @@ body.tema-escuro .gravacao-dica {
 body.tema-escuro .gravacao-acoes .btn-cancelar-grav {
   background: rgba(30, 50, 80, 0.8) !important;
   color: #93c5fd !important;
+}
+
+/* ============================================================ */
+/* 🔥 CORREÇÕES FINAIS — TEMA ESCURO                            */
+/* ============================================================ */
+
+/* 🔥 Barra de usuário (botão redondo inferior esquerdo) no tema escuro */
+body.tema-escuro .barra-usuario {
+  background: linear-gradient(180deg, rgba(30, 50, 80, 0.95), rgba(15, 30, 50, 0.9)) !important;
+  border: 3px solid rgba(56, 189, 248, 0.5) !important;
+  box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.3),
+              0 6px 20px rgba(0, 0, 0, 0.6),
+              0 0 20px rgba(14, 165, 233, 0.4) !important;
+}
+body.tema-escuro .barra-usuario:hover {
+  box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.4),
+              0 10px 30px rgba(0, 0, 0, 0.7),
+              0 0 30px rgba(14, 165, 233, 0.7) !important;
+}
+body.tema-escuro .barra-usuario .avatar {
+  background: linear-gradient(180deg, #1e5a8e, #0f2842);
+}
+
+/* 🔥 Overlay do avatar no tema escuro */
+body.tema-escuro .avatar-overlay {
+  background: rgba(10, 20, 40, 0.7) !important;
+}
+body.tema-escuro .perfil-banner-overlay {
+  background: linear-gradient(180deg, rgba(10,20,40,0.0), rgba(10,20,40,0.6)) !important;
+}
+body.tema-escuro .perfil-avatar-wrapper .avatar-container {
+  background: #0f1e3a;
+}
+body.tema-escuro .avatar {
+  background: linear-gradient(180deg, #1e5a8e, #0f2842) !important;
+}
+body.tema-escuro #nome-servidor { color: #e0f2fe !important; }
+body.tema-escuro #codigo-servidor {
+  color: #93c5fd !important;
+  background: rgba(10, 20, 40, 0.6) !important;
+  border-color: rgba(56, 189, 248, 0.3) !important;
+}
+body.tema-escuro #input-canal::placeholder,
+body.tema-escuro #input-dm::placeholder,
+body.tema-escuro #busca-input::placeholder {
+  color: rgba(147, 197, 253, 0.5) !important;
+}
+body.tema-escuro .topo-conversa {
+  background: linear-gradient(180deg, rgba(20, 30, 50, 0.8), rgba(15, 25, 45, 0.6)) !important;
+  border-bottom: 2px solid rgba(56, 189, 248, 0.25) !important;
+}
+body.tema-escuro #nome-conversa {
+  color: #e0f2fe !important;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5) !important;
+}
+body.tema-escuro #status-conversa { color: #93c5fd !important; }
+body.tema-escuro .vazio {
+  color: #93c5fd !important;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5) !important;
 }
   </style>
 </head>

@@ -1379,9 +1379,7 @@ function conectarSocket() {
 // 🔥 ATUALIZAR AVATARES NAS MENSAGENS (fora do conectarSocket)
 // ============================================================
 
-// 🔥 CORRIGIDO: só atualiza o avatar das mensagens cujo autor é o usuário que mudou
 function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
-  // Atualiza SÓ as mensagens cujo data-user-id == usuarioId
   document.querySelectorAll(`.msg-com-avatar[data-user-id="${usuarioId}"]`).forEach((msgEl) => {
     const avatarEl = msgEl.querySelector('.avatar');
     if (!avatarEl) return;
@@ -1392,12 +1390,10 @@ function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
         if (imgEl) {
           imgEl.src = avatar;
         } else {
-          // Era um avatar padrão, agora virou imagem
           avatarEl.classList.add('com-imagem');
           avatarEl.innerHTML = `<img src="${avatar}" alt="">`;
         }
       } else {
-        // Removeu a imagem → volta pra inicial
         if (imgEl) {
           avatarEl.classList.remove('com-imagem');
           const autor = msgEl.querySelector('.msg-autor')?.textContent || '?';
@@ -1407,7 +1403,6 @@ function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
     }
   });
 
-  // Atualiza a lista de membros do servidor (se tiver aberto)
   if (servidorAtivo) {
     servidorAtivo.membros = servidorAtivo.membros.map((m) => {
       if (m.id === usuarioId) {
@@ -1423,10 +1418,8 @@ function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
     renderizarMembros();
   }
 
-  // Atualiza a lista de conversas
   carregarConversas();
 
-  // Se o perfil visitado atual for desse usuário, atualiza
   if (perfilVisitadoAtual && perfilVisitadoAtual.id === usuarioId) {
     if (avatar !== undefined) perfilVisitadoAtual.avatar = avatar;
     if (banner !== undefined) perfilVisitadoAtual.banner = banner;
@@ -3761,28 +3754,54 @@ function capturarFoto() {
   const controlesCamera = document.getElementById('camera-controles');
   const controlesFoto = document.getElementById('camera-controles-foto');
 
-  // 🔥 CORREÇÃO: Espera o vídeo estar pronto (readyState >= 2) e ter dimensões
+  // 🔥 Espera o vídeo estar pronto E ter frame renderizado
   if (!video || !video.videoWidth || !video.videoHeight || video.readyState < 2) {
     setTimeout(capturarFoto, 200);
     return;
   }
 
+  // 🔥 Força o navegador a decodificar um frame do vídeo antes de copiar
+  try {
+    if (video.requestVideoFrameCallback) {
+      video.requestVideoFrameCallback(() => {
+        desenharFrameNoCanvas(video, canvas, wrap, controlesCamera, controlesFoto);
+      });
+      return;
+    }
+  } catch (e) {}
+
+  // Fallback: só desenha
+  desenharFrameNoCanvas(video, canvas, wrap, controlesCamera, controlesFoto);
+}
+
+function desenharFrameNoCanvas(video, canvas, wrap, controlesCamera, controlesFoto) {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d');
+
+  // Limpa antes
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Espelha
+  ctx.save();
   ctx.translate(canvas.width, 0);
   ctx.scale(-1, 1);
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  ctx.restore();
 
-  // 🔥 Verifica se o canvas não ficou preto (compara com preto puro)
+  // 🔥 Confere se não ficou preto puro (amostra no meio)
   try {
-    const testData = ctx.getImageData(0, 0, 1, 1).data;
-    if (testData[0] === 0 && testData[1] === 0 && testData[2] === 0 && testData[3] === 255) {
-      setTimeout(capturarFoto, 200);
+    const amostra = ctx.getImageData(
+      Math.floor(canvas.width / 2),
+      Math.floor(canvas.height / 2),
+      1, 1
+    ).data;
+    if (amostra[0] === 0 && amostra[1] === 0 && amostra[2] === 0 && amostra[3] === 255) {
+      setTimeout(() => capturarFoto(), 150);
       return;
     }
   } catch (e) {
-    // getImageData pode falhar em alguns contextos — ignora
+    // getImageData pode falhar por tainted canvas — segue em frente
   }
 
   cameraEstado.fotoBase64 = canvas.toDataURL('image/jpeg', 0.92);
