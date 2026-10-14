@@ -66,6 +66,25 @@ let perfilVisitadoAtual = null;
 const CONFIG_PADRAO = { somMsg: true, somReacao: true, notifVisual: true, notifSistema: true, digitando: true, darkMode: false };
 let config = { ...CONFIG_PADRAO };
 
+// 🔥 Cache de usuários (id → dados atualizados)
+const usuariosCache = new Map();
+
+function atualizarUsuarioCache(usuario) {
+  if (!usuario || !usuario.id) return;
+  const atual = usuariosCache.get(usuario.id) || {};
+  usuariosCache.set(usuario.id, {
+    id: usuario.id,
+    nome: usuario.nome !== undefined ? usuario.nome : atual.nome,
+    avatar: usuario.avatar !== undefined ? usuario.avatar : atual.avatar,
+    banner: usuario.banner !== undefined ? usuario.banner : atual.banner,
+    bio: usuario.bio !== undefined ? usuario.bio : atual.bio,
+  });
+}
+
+function pegarUsuarioDoCache(id) {
+  return usuariosCache.get(id) || null;
+}
+
 // ============================================================
 // TEMA
 // ============================================================
@@ -997,6 +1016,7 @@ function entrarNoApp(usuario) {
     return;
   }
   meuUsuario = usuario;
+  atualizarUsuarioCache(usuario);
   document.getElementById('tela-auth').style.display = 'none';
   document.getElementById('app').classList.add('ativo');
   atualizarAvataresNaUI();
@@ -1045,6 +1065,7 @@ function conectarSocket() {
 
   socket.on('lista-online', (users) => {
     onlineIds = new Set(users.map((u) => u.id));
+    users.forEach(atualizarUsuarioCache);
     atualizarMembrosOnline();
     carregarAmizades();
   });
@@ -1082,6 +1103,7 @@ function conectarSocket() {
   });
 
   socket.on('amizade-aceita', ({ por }) => {
+    if (por) atualizarUsuarioCache(por);
     carregarAmizades();
     mostrarNotificacaoVisual({
       tipo: 'amizade', deNome: por.nome, deAvatar: por.avatar, deId: por.id,
@@ -1091,7 +1113,8 @@ function conectarSocket() {
   });
 
   socket.on('perfil-atualizado', ({ usuario_id, avatar, banner, bio }) => {
-    // 1) Atualiza meu usuário local (sem sobrescrever com undefined)
+    atualizarUsuarioCache({ id: usuario_id, avatar, banner, bio });
+
     if (usuario_id === meuUsuario.id) {
       if (avatar !== undefined) meuUsuario.avatar = avatar;
       if (banner !== undefined) meuUsuario.banner = banner;
@@ -1101,17 +1124,14 @@ function conectarSocket() {
       atualizarPreviewBanner(meuUsuario);
     }
 
-    // 2) Atualiza o amigo da conversa atual
     if (conversaAtual && conversaAtual.amigo && conversaAtual.amigo.id === usuario_id) {
       if (avatar !== undefined) conversaAtual.amigo.avatar = avatar;
       if (banner !== undefined) conversaAtual.amigo.banner = banner;
       if (bio !== undefined) conversaAtual.amigo.bio = bio;
     }
 
-    // 3) Atualiza TODAS as mensagens já renderizadas (canal + dm)
     atualizarAvataresNasMensagens(usuario_id, avatar, banner, bio);
 
-    // 4) Atualiza painel de membros do servidor (SEM refetch — usa o estado local)
     if (servidorAtivo && servidorAtivo.membros) {
       let mudou = false;
       servidorAtivo.membros = servidorAtivo.membros.map((m) => {
@@ -1127,11 +1147,16 @@ function conectarSocket() {
       if (mudou) renderizarMembros();
     }
 
-    // 5) Atualiza listas (DMs, amigos, pedidos, busca) usando o estado local
     atualizarListasComPerfil(usuario_id, avatar, banner, bio);
 
-    // 6) Refetch APÓS um pequeno delay pra dar tempo do banco comitar
-    //    (evita o "flash" de avatar antigo e o "volta pra antiga depois de um tempo")
+    if (perfilVisitadoAtual && perfilVisitadoAtual.id === usuario_id) {
+      const dados = pegarUsuarioDoCache(usuario_id);
+      if (dados) {
+        perfilVisitadoAtual = { ...perfilVisitadoAtual, ...dados };
+        abrirPerfilVisitado(perfilVisitadoAtual);
+      }
+    }
+
     setTimeout(() => {
       carregarConversas();
       carregarAmizades();
@@ -1141,6 +1166,8 @@ function conectarSocket() {
   socket.on('dm-nova', ({ conversa_id, mensagem }) => {
     if (estaBloqueadoLocal(mensagem.de_id)) return;
     const silenciado = estaSilenciadoLocal('usuario', mensagem.de_id);
+
+    atualizarUsuarioCache({ id: mensagem.de_id, nome: mensagem.de_nome, avatar: mensagem.de_avatar });
 
     if (estouNaConversa(conversa_id)) {
       adicionarMsgDM(mensagem);
@@ -1202,6 +1229,8 @@ function conectarSocket() {
       const c = servidorAtivo.canais.find((x) => x.id === canal_id);
       if (c && estaSilenciadoLocal('servidor', c.servidor_id)) silenciado = true;
     }
+
+    atualizarUsuarioCache({ id: mensagem.de_id, nome: mensagem.de_nome, avatar: mensagem.de_avatar });
 
     if (estouNoCanal(canal_id)) { adicionarMsgCanal(mensagem); return; }
 
@@ -1310,6 +1339,7 @@ function conectarSocket() {
   });
 
   socket.on('membro-entrou', ({ servidor_id, membro }) => {
+    if (membro) atualizarUsuarioCache(membro);
     if (servidorAtivo && servidorAtivo.servidor.id === servidor_id) {
       if (!servidorAtivo.membros.some((m) => m.id === membro.id)) {
         servidorAtivo.membros.push(membro);
@@ -1416,23 +1446,32 @@ function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
         }
       }
     }
+
+    const dados = pegarUsuarioDoCache(usuarioId);
+    if (dados) {
+      const usuarioMsg = {
+        id: dados.id,
+        nome: dados.nome,
+        avatar: dados.avatar || '',
+        banner: dados.banner || '',
+        bio: dados.bio || '',
+      };
+      avatarEl.setAttribute('onclick',
+        `abrirPerfilVisitado(${JSON.stringify(usuarioMsg).replace(/"/g, '&quot;')})`);
+    }
   });
 
-  // 🔥 NÃO chama mais carregarConversas() aqui — isso causava race condition.
-  //    O socket handler já chama carregarConversas() com delay de 300ms.
-
   if (perfilVisitadoAtual && perfilVisitadoAtual.id === usuarioId) {
-    if (avatar !== undefined) perfilVisitadoAtual.avatar = avatar;
-    if (banner !== undefined) perfilVisitadoAtual.banner = banner;
-    if (bio !== undefined) perfilVisitadoAtual.bio = bio;
-    abrirPerfilVisitado(perfilVisitadoAtual);
+    const dados = pegarUsuarioDoCache(usuarioId);
+    if (dados) {
+      perfilVisitadoAtual = { ...perfilVisitadoAtual, ...dados };
+      abrirPerfilVisitado(perfilVisitadoAtual);
+    }
   }
 }
 
 // ============================================================
-// 🔥 NOVO — Atualizar listas (DMs, amigos, pedidos, busca, bloqueados)
-//    SEM refetch. Evita o "flash" de avatar antigo e o
-//    "volta pra antiga depois de um tempo".
+// ATUALIZAR LISTAS
 // ============================================================
 
 function atualizarListasComPerfil(usuarioId, avatar, banner, bio) {
@@ -1452,7 +1491,6 @@ function atualizarListasComPerfil(usuarioId, avatar, banner, bio) {
       const pai = avatarEl.closest('[onclick]');
       if (!pai) return;
       const onclick = pai.getAttribute('onclick') || '';
-      // Verifica se o onclick contém o id do usuário
       const bate = onclick.includes(`"id":${usuarioId}`) ||
                    onclick.includes(`"id": ${usuarioId}`) ||
                    onclick.includes(`\\"id\\":${usuarioId}`);
@@ -1471,7 +1509,6 @@ function atualizarListasComPerfil(usuarioId, avatar, banner, bio) {
     });
   });
 
-  // Atualiza notificações visuais abertas que mostram esse usuário
   notificacoesAbertas.forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -1490,7 +1527,7 @@ function atualizarListasComPerfil(usuarioId, avatar, banner, bio) {
 }
 
 // ============================================================
-// BLOQUEIOS E SILENCIADOS (estado local)
+// BLOQUEIOS E SILENCIADOS
 // ============================================================
 
 let bloqueadosLocal = new Set();
@@ -1685,7 +1722,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ============================================================
-// REAÇÕES
+// REAÇÕES (picker global)
 // ============================================================
 
 function montarPickerReacao() {
@@ -2063,6 +2100,8 @@ async function abrirServidor(id) {
     document.getElementById('nome-servidor').textContent = data.servidor.nome;
     document.getElementById('codigo-servidor').textContent = 'convite: ' + data.servidor.codigo_convite;
 
+    if (data.membros) data.membros.forEach(atualizarUsuarioCache);
+
     if (data.silenciado) silenciadosServidorLocal.add(data.servidor.id);
     else silenciadosServidorLocal.delete(data.servidor.id);
 
@@ -2132,7 +2171,8 @@ function renderizarMembros() {
 
     d.onclick = (e) => {
       if (e.target.closest('.dono')) return;
-      abrirPerfilVisitado(m);
+      const dados = pegarUsuarioDoCache(m.id) || m;
+      abrirPerfilVisitado(dados);
     };
     lista.appendChild(d);
   });
@@ -2299,7 +2339,15 @@ function criarElMsg(m, chatId, contexto) {
   const reply = replyHTML(m);
   const anexoHTML = renderAnexoHTML(m.anexo);
 
-  const usuarioMsg = { nome: m.de_nome, avatar: m.de_avatar, id: m.de_id };
+  // 🔥 Pega o usuário do cache (dados atualizados) ou cria um fallback
+  const dadosAtualizados = pegarUsuarioDoCache(m.de_id);
+  const usuarioMsg = {
+    id: m.de_id,
+    nome: dadosAtualizados?.nome || m.de_nome,
+    avatar: dadosAtualizados?.avatar !== undefined ? dadosAtualizados.avatar : (m.de_avatar || ''),
+    banner: dadosAtualizados?.banner || '',
+    bio: dadosAtualizados?.bio || '',
+  };
   const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(usuarioMsg).replace(/"/g, '&quot;')})`;
   const textoHTML = m.texto ? `<div class="msg-texto">${escapeHtml(m.texto)}</div>` : '';
 
@@ -2334,6 +2382,7 @@ function criarElMsg(m, chatId, contexto) {
 }
 
 function adicionarMsgCanal(m) {
+  atualizarUsuarioCache({ id: m.de_id, nome: m.de_nome, avatar: m.de_avatar });
   const el = document.getElementById('chat-canal');
   const div = criarElMsg(m, 'chat-canal', 'canal');
   el.appendChild(div);
@@ -2342,6 +2391,7 @@ function adicionarMsgCanal(m) {
 }
 
 function adicionarMsgDM(m) {
+  atualizarUsuarioCache({ id: m.de_id, nome: m.de_nome, avatar: m.de_avatar });
   const el = document.getElementById('chat-dm');
   const div = criarElMsg(m, 'chat-dm', 'dm');
   el.appendChild(div);
@@ -2378,7 +2428,7 @@ function removerMsgDaTela(chatId, msgId) {
 }
 
 // ============================================================
-// REAÇÕES
+// REAÇÕES (toggle)
 // ============================================================
 
 async function toggleReacao(contexto, msgId, emoji) {
@@ -2619,6 +2669,9 @@ async function carregarAmizades() {
     const r = await fetch('/api/amizades');
     if (!r.ok) return;
     const data = await r.json();
+    (data.amigos || []).forEach(atualizarUsuarioCache);
+    (data.pedidosRecebidos || []).forEach(atualizarUsuarioCache);
+    (data.pedidosEnviados || []).forEach(atualizarUsuarioCache);
     renderizarPedidos(data.pedidosRecebidos);
     renderizarAmigos(data.amigos);
     renderizarEnviados(data.pedidosEnviados);
@@ -2665,10 +2718,11 @@ function renderizarAmigos(amigos) {
     const li = document.createElement('li');
     const info = document.createElement('div');
     info.className = 'info';
-    const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(a).replace(/"/g, '&quot;')})`;
+    const dados = pegarUsuarioDoCache(a.id) || a;
+    const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(dados).replace(/"/g, '&quot;')})`;
     info.innerHTML = `
       <span class="nome">
-        ${avatarHTML(a, 'mini', onclickAttr)}
+        ${avatarHTML(dados, 'mini', onclickAttr)}
         <span class="status-dot ${estaOnline ? 'online' : 'offline'}"></span>
         ${a.nome}
       </span>
@@ -2749,6 +2803,8 @@ function buscarUsuarios() {
       return;
     }
 
+    (data.usuarios || []).forEach(atualizarUsuarioCache);
+
     const amz = await fetch('/api/amizades').then((r) => r.json());
     const amigosIds = new Set(amz.amigos.map((a) => a.id));
     const enviadosIds = new Set(amz.pedidosEnviados.map((p) => p.id));
@@ -2801,6 +2857,11 @@ async function carregarConversas() {
   const data = await r.json();
   const ul = document.getElementById('lista-conversas');
   if (!ul) return;
+
+  (data.conversas || []).forEach((c) => {
+    if (c.amigo) atualizarUsuarioCache(c.amigo);
+  });
+
   ul.innerHTML = '';
   if (!data.conversas || data.conversas.length === 0) {
     ul.innerHTML = '<div class="vazio">Nenhuma conversa. Vá em Amigos e clique em Conversar.</div>';
@@ -2820,11 +2881,12 @@ async function carregarConversas() {
     } else {
       preview = '(sem mensagens)';
     }
-    const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(c.amigo).replace(/"/g, '&quot;')})`;
+    const dadosAtualizados = pegarUsuarioDoCache(c.amigo.id) || c.amigo;
+    const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(dadosAtualizados).replace(/"/g, '&quot;')})`;
     const badgeSile = c.silenciado ? '<span class="badge-silenciado">🔇</span>' : '';
     info.innerHTML = `
       <span class="nome">
-        ${avatarHTML(c.amigo, 'mini', onclickAttr)}
+        ${avatarHTML(dadosAtualizados, 'mini', onclickAttr)}
         <span class="status-dot ${estaOnline ? 'online' : 'offline'}"></span>
         ${c.amigo.nome}
         ${badgeSile}
@@ -2894,7 +2956,10 @@ function abrirMenuAmigo(event, amigo, silenciado) {
       {
         emoji: '👤',
         label: 'Ver perfil',
-        onClick: () => abrirPerfilVisitado(amigo),
+        onClick: () => {
+          const dados = pegarUsuarioDoCache(amigo.id) || amigo;
+          abrirPerfilVisitado(dados);
+        },
       },
     ],
   });
@@ -2909,6 +2974,7 @@ async function abrirConversa(amigo) {
   if (!r.ok) { alert(data.erro || 'Erro'); return; }
 
   conversaAtual = { conversa_id: data.conversa_id, amigo: data.amigo };
+  atualizarUsuarioCache(data.amigo);
 
   cancelarReply('dm');
   fecharPickerReacao();
@@ -3079,6 +3145,10 @@ async function salvarBio() {
   });
   if (!r.ok) { alert('Erro ao salvar bio'); return; }
   meuUsuario.bio = bio;
+  atualizarUsuarioCache({ id: meuUsuario.id, bio });
+  if (socket && socket.connected) {
+    socket.emit('perfil-atualizado-local', { usuario_id: meuUsuario.id, bio });
+  }
   tocarSom();
 }
 
@@ -3103,38 +3173,80 @@ function atualizarAvataresNaUI() {
 }
 
 // ============================================================
-// PERFIL — VISITA
+// PERFIL — VISITA (COM BUSCA DE DADOS FRESCOS)
 // ============================================================
 
-function abrirPerfilVisitado(usuario) {
+async function abrirPerfilVisitado(usuario) {
   if (!usuario || !usuario.nome) return;
   if (meuUsuario && usuario.id === meuUsuario.id) { abrirModalPerfil(); return; }
 
-  perfilVisitadoAtual = usuario;
+  // 🔥 Pega do cache primeiro (dados frescos do socket)
+  const dadosCache = pegarUsuarioDoCache(usuario.id);
+  const dadosIniciais = dadosCache ? { ...usuario, ...dadosCache } : usuario;
 
-  document.getElementById('visita-nome').textContent = usuario.nome;
-  document.getElementById('visita-email').textContent = usuario.email || '';
+  // Abre o modal JÁ com o que tem (feedback imediato)
+  perfilVisitadoAtual = dadosIniciais;
+  document.getElementById('visita-nome').textContent = dadosIniciais.nome;
+  document.getElementById('visita-email').textContent = dadosIniciais.email || '';
 
   const avatarEl = document.getElementById('visita-avatar');
-  if (usuario.avatar) {
+  if (dadosIniciais.avatar) {
     avatarEl.classList.add('com-imagem');
-    avatarEl.innerHTML = `<img src="${usuario.avatar}" alt="">`;
+    avatarEl.innerHTML = `<img src="${dadosIniciais.avatar}" alt="">`;
   } else {
     avatarEl.classList.remove('com-imagem');
-    const inicial = (usuario.nome || '?').charAt(0).toUpperCase();
+    const inicial = (dadosIniciais.nome || '?').charAt(0).toUpperCase();
     avatarEl.innerHTML = inicial;
     avatarEl.style.background = 'linear-gradient(180deg, #38bdf8, #0284c7)';
   }
 
   const bannerEl = document.getElementById('visita-banner');
-  if (usuario.banner) bannerEl.style.backgroundImage = `url(${usuario.banner})`;
+  if (dadosIniciais.banner) bannerEl.style.backgroundImage = `url(${dadosIniciais.banner})`;
   else bannerEl.style.backgroundImage = '';
 
   document.getElementById('visita-bio').textContent =
-    (usuario.bio && usuario.bio.trim()) ? usuario.bio : 'Sem descrição.';
+    (dadosIniciais.bio && dadosIniciais.bio.trim()) ? dadosIniciais.bio : 'Sem descrição.';
 
-  montarAcoesPerfil(usuario);
+  montarAcoesPerfil(dadosIniciais);
   document.getElementById('modal-perfil-visita').classList.add('ativo');
+
+  // 🔥 DEPOIS: busca dados frescos do servidor e atualiza
+  try {
+    const r = await fetch(`/api/usuarios/${usuario.id}`);
+    if (!r.ok) return;
+    const data = await r.json();
+    if (!data || !data.usuario) return;
+
+    // Atualiza cache
+    atualizarUsuarioCache(data.usuario);
+
+    // Se o modal já foi fechado, não atualiza
+    if (!perfilVisitadoAtual || perfilVisitadoAtual.id !== usuario.id) return;
+
+    // Re-renderiza com dados frescos
+    const frescos = { ...dadosIniciais, ...data.usuario };
+    perfilVisitadoAtual = frescos;
+
+    document.getElementById('visita-nome').textContent = frescos.nome;
+    document.getElementById('visita-email').textContent = frescos.email || '';
+
+    if (frescos.avatar) {
+      avatarEl.classList.add('com-imagem');
+      avatarEl.innerHTML = `<img src="${frescos.avatar}" alt="">`;
+    } else {
+      avatarEl.classList.remove('com-imagem');
+      const inicial = (frescos.nome || '?').charAt(0).toUpperCase();
+      avatarEl.innerHTML = inicial;
+    }
+
+    if (frescos.banner) bannerEl.style.backgroundImage = `url(${frescos.banner})`;
+    else bannerEl.style.backgroundImage = '';
+
+    document.getElementById('visita-bio').textContent =
+      (frescos.bio && frescos.bio.trim()) ? frescos.bio : 'Sem descrição.';
+  } catch (e) {
+    console.warn('Erro ao buscar dados frescos do perfil:', e);
+  }
 }
 
 function montarAcoesPerfil(usuario) {
@@ -3438,8 +3550,8 @@ async function salvarEdicao() {
   });
   if (!r.ok) { alert('Erro ao salvar'); return; }
 
-  // 🔥 Atualiza TUDO localmente na hora (sem esperar o socket)
   meuUsuario[chave] = base64;
+  atualizarUsuarioCache({ id: meuUsuario.id, [chave]: base64 });
 
   if (tipo === 'avatar') {
     atualizarPreviewAvatar(meuUsuario);
@@ -3450,7 +3562,6 @@ async function salvarEdicao() {
     atualizarPreviewBanner(meuUsuario);
   }
 
-  // 🔥 Avisa os OUTROS usuários (e confirma pra si mesmo) via socket
   if (socket && socket.connected) {
     socket.emit('perfil-atualizado-local', {
       usuario_id: meuUsuario.id,
@@ -3968,6 +4079,16 @@ async function enviarFotoCapturada() {
   const file = new File([blob], `foto-${Date.now()}.jpg`, { type: mime });
   fecharCamera();
   await enviarComUpload(file, 'foto', contexto);
+}
+
+function tirarOutraFoto() {
+  const wrap = document.getElementById('camera-preview-wrap');
+  const controlesCamera = document.getElementById('camera-controles');
+  const controlesFoto = document.getElementById('camera-controles-foto');
+  wrap.classList.remove('mostrando-foto');
+  controlesCamera.style.display = 'flex';
+  controlesFoto.style.display = 'none';
+  cameraEstado.fotoBase64 = null;
 }
 
 function fecharCamera() {

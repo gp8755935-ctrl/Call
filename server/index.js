@@ -308,6 +308,23 @@ app.get('/api/usuarios/buscar', exigirAuth, (req, res) => {
   res.json({ usuarios: filtrados });
 });
 
+app.get('/api/usuarios/:id', exigirAuth, (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ erro: 'ID inválido' });
+  const usuario = db.buscarUsuarioPorId(id);
+  if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado' });
+  res.json({
+    usuario: {
+      id: usuario.id,
+      nome: usuario.nome,
+      email: usuario.email,
+      avatar: usuario.avatar || '',
+      banner: usuario.banner || '',
+      bio: usuario.bio || '',
+    },
+  });
+});
+
 app.get('/api/amizades', exigirAuth, (req, res) => {
   const id = req.usuario.id;
   res.json({
