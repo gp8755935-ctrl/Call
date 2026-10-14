@@ -493,7 +493,7 @@ function escolherTipoAnexo(tipo) {
   fecharMenuAnexo();
   const input = document.getElementById('input-anexo');
   if (!input) return;
-  input.value = '';
+  // 🔥 NÃO limpa o input aqui — o listener change cuida disso
   input.accept = tipo === 'foto' ? 'image/*' : tipo === 'video' ? 'video/*' : '';
   input.click();
 }
@@ -531,13 +531,22 @@ document.addEventListener('scroll', (e) => {
 
 document.addEventListener('change', async (e) => {
   if (e.target.id !== 'input-anexo') return;
-  const file = e.target.files[0];
+
+  // 🔥 Captura o arquivo IMEDIATAMENTE
+  const file = e.target.files && e.target.files[0];
   if (!file) return;
+
+  // 🔥 Captura contexto/tipo ANTES de qualquer reset
   const contexto = anexoContexto;
   const tipo = anexoTipo;
+
+  // 🔥 Agora sim pode resetar
   anexoContexto = null;
   anexoTipo = null;
+  e.target.value = '';
+
   if (!contexto || !tipo) return;
+
   await enviarComUpload(file, tipo, contexto);
 });
 
@@ -585,11 +594,15 @@ function enviarComUpload(file, tipo, contexto) {
       }
     };
 
+    // 🔥 Fallback visual: se o navegador não reportar progresso,
+    //    anima a barra com base no tempo decorrido
     const intervalTempo = setInterval(() => {
       if (progressoRecebido) { clearInterval(intervalTempo); return; }
       const seg = Math.floor((Date.now() - tempoInicio) / 1000);
       pct.textContent = `Enviando... ${seg}s`;
-    }, 1000);
+      const pctFake = Math.min(95, Math.round((seg / 20) * 100));
+      fill.style.width = pctFake + '%';
+    }, 400);
 
     xhr.onload = async () => {
       clearInterval(intervalTempo);
@@ -611,18 +624,15 @@ function enviarComUpload(file, tipo, contexto) {
         resolve(null); return;
       }
 
-      // 🔥 Marca 100% mas NÃO remove ainda
       fill.style.width = '100%';
       pct.textContent = '✅ Enviando...';
 
-      // 🔥 Só remove a barra DEPOIS que a mensagem foi adicionada na tela
       try {
         await enviarMensagemComAnexo(contexto, anexo);
       } catch (err) {
         console.warn('Erro ao enviar mensagem com anexo:', err);
       }
 
-      // 🔥 Agora sim pode remover (com um pequeno fade pra ficar suave)
       pct.textContent = '✅ Enviado';
       setTimeout(() => barra.remove(), 300);
       resolve(anexo);
@@ -640,6 +650,7 @@ function enviarComUpload(file, tipo, contexto) {
     xhr.send(formData);
   });
 }
+
 async function enviarMensagemComAnexo(contexto, anexo) {
   const inputId = contexto === 'canal' ? 'input-canal' : 'input-dm';
   const input = document.getElementById(inputId);
@@ -3187,7 +3198,6 @@ function atualizarAvataresNaUI() {
 // PERFIL — VISITA
 // ============================================================
 
-// 🔥 Atualiza APENAS a UI do perfil visitado, sem refetch nem refazer ações
 function atualizarPerfilVisitadoUI(dados) {
   if (!dados) return;
 
@@ -3260,10 +3270,7 @@ function montarAcoesPerfil(usuario) {
   const acoesEl = document.getElementById('visita-acoes');
   if (!acoesEl) return;
 
-  // 🔥 Gera um token único pra essa chamada
   const meuToken = ++_montarAcoesToken;
-
-  // 🔥 Limpa TUDO imediatamente
   acoesEl.innerHTML = '';
 
   const bloqueado = estaBloqueadoLocal(usuario.id);
@@ -3278,10 +3285,7 @@ function montarAcoesPerfil(usuario) {
   }
 
   fetch('/api/amizades').then((r) => r.json()).then((amz) => {
-    // 🔥 Se outra chamada mais recente já aconteceu, ignora essa
     if (meuToken !== _montarAcoesToken) return;
-
-    // 🔥 Limpa de novo (caso algo tenha sido adicionado enquanto o fetch rodava)
     acoesEl.innerHTML = '';
 
     const ehAmigo = amz.amigos.some((a) => a.id === usuario.id);
@@ -3626,7 +3630,6 @@ function iniciarGravacaoAudioDoContexto(event) {
     event.stopPropagation();
   }
 
-  // 🔥 Descobre o contexto de forma robusta
   let contexto = anexoContexto;
   if (!contexto) {
     if (telaAtual === 'canal') contexto = 'canal';
@@ -3634,15 +3637,13 @@ function iniciarGravacaoAudioDoContexto(event) {
     else contexto = 'dm';
   }
 
-  // 🔥 Fecha o menu DEPOIS de capturar o contexto
   fecharMenuAnexo();
 
-  // 🔥 Pequeno delay pra o menu fechar antes de abrir a gravação
-  //    (evita conflito entre o clique e o fechamento do menu)
   setTimeout(() => {
     iniciarGravacaoAudio(contexto);
   }, 50);
 }
+
 async function iniciarGravacaoAudio(contexto) {
   if (gravacaoEstado.ativo) return;
   if (contexto !== 'canal' && contexto !== 'dm') return;
