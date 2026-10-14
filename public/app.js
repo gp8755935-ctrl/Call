@@ -610,10 +610,21 @@ function enviarComUpload(file, tipo, contexto) {
         setTimeout(() => barra.remove(), 4000);
         resolve(null); return;
       }
+
+      // 🔥 Marca 100% mas NÃO remove ainda
       fill.style.width = '100%';
+      pct.textContent = '✅ Enviando...';
+
+      // 🔥 Só remove a barra DEPOIS que a mensagem foi adicionada na tela
+      try {
+        await enviarMensagemComAnexo(contexto, anexo);
+      } catch (err) {
+        console.warn('Erro ao enviar mensagem com anexo:', err);
+      }
+
+      // 🔥 Agora sim pode remover (com um pequeno fade pra ficar suave)
       pct.textContent = '✅ Enviado';
-      setTimeout(() => barra.remove(), 400);
-      await enviarMensagemComAnexo(contexto, anexo);
+      setTimeout(() => barra.remove(), 300);
       resolve(anexo);
     };
 
@@ -629,7 +640,6 @@ function enviarComUpload(file, tipo, contexto) {
     xhr.send(formData);
   });
 }
-
 async function enviarMensagemComAnexo(contexto, anexo) {
   const inputId = contexto === 'canal' ? 'input-canal' : 'input-dm';
   const input = document.getElementById(inputId);
