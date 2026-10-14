@@ -91,10 +91,16 @@ function pegarUsuarioDoCache(id) {
 
 function voltarTelaMobile() {
   if (telaAtual === 'amigos' || telaAtual === 'buscar' || telaAtual === 'dm') {
-    voltarParaServidor();
+    // 🔥 Em vez de voltar pra home vazia, volta pro canal que tava aberto
+    if (canalAtivo) {
+      abrirCanal(canalAtivo);
+    } else {
+      voltarParaServidor();
+    }
   } else if (telaAtual === 'conversa') {
     voltarDMs();
   } else if (telaAtual === 'canal') {
+    // Se tá num canal e clica ←, volta pro home (lista de canais)
     mostrarTelaHome();
   } else {
     voltarParaServidor();
