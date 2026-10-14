@@ -4479,3 +4479,33 @@ window.addEventListener('load', async () => {
     if (e.key === 'void-logout') location.reload();
   });
 });
+
+// ============================================================
+// 🔥 MOBILE — Botão voltar e título dinâmico
+// ============================================================
+
+function voltarTelaMobile() {
+  if (telaAtual === 'amigos' || telaAtual === 'buscar' || telaAtual === 'dm') {
+    voltarParaServidor();
+  } else if (telaAtual === 'conversa') {
+    voltarDMs();
+  } else if (telaAtual === 'canal') {
+    mostrarTelaHome();
+  } else {
+    voltarParaServidor();
+  }
+}
+
+function atualizarBotaoVoltar() {
+  const btn = document.getElementById('btn-voltar-mobile');
+  if (!btn) return;
+  btn.classList.toggle('escondido', telaAtual === 'home');
+}
+
+function atualizarTituloMain(texto) {
+  const tituloEl = document.getElementById('titulo-main');
+  if (!tituloEl) return;
+  const txtEl = tituloEl.querySelector('.txt-titulo');
+  if (txtEl) txtEl.textContent = texto;
+  else tituloEl.textContent = texto;
+}
