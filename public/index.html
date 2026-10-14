@@ -10,6 +10,8 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
 :root {
   --ceu-1: #bae6fd;
   --ceu-2: #7dd3fc;
@@ -1041,8 +1043,6 @@ button.mini { padding: 6px 14px; font-size: 12px; border-radius: 999px; }
   font-weight: 900; text-align: center;
   text-shadow: 0 2px 0 rgba(255,255,255,0.7);
 }
-
-/* 🔥 CORREÇÃO — câmera preta */
 .camera-preview-wrap {
   position: relative;
   background: #000;
@@ -2401,15 +2401,12 @@ body.tema-escuro .notif-onde,
 body.tema-escuro .notif-texto {
   color: #93c5fd;
 }
-
-/* 🔥 CORREÇÃO — avatar padrão da notificação no tema escuro */
 body.tema-escuro .notif-avatar {
   background: linear-gradient(180deg, #1e5a8e, #0f2842) !important;
   border-color: rgba(56, 189, 248, 0.4) !important;
   color: #e0f2fe !important;
   box-shadow: 0 0 12px rgba(14, 165, 233, 0.4) !important;
 }
-
 body.tema-escuro .emoji-picker {
   background: linear-gradient(180deg, rgba(20, 30, 50, 0.98), rgba(15, 25, 45, 0.95));
   border-color: rgba(56, 189, 248, 0.4);
@@ -2490,10 +2487,6 @@ body.tema-escuro .modal-fechar:hover {
   background: rgba(56, 189, 248, 0.3);
   color: #e0f2fe;
 }
-
-/* ============================================================
-   🌙 AJUSTES FINOS DO MODO ESCURO
-   ============================================================ */
 body.tema-escuro .barra-msg {
   border-top: 2px solid rgba(56, 189, 248, 0.25) !important;
   box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.1) !important;
@@ -2774,11 +2767,6 @@ body.tema-escuro .gravacao-acoes .btn-cancelar-grav {
   background: rgba(30, 50, 80, 0.8) !important;
   color: #93c5fd !important;
 }
-
-/* ============================================================ */
-/* 🔥 CORREÇÕES FINAIS — TEMA ESCURO                            */
-/* ============================================================ */
-
 body.tema-escuro .barra-usuario {
   background: linear-gradient(180deg, rgba(30, 50, 80, 0.95), rgba(15, 30, 50, 0.9)) !important;
   border: 3px solid rgba(56, 189, 248, 0.5) !important;
@@ -2794,7 +2782,6 @@ body.tema-escuro .barra-usuario:hover {
 body.tema-escuro .barra-usuario .avatar {
   background: linear-gradient(180deg, #1e5a8e, #0f2842);
 }
-
 body.tema-escuro .avatar-overlay {
   background: rgba(10, 20, 40, 0.7) !important;
 }
@@ -2831,7 +2818,10 @@ body.tema-escuro .vazio {
   color: #93c5fd !important;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5) !important;
 }
-/* 🔥 Corrige alinhamento da bolinha de online no botão de usuário */
+
+/* ============================================================ */
+/* 🔥 AJUSTES FINAIS DO BOTÃO DE USUÁRIO */
+/* ============================================================ */
 .barra-usuario .status-pontinho {
   bottom: 2px !important;
   right: 2px !important;
@@ -2839,8 +2829,6 @@ body.tema-escuro .vazio {
   height: 13px !important;
   z-index: 5;
 }
-
-/* 🔥 Garante que o avatar do botão de usuário não saia do lugar */
 .barra-usuario .avatar {
   width: 42px !important;
   height: 42px !important;
@@ -2848,7 +2836,6 @@ body.tema-escuro .vazio {
   position: relative;
   z-index: 1;
 }
-
 .barra-usuario .avatar img {
   width: 100%;
   height: 100%;
@@ -2856,14 +2843,6 @@ body.tema-escuro .vazio {
   border-radius: 50%;
   display: block;
 }
-/* ============================================================ */
-/* 🔥 BOTÃO DE USUÁRIO (canto inferior esquerdo)                */
-/* ============================================================ */
-
-/* ============================================================ */
-/* 🔥 BOTÃO DE USUÁRIO (canto inferior esquerdo)                */
-/* ============================================================ */
-
 .barra-usuario {
   position: fixed;
   bottom: 14px;
@@ -2886,17 +2865,13 @@ body.tema-escuro .vazio {
   padding: 0;
   overflow: visible;
 }
-
 .barra-usuario::before { display: none; }
-
 .barra-usuario:hover {
   transform: scale(1.1) translateY(-3px);
   box-shadow: inset 0 2px 0 rgba(255, 255, 255, 1),
               0 10px 30px rgba(2, 132, 199, 0.6),
               var(--glow-ciano);
 }
-
-/* 🔥 O avatar ocupa 42x42, centralizado no botão */
 .barra-usuario .avatar {
   width: 42px;
   height: 42px;
@@ -2909,7 +2884,6 @@ body.tema-escuro .vazio {
   border-radius: 50%;
   flex-shrink: 0;
 }
-
 .barra-usuario .avatar img {
   width: 100%;
   height: 100%;
@@ -2917,9 +2891,6 @@ body.tema-escuro .vazio {
   border-radius: 50%;
   display: block;
 }
-
-/* 🔥 A bolinha verde fica no canto inferior DIREITO do avatar,
-   meio pra dentro / meio pra fora (padrão Discord/WhatsApp) */
 .barra-usuario .status-pontinho {
   position: absolute;
   bottom: 1px;
@@ -2934,8 +2905,6 @@ body.tema-escuro .vazio {
   box-sizing: border-box;
   pointer-events: none;
 }
-
-/* 🔥 Ajuste no tema escuro */
 body.tema-escuro .barra-usuario {
   background: linear-gradient(180deg, rgba(30, 50, 80, 0.95), rgba(15, 30, 50, 0.9));
   border: 3px solid rgba(56, 189, 248, 0.5);
@@ -2943,58 +2912,20 @@ body.tema-escuro .barra-usuario {
               0 6px 20px rgba(0, 0, 0, 0.6),
               0 0 20px rgba(14, 165, 233, 0.4);
 }
-
 body.tema-escuro .barra-usuario:hover {
   box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.4),
               0 10px 30px rgba(0, 0, 0, 0.7),
               0 0 30px rgba(14, 165, 233, 0.7);
 }
-
 body.tema-escuro .barra-usuario .status-pontinho {
   border-color: #0f1e3a;
 }
 
-/* 🔥 A bolinha verde fica no canto inferior DIREITO do avatar,
-   meio pra dentro / meio pra fora (padrão Discord/WhatsApp) */
-.barra-usuario .status-pontinho {
-  position: absolute;
-  bottom: 1px;
-  right: 1px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #bbf7d0, #22c55e);
-  border: 2.5px solid white;
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
-  z-index: 10;
-  box-sizing: border-box;
-  pointer-events: none;
-}
-
-/* 🔥 Ajuste no tema escuro */
-body.tema-escuro .barra-usuario {
-  background: linear-gradient(180deg, rgba(30, 50, 80, 0.95), rgba(15, 30, 50, 0.9));
-  border: 3px solid rgba(56, 189, 248, 0.5);
-  box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.3),
-              0 6px 20px rgba(0, 0, 0, 0.6),
-              0 0 20px rgba(14, 165, 233, 0.4);
-}
-
-body.tema-escuro .barra-usuario:hover {
-  box-shadow: inset 0 2px 0 rgba(56, 189, 248, 0.4),
-              0 10px 30px rgba(0, 0, 0, 0.7),
-              0 0 30px rgba(14, 165, 233, 0.7);
-}
-
-body.tema-escuro .barra-usuario .status-pontinho {
-  border-color: #0f1e3a;
-}
 /* ============================================================
    🔥 MOBILE — Topo do main + botão voltar
    Só afeta telas <= 768px. PC 100% intacto.
    ============================================================ */
 
-/* Botão voltar mobile (escondido por padrão) */
 .btn-voltar-mobile {
   display: none;
 }
@@ -3022,19 +2953,20 @@ body.tema-escuro .barra-usuario .status-pontinho {
     align-items: center;
   }
 
-  /* 🔥 No mobile, o texto do título fica truncável */
   .topo-main h3 .txt-titulo {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    min-width: 0;
+    min-width: 70px;
     flex: 1;
+    display: block;
   }
 
-  /* Ações ficam compactas com só ícones */
   .topo-main .acoes {
     gap: 6px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
   }
 
   .topo-main .acoes button {
@@ -3044,19 +2976,21 @@ body.tema-escuro .barra-usuario .status-pontinho {
     min-height: 40px;
     width: 40px;
     height: 40px;
+    max-width: 40px;
+    max-height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
     line-height: 1;
+    flex-shrink: 0;
+    overflow: hidden;
   }
 
-  /* 🔥 Esconde o TEXTO dos botões (fica só emoji) */
   .topo-main .acoes button .txt-btn {
     display: none;
   }
 
-  /* Botão voltar */
   .btn-voltar-mobile {
     display: inline-flex;
     align-items: center;
@@ -3084,7 +3018,25 @@ body.tema-escuro .barra-usuario .status-pontinho {
     transform: scale(0.92);
   }
   .btn-voltar-mobile.escondido {
+    display: none !important;
+  }
+
+  .btn-hamburger {
     display: none;
+    padding: 0;
+    font-size: 20px;
+    min-width: 40px;
+    min-height: 40px;
+    width: 40px;
+    height: 40px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  #app.canal-ativo .btn-hamburger {
+    display: inline-flex;
   }
 }
   </style>
