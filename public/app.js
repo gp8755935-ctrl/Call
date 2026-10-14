@@ -1149,11 +1149,12 @@ function conectarSocket() {
 
     atualizarListasComPerfil(usuario_id, avatar, banner, bio);
 
+    // 🔥 Atualiza APENAS a UI do perfil visitado (sem refetch nem refazer ações)
     if (perfilVisitadoAtual && perfilVisitadoAtual.id === usuario_id) {
       const dados = pegarUsuarioDoCache(usuario_id);
       if (dados) {
         perfilVisitadoAtual = { ...perfilVisitadoAtual, ...dados };
-        abrirPerfilVisitado(perfilVisitadoAtual);
+        atualizarPerfilVisitadoUI(dados);
       }
     }
 
@@ -1461,11 +1462,12 @@ function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
     }
   });
 
+  // 🔥 Só atualiza a UI do perfil visitado, sem refetch nem refazer ações
   if (perfilVisitadoAtual && perfilVisitadoAtual.id === usuarioId) {
     const dados = pegarUsuarioDoCache(usuarioId);
     if (dados) {
       perfilVisitadoAtual = { ...perfilVisitadoAtual, ...dados };
-      abrirPerfilVisitado(perfilVisitadoAtual);
+      atualizarPerfilVisitadoUI(dados);
     }
   }
 }
@@ -2339,7 +2341,6 @@ function criarElMsg(m, chatId, contexto) {
   const reply = replyHTML(m);
   const anexoHTML = renderAnexoHTML(m.anexo);
 
-  // 🔥 Pega o usuário do cache (dados atualizados) ou cria um fallback
   const dadosAtualizados = pegarUsuarioDoCache(m.de_id);
   const usuarioMsg = {
     id: m.de_id,
@@ -3173,85 +3174,88 @@ function atualizarAvataresNaUI() {
 }
 
 // ============================================================
-// PERFIL — VISITA (COM BUSCA DE DADOS FRESCOS)
+// PERFIL — VISITA
 // ============================================================
+
+// 🔥 Atualiza APENAS a UI do perfil visitado, sem refetch nem refazer ações
+function atualizarPerfilVisitadoUI(dados) {
+  if (!dados) return;
+
+  const nomeEl = document.getElementById('visita-nome');
+  if (nomeEl) nomeEl.textContent = dados.nome || '';
+
+  const emailEl = document.getElementById('visita-email');
+  if (emailEl) emailEl.textContent = dados.email || '';
+
+  const avatarEl = document.getElementById('visita-avatar');
+  if (avatarEl) {
+    if (dados.avatar) {
+      avatarEl.classList.add('com-imagem');
+      avatarEl.innerHTML = `<img src="${dados.avatar}" alt="">`;
+    } else {
+      avatarEl.classList.remove('com-imagem');
+      const inicial = (dados.nome || '?').charAt(0).toUpperCase();
+      avatarEl.innerHTML = inicial;
+      avatarEl.style.background = 'linear-gradient(180deg, #38bdf8, #0284c7)';
+    }
+  }
+
+  const bannerEl = document.getElementById('visita-banner');
+  if (bannerEl) {
+    if (dados.banner) bannerEl.style.backgroundImage = `url(${dados.banner})`;
+    else bannerEl.style.backgroundImage = '';
+  }
+
+  const bioEl = document.getElementById('visita-bio');
+  if (bioEl) {
+    bioEl.textContent = (dados.bio && dados.bio.trim()) ? dados.bio : 'Sem descrição.';
+  }
+}
 
 async function abrirPerfilVisitado(usuario) {
   if (!usuario || !usuario.nome) return;
   if (meuUsuario && usuario.id === meuUsuario.id) { abrirModalPerfil(); return; }
 
-  // 🔥 Pega do cache primeiro (dados frescos do socket)
   const dadosCache = pegarUsuarioDoCache(usuario.id);
   const dadosIniciais = dadosCache ? { ...usuario, ...dadosCache } : usuario;
 
-  // Abre o modal JÁ com o que tem (feedback imediato)
   perfilVisitadoAtual = dadosIniciais;
-  document.getElementById('visita-nome').textContent = dadosIniciais.nome;
-  document.getElementById('visita-email').textContent = dadosIniciais.email || '';
-
-  const avatarEl = document.getElementById('visita-avatar');
-  if (dadosIniciais.avatar) {
-    avatarEl.classList.add('com-imagem');
-    avatarEl.innerHTML = `<img src="${dadosIniciais.avatar}" alt="">`;
-  } else {
-    avatarEl.classList.remove('com-imagem');
-    const inicial = (dadosIniciais.nome || '?').charAt(0).toUpperCase();
-    avatarEl.innerHTML = inicial;
-    avatarEl.style.background = 'linear-gradient(180deg, #38bdf8, #0284c7)';
-  }
-
-  const bannerEl = document.getElementById('visita-banner');
-  if (dadosIniciais.banner) bannerEl.style.backgroundImage = `url(${dadosIniciais.banner})`;
-  else bannerEl.style.backgroundImage = '';
-
-  document.getElementById('visita-bio').textContent =
-    (dadosIniciais.bio && dadosIniciais.bio.trim()) ? dadosIniciais.bio : 'Sem descrição.';
+  atualizarPerfilVisitadoUI(dadosIniciais);
 
   montarAcoesPerfil(dadosIniciais);
   document.getElementById('modal-perfil-visita').classList.add('ativo');
 
-  // 🔥 DEPOIS: busca dados frescos do servidor e atualiza
   try {
     const r = await fetch(`/api/usuarios/${usuario.id}`);
     if (!r.ok) return;
     const data = await r.json();
     if (!data || !data.usuario) return;
 
-    // Atualiza cache
     atualizarUsuarioCache(data.usuario);
 
-    // Se o modal já foi fechado, não atualiza
     if (!perfilVisitadoAtual || perfilVisitadoAtual.id !== usuario.id) return;
 
-    // Re-renderiza com dados frescos
     const frescos = { ...dadosIniciais, ...data.usuario };
     perfilVisitadoAtual = frescos;
-
-    document.getElementById('visita-nome').textContent = frescos.nome;
-    document.getElementById('visita-email').textContent = frescos.email || '';
-
-    if (frescos.avatar) {
-      avatarEl.classList.add('com-imagem');
-      avatarEl.innerHTML = `<img src="${frescos.avatar}" alt="">`;
-    } else {
-      avatarEl.classList.remove('com-imagem');
-      const inicial = (frescos.nome || '?').charAt(0).toUpperCase();
-      avatarEl.innerHTML = inicial;
-    }
-
-    if (frescos.banner) bannerEl.style.backgroundImage = `url(${frescos.banner})`;
-    else bannerEl.style.backgroundImage = '';
-
-    document.getElementById('visita-bio').textContent =
-      (frescos.bio && frescos.bio.trim()) ? frescos.bio : 'Sem descrição.';
+    atualizarPerfilVisitadoUI(frescos);
   } catch (e) {
     console.warn('Erro ao buscar dados frescos do perfil:', e);
   }
 }
 
+// 🔥 Token de requisição pra evitar duplicação de botões
+let _montarAcoesToken = 0;
+
 function montarAcoesPerfil(usuario) {
   const acoesEl = document.getElementById('visita-acoes');
+  if (!acoesEl) return;
+
+  // 🔥 Gera um token único pra essa chamada
+  const meuToken = ++_montarAcoesToken;
+
+  // 🔥 Limpa TUDO imediatamente
   acoesEl.innerHTML = '';
+
   const bloqueado = estaBloqueadoLocal(usuario.id);
 
   if (bloqueado) {
@@ -3264,6 +3268,12 @@ function montarAcoesPerfil(usuario) {
   }
 
   fetch('/api/amizades').then((r) => r.json()).then((amz) => {
+    // 🔥 Se outra chamada mais recente já aconteceu, ignora essa
+    if (meuToken !== _montarAcoesToken) return;
+
+    // 🔥 Limpa de novo (caso algo tenha sido adicionado enquanto o fetch rodava)
+    acoesEl.innerHTML = '';
+
     const ehAmigo = amz.amigos.some((a) => a.id === usuario.id);
     const pedidoEnviado = amz.pedidosEnviados.some((p) => p.id === usuario.id);
     const pedidoRecebido = amz.pedidosRecebidos.some((p) => p.id === usuario.id);
@@ -3286,6 +3296,7 @@ function montarAcoesPerfil(usuario) {
       btn.textContent = '✅ Aceitar pedido';
       btn.onclick = () => {
         fetch('/api/amizades').then((r) => r.json()).then((d) => {
+          if (meuToken !== _montarAcoesToken) return;
           const ped = d.pedidosRecebidos.find((p) => p.id === usuario.id);
           if (ped) aceitarPedido(ped.amizade_id);
           fecharPerfilVisitado();
@@ -4347,7 +4358,7 @@ window.addEventListener('load', async () => {
   bindConfig();
 
   try {
-    const r = await fetch('/api/eu', { credentials: 'same-origin' });
+    const r = await fetch('/api/eu', { credentials: 'same-origin', cache: 'no-store' });
     if (r.ok) {
       const data = await r.json();
       if (data && data.usuario && data.usuario.id) {

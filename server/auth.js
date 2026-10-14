@@ -17,7 +17,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // 🔥 Versão do token — mude pra invalidar TODOS os tokens existentes
-const TOKEN_VERSION = 2;
+const TOKEN_VERSION = 3;
 
 async function hashearSenha(senha) {
   return bcrypt.hash(senha, 10);
