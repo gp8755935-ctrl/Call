@@ -2170,12 +2170,13 @@ async function abrirServidor(id) {
     renderizarCanais();
     renderizarMembros();
 
+    // 🔥 SEMPRE abre o primeiro canal quando clica no servidor
     if (data.canais.length > 0) {
-      if (telaAtual === 'canal') abrirCanal(data.canais[0]);
-      else { canalAtivo = data.canais[0]; renderizarCanais(); }
+      await abrirCanal(data.canais[0]);
     } else {
       canalAtivo = null;
       document.getElementById('chat-canal').innerHTML = '<div class="vazio">Sem canais neste servidor.</div>';
+      atualizarTituloMain('Selecione um canal');
     }
   } catch (e) { console.warn(e); }
 }
