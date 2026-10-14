@@ -3610,12 +3610,29 @@ let gravacaoEstado = {
 
 const GRAVACAO_MAX_SEGUNDOS = 120;
 
-function iniciarGravacaoAudioDoContexto() {
-  const contexto = anexoContexto || (telaAtual === 'canal' ? 'canal' : 'dm');
-  fecharMenuAnexo();
-  iniciarGravacaoAudio(contexto);
-}
+function iniciarGravacaoAudioDoContexto(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
 
+  // 🔥 Descobre o contexto de forma robusta
+  let contexto = anexoContexto;
+  if (!contexto) {
+    if (telaAtual === 'canal') contexto = 'canal';
+    else if (telaAtual === 'conversa') contexto = 'dm';
+    else contexto = 'dm';
+  }
+
+  // 🔥 Fecha o menu DEPOIS de capturar o contexto
+  fecharMenuAnexo();
+
+  // 🔥 Pequeno delay pra o menu fechar antes de abrir a gravação
+  //    (evita conflito entre o clique e o fechamento do menu)
+  setTimeout(() => {
+    iniciarGravacaoAudio(contexto);
+  }, 50);
+}
 async function iniciarGravacaoAudio(contexto) {
   if (gravacaoEstado.ativo) return;
   if (contexto !== 'canal' && contexto !== 'dm') return;
@@ -3905,10 +3922,24 @@ function finalizarGravacaoEstado() {
 
 let cameraEstado = { stream: null, fotoBase64: null, contexto: null, _tentativas: 0 };
 
-function abrirCameraDoContexto() {
-  const contexto = anexoContexto || (telaAtual === 'canal' ? 'canal' : 'dm');
+function abrirCameraDoContexto(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  let contexto = anexoContexto;
+  if (!contexto) {
+    if (telaAtual === 'canal') contexto = 'canal';
+    else if (telaAtual === 'conversa') contexto = 'dm';
+    else contexto = 'dm';
+  }
+
   fecharMenuAnexo();
-  abrirCamera(contexto);
+
+  setTimeout(() => {
+    abrirCamera(contexto);
+  }, 50);
 }
 
 async function abrirCamera(contexto) {
