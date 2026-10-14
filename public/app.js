@@ -573,23 +573,32 @@ function enviarComUpload(file, tipo, contexto) {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload');
 
-    let progressoRecebido = false;
+    let progressoReal = false;
     const tempoInicio = Date.now();
 
     xhr.upload.onprogress = (ev) => {
       if (ev.lengthComputable && ev.total > 0) {
-        progressoRecebido = true;
+        progressoReal = true;
         const p = Math.round((ev.loaded / ev.total) * 100);
         fill.style.width = p + '%';
         pct.textContent = p + '%';
       }
     };
 
+    // 🔥 FALLBACK MOBILE: roda SEMPRE. Se o onprogress disparar,
+    //    esse interval para. Se NÃO disparar (Android),
+    //    ele anima a barra por tempo.
     const intervalTempo = setInterval(() => {
-      if (progressoRecebido) { clearInterval(intervalTempo); return; }
+      if (progressoReal) { clearInterval(intervalTempo); return; }
+
       const seg = Math.floor((Date.now() - tempoInicio) / 1000);
       pct.textContent = `Enviando... ${seg}s`;
-    }, 1000);
+
+      // 🔥 Estima o progresso: assume que vai demorar no máx 30s
+      //    Quando passa de 30s, para em 95%
+      const pctFake = Math.min(95, Math.round((seg / 30) * 100));
+      fill.style.width = pctFake + '%';
+    }, 300);
 
     xhr.onload = async () => {
       clearInterval(intervalTempo);
@@ -611,18 +620,15 @@ function enviarComUpload(file, tipo, contexto) {
         resolve(null); return;
       }
 
-      // 🔥 Marca 100% mas NÃO remove ainda
       fill.style.width = '100%';
       pct.textContent = '✅ Enviando...';
 
-      // 🔥 Só remove a barra DEPOIS que a mensagem foi adicionada na tela
       try {
         await enviarMensagemComAnexo(contexto, anexo);
       } catch (err) {
         console.warn('Erro ao enviar mensagem com anexo:', err);
       }
 
-      // 🔥 Agora sim pode remover (com um pequeno fade pra ficar suave)
       pct.textContent = '✅ Enviado';
       setTimeout(() => barra.remove(), 300);
       resolve(anexo);
@@ -639,31 +645,6 @@ function enviarComUpload(file, tipo, contexto) {
 
     xhr.send(formData);
   });
-}
-async function enviarMensagemComAnexo(contexto, anexo) {
-  const inputId = contexto === 'canal' ? 'input-canal' : 'input-dm';
-  const input = document.getElementById(inputId);
-  const texto = (input && input.value.trim()) || '';
-  if (input) input.value = '';
-
-  if (contexto === 'canal') {
-    if (!canalAtivo) return;
-    const r = await fetch(`/api/canais/${canalAtivo.id}/mensagens`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ texto, anexo }),
-    });
-    if (!r.ok) { alert('Erro ao enviar anexo'); return; }
-    setTimeout(() => { scrollarChat('chat-canal'); }, 100);
-  } else if (contexto === 'dm') {
-    if (!conversaAtual) return;
-    const r = await fetch(`/api/conversas/${conversaAtual.conversa_id}/mensagens`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ texto, anexo }),
-    });
-    const data = await r.json();
-    if (!r.ok) { alert(data.erro || 'Erro'); return; }
-    adicionarMsgDM(data.mensagem);
-  }
 }
 
 // ============================================================
