@@ -86,6 +86,45 @@ function pegarUsuarioDoCache(id) {
 }
 
 // ============================================================
+// 🔥 MOBILE — Botão voltar e título dinâmico
+// ============================================================
+
+function voltarTelaMobile() {
+  if (telaAtual === 'amigos' || telaAtual === 'buscar' || telaAtual === 'dm') {
+    voltarParaServidor();
+  } else if (telaAtual === 'conversa') {
+    voltarDMs();
+  } else if (telaAtual === 'canal') {
+    mostrarTelaHome();
+  } else {
+    voltarParaServidor();
+  }
+}
+
+function atualizarBotaoVoltar() {
+  const btn = document.getElementById('btn-voltar-mobile');
+  if (!btn) return;
+
+  // Mostra o botão quando NÃO está na home
+  const esconder = (telaAtual === 'home');
+  btn.classList.toggle('escondido', esconder);
+}
+
+// 🔥 Atualiza só o texto do título (sem apagar botões)
+function atualizarTituloMain(texto) {
+  const tituloEl = document.getElementById('titulo-main');
+  if (!tituloEl) return;
+
+  const txtEl = tituloEl.querySelector('.txt-titulo');
+  if (txtEl) {
+    txtEl.textContent = texto;
+  } else {
+    // Fallback (não deve acontecer se o HTML foi atualizado)
+    tituloEl.textContent = texto;
+  }
+}
+
+// ============================================================
 // TEMA
 // ============================================================
 
@@ -573,32 +612,23 @@ function enviarComUpload(file, tipo, contexto) {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload');
 
-    let progressoReal = false;
+    let progressoRecebido = false;
     const tempoInicio = Date.now();
 
     xhr.upload.onprogress = (ev) => {
       if (ev.lengthComputable && ev.total > 0) {
-        progressoReal = true;
+        progressoRecebido = true;
         const p = Math.round((ev.loaded / ev.total) * 100);
         fill.style.width = p + '%';
         pct.textContent = p + '%';
       }
     };
 
-    // 🔥 FALLBACK MOBILE: roda SEMPRE. Se o onprogress disparar,
-    //    esse interval para. Se NÃO disparar (Android),
-    //    ele anima a barra por tempo.
     const intervalTempo = setInterval(() => {
-      if (progressoReal) { clearInterval(intervalTempo); return; }
-
+      if (progressoRecebido) { clearInterval(intervalTempo); return; }
       const seg = Math.floor((Date.now() - tempoInicio) / 1000);
       pct.textContent = `Enviando... ${seg}s`;
-
-      // 🔥 Estima o progresso: assume que vai demorar no máx 30s
-      //    Quando passa de 30s, para em 95%
-      const pctFake = Math.min(95, Math.round((seg / 30) * 100));
-      fill.style.width = pctFake + '%';
-    }, 300);
+    }, 1000);
 
     xhr.onload = async () => {
       clearInterval(intervalTempo);
@@ -645,6 +675,32 @@ function enviarComUpload(file, tipo, contexto) {
 
     xhr.send(formData);
   });
+}
+
+async function enviarMensagemComAnexo(contexto, anexo) {
+  const inputId = contexto === 'canal' ? 'input-canal' : 'input-dm';
+  const input = document.getElementById(inputId);
+  const texto = (input && input.value.trim()) || '';
+  if (input) input.value = '';
+
+  if (contexto === 'canal') {
+    if (!canalAtivo) return;
+    const r = await fetch(`/api/canais/${canalAtivo.id}/mensagens`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texto, anexo }),
+    });
+    if (!r.ok) { alert('Erro ao enviar anexo'); return; }
+    setTimeout(() => { scrollarChat('chat-canal'); }, 100);
+  } else if (contexto === 'dm') {
+    if (!conversaAtual) return;
+    const r = await fetch(`/api/conversas/${conversaAtual.conversa_id}/mensagens`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texto, anexo }),
+    });
+    const data = await r.json();
+    if (!r.ok) { alert(data.erro || 'Erro'); return; }
+    adicionarMsgDM(data.mensagem);
+  }
 }
 
 // ============================================================
@@ -1140,7 +1196,6 @@ function conectarSocket() {
 
     atualizarListasComPerfil(usuario_id, avatar, banner, bio);
 
-    // 🔥 Atualiza APENAS a UI do perfil visitado (sem refetch nem refazer ações)
     if (perfilVisitadoAtual && perfilVisitadoAtual.id === usuario_id) {
       const dados = pegarUsuarioDoCache(usuario_id);
       if (dados) {
@@ -1292,7 +1347,8 @@ function conectarSocket() {
   socket.on('servidor-atualizado', ({ servidor }) => {
     if (servidorAtivo && servidorAtivo.servidor.id === servidor.id) {
       servidorAtivo.servidor = servidor;
-      document.getElementById('nome-servidor').textContent = servidor.nome;
+      const nomeEl = document.getElementById('nome-servidor');
+      if (nomeEl) nomeEl.textContent = servidor.nome;
     }
     const idx = servidores.findIndex((s) => s.id === servidor.id);
     if (idx >= 0) servidores[idx] = servidor;
@@ -1307,12 +1363,13 @@ function conectarSocket() {
       canalAtivo = null;
       document.getElementById('sidebar-canais').style.display = 'none';
       document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
-      document.getElementById('titulo-main').textContent = 'Selecione um canal';
+      atualizarTituloMain('Selecione um canal');
       document.getElementById('app').classList.remove('canal-ativo');
       document.getElementById('tela-canal').classList.remove('tem-canal');
       telaAtual = 'home';
       esconderTelasMain();
       document.getElementById('tela-canal').classList.add('ativa');
+      atualizarBotaoVoltar();
 
       try {
         const salvo = localStorage.getItem('void-ultima-tela');
@@ -1356,12 +1413,13 @@ function conectarSocket() {
       canalAtivo = null;
       document.getElementById('sidebar-canais').style.display = 'none';
       document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
-      document.getElementById('titulo-main').textContent = 'Selecione um canal';
+      atualizarTituloMain('Selecione um canal');
       document.getElementById('app').classList.remove('canal-ativo');
       document.getElementById('tela-canal').classList.remove('tem-canal');
       telaAtual = 'home';
       esconderTelasMain();
       document.getElementById('tela-canal').classList.add('ativa');
+      atualizarBotaoVoltar();
 
       try {
         const salvo = localStorage.getItem('void-ultima-tela');
@@ -1453,7 +1511,6 @@ function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
     }
   });
 
-  // 🔥 Só atualiza a UI do perfil visitado, sem refetch nem refazer ações
   if (perfilVisitadoAtual && perfilVisitadoAtual.id === usuarioId) {
     const dados = pegarUsuarioDoCache(usuarioId);
     if (dados) {
@@ -2020,12 +2077,13 @@ function abrirMenuServidor(event, s) {
             canalAtivo = null;
             document.getElementById('sidebar-canais').style.display = 'none';
             document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
-            document.getElementById('titulo-main').textContent = 'Selecione um canal';
+            atualizarTituloMain('Selecione um canal');
             document.getElementById('app').classList.remove('canal-ativo');
             document.getElementById('tela-canal').classList.remove('tem-canal');
             telaAtual = 'home';
             esconderTelasMain();
             document.getElementById('tela-canal').classList.add('ativa');
+            atualizarBotaoVoltar();
 
             try {
               const salvo = localStorage.getItem('void-ultima-tela');
@@ -2056,12 +2114,13 @@ function abrirMenuServidor(event, s) {
             canalAtivo = null;
             document.getElementById('sidebar-canais').style.display = 'none';
             document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
-            document.getElementById('titulo-main').textContent = 'Selecione um canal';
+            atualizarTituloMain('Selecione um canal');
             document.getElementById('app').classList.remove('canal-ativo');
             document.getElementById('tela-canal').classList.remove('tem-canal');
             telaAtual = 'home';
             esconderTelasMain();
             document.getElementById('tela-canal').classList.add('ativa');
+            atualizarBotaoVoltar();
 
             try {
               const salvo = localStorage.getItem('void-ultima-tela');
@@ -2090,8 +2149,10 @@ async function abrirServidor(id) {
 
     servidorAtivo = data;
     document.getElementById('sidebar-canais').style.display = 'flex';
-    document.getElementById('nome-servidor').textContent = data.servidor.nome;
-    document.getElementById('codigo-servidor').textContent = 'convite: ' + data.servidor.codigo_convite;
+    const nomeServEl = document.getElementById('nome-servidor');
+    if (nomeServEl) nomeServEl.textContent = data.servidor.nome;
+    const codEl = document.getElementById('codigo-servidor');
+    if (codEl) codEl.textContent = 'convite: ' + data.servidor.codigo_convite;
 
     if (data.membros) data.membros.forEach(atualizarUsuarioCache);
 
@@ -2146,7 +2207,7 @@ function renderizarMembros() {
   const lista = document.getElementById('painel-membros-lista');
   const num = document.getElementById('painel-num-membros');
   if (!lista || !servidorAtivo) return;
-  num.textContent = servidorAtivo.membros.length;
+  if (num) num.textContent = servidorAtivo.membros.length;
 
   lista.innerHTML = '';
   servidorAtivo.membros.forEach((m) => {
@@ -2236,13 +2297,15 @@ async function abrirCanal(canal) {
   const telaCanal = document.getElementById('tela-canal');
   telaCanal.classList.add('tem-canal');
   document.getElementById('app').classList.add('canal-ativo');
-  document.getElementById('titulo-main').textContent = '# ' + canal.nome;
+  atualizarTituloMain('# ' + canal.nome);
   document.getElementById('input-canal').focus();
 
   esconderTelasMain();
   telaCanal.classList.add('ativa');
 
   if (window.innerWidth <= 768) fecharSidebarMobile();
+
+  atualizarBotaoVoltar();
 
   setTimeout(() => salvarUltimaTela(), 100);
 }
@@ -2608,9 +2671,10 @@ function mostrarTelaHome() {
   telaCanal.classList.add('ativa');
   telaCanal.classList.remove('tem-canal');
   document.getElementById('app').classList.remove('canal-ativo');
-  document.getElementById('titulo-main').textContent = 'Selecione um canal';
+  atualizarTituloMain('Selecione um canal');
   document.getElementById('chat-canal').innerHTML = '<div class="vazio">Selecione um canal na barra lateral pra começar.</div>';
   renderizarCanais();
+  atualizarBotaoVoltar();
 }
 
 function abrirDM() {
@@ -2618,8 +2682,9 @@ function abrirDM() {
   document.getElementById('app').classList.remove('canal-ativo');
   esconderTelasMain();
   document.getElementById('tela-dm').classList.add('ativa');
-  document.getElementById('titulo-main').textContent = '💬 Mensagens diretas';
+  atualizarTituloMain('💬 Mensagens diretas');
   carregarConversas();
+  atualizarBotaoVoltar();
 }
 
 function abrirAmigos() {
@@ -2627,8 +2692,9 @@ function abrirAmigos() {
   document.getElementById('app').classList.remove('canal-ativo');
   esconderTelasMain();
   document.getElementById('tela-amigos').classList.add('ativa');
-  document.getElementById('titulo-main').textContent = '👥 Amigos';
+  atualizarTituloMain('👥 Amigos');
   carregarAmizades();
+  atualizarBotaoVoltar();
 }
 
 function abrirBuscar() {
@@ -2636,8 +2702,9 @@ function abrirBuscar() {
   document.getElementById('app').classList.remove('canal-ativo');
   esconderTelasMain();
   document.getElementById('tela-buscar').classList.add('ativa');
-  document.getElementById('titulo-main').textContent = '🔍 Buscar usuários';
+  atualizarTituloMain('🔍 Buscar usuários');
   setTimeout(() => document.getElementById('busca-input').focus(), 50);
+  atualizarBotaoVoltar();
 }
 
 function voltarParaServidor() { mostrarTelaHome(); }
@@ -2976,7 +3043,7 @@ async function abrirConversa(amigo) {
   document.getElementById('app').classList.remove('canal-ativo');
   esconderTelasMain();
   document.getElementById('tela-conversa').classList.add('ativa');
-  document.getElementById('titulo-main').textContent = '💬 Conversa';
+  atualizarTituloMain('💬 Conversa');
   document.getElementById('nome-conversa').textContent = data.amigo.nome;
 
   const r2 = await fetch(`/api/conversas/${data.conversa_id}/mensagens`);
@@ -2985,6 +3052,8 @@ async function abrirConversa(amigo) {
   el.innerHTML = '';
   (d2.mensagens || []).forEach(adicionarMsgDM);
   document.getElementById('input-dm').focus();
+
+  atualizarBotaoVoltar();
 
   setTimeout(() => salvarUltimaTela(), 100);
 }
@@ -3168,7 +3237,6 @@ function atualizarAvataresNaUI() {
 // PERFIL — VISITA
 // ============================================================
 
-// 🔥 Atualiza APENAS a UI do perfil visitado, sem refetch nem refazer ações
 function atualizarPerfilVisitadoUI(dados) {
   if (!dados) return;
 
@@ -3234,17 +3302,13 @@ async function abrirPerfilVisitado(usuario) {
   }
 }
 
-// 🔥 Token de requisição pra evitar duplicação de botões
 let _montarAcoesToken = 0;
 
 function montarAcoesPerfil(usuario) {
   const acoesEl = document.getElementById('visita-acoes');
   if (!acoesEl) return;
 
-  // 🔥 Gera um token único pra essa chamada
   const meuToken = ++_montarAcoesToken;
-
-  // 🔥 Limpa TUDO imediatamente
   acoesEl.innerHTML = '';
 
   const bloqueado = estaBloqueadoLocal(usuario.id);
@@ -3259,10 +3323,7 @@ function montarAcoesPerfil(usuario) {
   }
 
   fetch('/api/amizades').then((r) => r.json()).then((amz) => {
-    // 🔥 Se outra chamada mais recente já aconteceu, ignora essa
     if (meuToken !== _montarAcoesToken) return;
-
-    // 🔥 Limpa de novo (caso algo tenha sido adicionado enquanto o fetch rodava)
     acoesEl.innerHTML = '';
 
     const ehAmigo = amz.amigos.some((a) => a.id === usuario.id);
@@ -3607,7 +3668,6 @@ function iniciarGravacaoAudioDoContexto(event) {
     event.stopPropagation();
   }
 
-  // 🔥 Descobre o contexto de forma robusta
   let contexto = anexoContexto;
   if (!contexto) {
     if (telaAtual === 'canal') contexto = 'canal';
@@ -3615,15 +3675,13 @@ function iniciarGravacaoAudioDoContexto(event) {
     else contexto = 'dm';
   }
 
-  // 🔥 Fecha o menu DEPOIS de capturar o contexto
   fecharMenuAnexo();
 
-  // 🔥 Pequeno delay pra o menu fechar antes de abrir a gravação
-  //    (evita conflito entre o clique e o fechamento do menu)
   setTimeout(() => {
     iniciarGravacaoAudio(contexto);
   }, 50);
 }
+
 async function iniciarGravacaoAudio(contexto) {
   if (gravacaoEstado.ativo) return;
   if (contexto !== 'canal' && contexto !== 'dm') return;

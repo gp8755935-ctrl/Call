@@ -2990,666 +2990,101 @@ body.tema-escuro .barra-usuario .status-pontinho {
   border-color: #0f1e3a;
 }
 /* ============================================================
-   🔥 UI MOBILE — Otimizações pra Android/Celular
+   🔥 MOBILE — Topo do main + botão voltar
    Só afeta telas <= 768px. PC 100% intacto.
    ============================================================ */
 
+/* Botão voltar mobile (escondido por padrão) */
+.btn-voltar-mobile {
+  display: none;
+}
+
 @media (max-width: 768px) {
 
-  /* ============ BASE ============ */
-  html, body {
-    -webkit-text-size-adjust: 100%;
-    -webkit-tap-highlight-color: transparent;
-    overscroll-behavior-y: none;
-    touch-action: manipulation;
-  }
-
-  /* Remove hover bugado no touch */
-  button:hover,
-  .lista li:hover,
-  .canal-item:hover,
-  .servidor-icon:hover,
-  .msg-anexo-imagem:hover {
-    transform: none !important;
-  }
-
-  /* Botões mínimos tocáveis (44px) */
-  button {
-    min-height: 44px;
-    min-width: 44px;
-    padding: 12px 18px;
-    font-size: 14px;
-  }
-  button.mini {
-    min-height: 36px;
-    min-width: 36px;
-    padding: 8px 14px;
-    font-size: 13px;
-  }
-  button.secundario {
-    min-height: 44px;
-  }
-
-  /* Inputs maiores pra dedo */
-  input, textarea {
-    font-size: 16px !important; /* 🔥 16px evita zoom no iOS */
-    padding: 14px 18px;
-    min-height: 48px;
-  }
-
-  /* Scroll suave */
-  .chat-area,
-  .lista-canais,
-  .painel-membros-lista,
-  #notif-stack {
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* ============ TOPO ============ */
+  /* === TOPO MAIN === */
   .topo-main {
     padding: 10px 12px;
     gap: 8px;
     flex-wrap: nowrap;
+    align-items: center;
+    min-height: 56px;
   }
+
   .topo-main h3 {
     font-size: 15px;
-    gap: 6px;
     flex: 1;
     min-width: 0;
-  }
-  .topo-main h3 span {
-    white-space: nowrap;
+    gap: 6px;
     overflow: hidden;
+    white-space: nowrap;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
   }
+
+  /* 🔥 No mobile, o texto do título fica truncável */
+  .topo-main h3 .txt-titulo {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* Ações ficam compactas com só ícones */
   .topo-main .acoes {
     gap: 6px;
     flex-shrink: 0;
   }
+
   .topo-main .acoes button {
-    padding: 8px 10px;
-    font-size: 12px;
-    min-height: 38px;
-    min-width: 38px;
+    padding: 0;
+    font-size: 18px;
+    min-width: 40px;
+    min-height: 40px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    line-height: 1;
   }
 
-  /* Esconde texto dos botões do topo (só ícone) */
+  /* 🔥 Esconde o TEXTO dos botões (fica só emoji) */
   .topo-main .acoes button .txt-btn {
     display: none;
   }
 
-  /* ============ SIDEBAR SERVIDORES ============ */
-  .sidebar-servidores {
-    width: 64px;
-    padding: 10px 0 80px 0;
-    gap: 10px;
-  }
-  .servidor-icon {
-    width: 48px;
-    height: 48px;
-    font-size: 18px;
-  }
-
-  /* ============ SIDEBAR CANAIS (DRAWER) ============ */
-  .sidebar-canais {
-    width: 85%;
-    max-width: 300px;
-    padding-bottom: 100px;
-    z-index: 900;
-  }
-  .sidebar-canais.aberto {
-    box-shadow: 8px 0 40px rgba(2, 132, 199, 0.5);
-  }
-  .topo-servidor {
-    padding: 14px;
-  }
-  .topo-servidor .nome {
-    font-size: 16px;
-  }
-  .canal-item {
-    padding: 12px 16px;
-    font-size: 15px;
-    min-height: 44px;
-  }
-  .secao {
-    padding: 14px 16px 8px;
-    font-size: 11px;
-  }
-  .secao button {
-    width: 32px;
-    height: 32px;
-    font-size: 18px;
-  }
-
-  /* ============ CHAT ============ */
-  .chat-area {
-    padding: 12px;
-    gap: 10px;
-  }
-  .msg-com-avatar {
-    max-width: 92%;
-    gap: 8px;
-  }
-  .msg-com-avatar .avatar {
-    width: 34px;
-    height: 34px;
-    font-size: 14px;
-  }
-  .msg-com-avatar .msg-autor {
-    font-size: 13px;
-  }
-  .msg-com-avatar .msg-texto {
-    font-size: 14px;
-    padding: 10px 14px;
-    line-height: 1.45;
-  }
-  .msg-com-avatar .msg-hora {
-    font-size: 10px;
-  }
-
-  /* Ações da mensagem: sempre visíveis no touch */
-  .msg-acoes {
-    position: static !important;
-    margin-top: 6px;
-    align-self: flex-end;
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    padding: 0;
-    display: none !important;
-    gap: 4px;
-  }
-  .msg-com-avatar.mostrar-acoes .msg-acoes {
-    display: flex !important;
-  }
-  .msg-acoes button {
-    min-height: 36px;
-    min-width: 36px;
-    padding: 6px 10px;
-    font-size: 16px;
-    background: rgba(255, 255, 255, 0.9);
-    border: 1.5px solid rgba(255, 255, 255, 0.95);
-    border-radius: 50%;
-    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.25);
-  }
-
-  /* ============ BARRA DE MENSAGEM ============ */
-  .barra-msg {
-    padding: 10px 12px;
-    gap: 8px;
-    /* 🔥 padding-bottom respeita a barra de navegação do Android */
-    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-  }
-  .barra-msg input {
-    font-size: 16px;
-    padding: 12px 16px;
-    min-height: 46px;
-  }
-  .barra-msg button {
-    padding: 12px 18px;
-    font-size: 14px;
-    min-height: 46px;
-  }
-  .barra-msg .anexo-btn,
-  .barra-msg .emoji-btn {
-    font-size: 22px;
-    padding: 8px;
-    min-height: 44px;
-    min-width: 44px;
-  }
-
-  /* ============ MENU DE ANEXO — BOTTOM SHEET ============ */
-  #menu-anexo {
-    position: fixed !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    top: auto !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    border-radius: 24px 24px 0 0 !important;
-    padding: 12px 8px calc(12px + env(safe-area-inset-bottom, 0px)) 8px !important;
-    min-width: 0 !important;
-    max-height: 80vh !important;
-    overflow-y: auto !important;
-    animation: sheetUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-    box-shadow: 0 -10px 40px rgba(2, 132, 199, 0.5) !important;
-  }
-  #menu-anexo.ativo {
-    display: flex !important;
-  }
-  #menu-anexo::before {
-    content: '';
-    position: absolute;
-    top: 6px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 40px;
-    height: 4px;
-    border-radius: 999px;
-    background: rgba(2, 132, 199, 0.3);
-  }
-  #menu-anexo button {
-    padding: 14px 18px !important;
-    font-size: 15px !important;
-    min-height: 56px !important;
-    border-radius: 14px !important;
-    gap: 14px !important;
-  }
-  #menu-anexo button .menu-emoji {
-    font-size: 22px !important;
-    width: 28px !important;
-  }
-  #menu-anexo button .menu-desc {
-    font-size: 11px !important;
-    margin-top: 2px !important;
-  }
-
-  @keyframes sheetUp {
-    from { transform: translateY(100%); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
-  }
-
-  /* Overlay escuro atrás do bottom sheet */
-  #menu-anexo.ativo::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: rgba(2, 20, 35, 0.5);
-    z-index: -1;
-    animation: fadeIn 0.2s;
-  }
-
-  /* ============ EMOJI PICKER ============ */
-  .emoji-picker {
-    position: fixed !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    top: auto !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    max-height: 50vh !important;
-    border-radius: 24px 24px 0 0 !important;
-    padding: 16px 12px calc(16px + env(safe-area-inset-bottom, 0px)) 12px !important;
-    animation: sheetUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-  }
-  .emoji-picker::before {
-    content: '';
-    position: absolute;
-    top: 6px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 40px;
-    height: 4px;
-    border-radius: 999px;
-    background: rgba(2, 132, 199, 0.3);
-  }
-  .emoji-grid {
-    grid-template-columns: repeat(8, 1fr);
-    gap: 2px;
-  }
-  .emoji-grid span {
-    font-size: 24px;
-    padding: 6px 2px;
-    min-height: 40px;
-    display: flex;
+  /* Botão voltar */
+  .btn-voltar-mobile {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-  }
-
-  /* ============ PAINEL MEMBROS ============ */
-  .painel-membros {
-    width: 85%;
-    max-width: 320px;
-  }
-  .painel-membros-lista .membro-item {
-    padding: 12px 14px;
-    font-size: 15px;
-    min-height: 52px;
-  }
-
-  /* ============ BOTÃO USUÁRIO ============ */
-  .barra-usuario {
-    left: 10px;
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-    width: 52px;
-    height: 52px;
-  }
-  .barra-usuario .avatar {
-    width: 42px;
-    height: 42px;
-  }
-
-  /* ============ NOTIFICAÇÕES ============ */
-  #notif-stack {
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    max-width: none;
-    width: auto;
-  }
-  .notif {
-    padding: 14px 16px;
-    border-radius: 16px;
-  }
-  .notif-avatar {
-    width: 42px;
-    height: 42px;
-    font-size: 16px;
-  }
-  .notif-titulo {
-    font-size: 14px;
-  }
-  .notif-texto {
-    font-size: 13px;
-  }
-  .notif-close {
     min-width: 40px;
     min-height: 40px;
-    font-size: 16px;
-  }
-
-  /* ============ MODAIS ============ */
-  .modal-bg {
-    padding: 0;
-    align-items: flex-end;
-  }
-  .modal {
-    max-width: 100% !important;
-    width: 100% !important;
-    max-height: 92vh;
-    border-radius: 24px 24px 0 0 !important;
-    padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px)) 20px;
-    animation: sheetUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-  }
-  .modal::before {
-    content: '';
-    position: absolute;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 40px;
-    height: 4px;
-    border-radius: 999px;
-    background: rgba(2, 132, 199, 0.3);
-  }
-  .modal h3 {
-    font-size: 20px;
-    margin-bottom: 16px;
-    margin-top: 8px;
-  }
-  .modal .acoes {
-    gap: 8px;
-    margin-top: 16px;
-  }
-  .modal .acoes button {
-    flex: 1;
-    min-height: 48px;
-    font-size: 15px;
-  }
-
-  /* Perfil modal */
-  .modal-perfil {
-    max-width: 100% !important;
-    padding: 0 !important;
-    border-radius: 24px 24px 0 0 !important;
-  }
-  .perfil-banner {
-    height: 130px;
-  }
-  .perfil-avatar-wrapper {
-    width: 96px;
-    height: 96px;
-    margin-top: -48px;
-    margin-left: 20px;
-  }
-  .perfil-avatar-wrapper .avatar-container,
-  .avatar-overlay {
-    width: 96px;
-    height: 96px;
-  }
-  .perfil-info {
-    padding: 14px 20px 8px;
-  }
-  .perfil-info h3 {
-    font-size: 22px;
-  }
-  .perfil-info textarea {
-    font-size: 15px;
-    min-height: 80px;
-  }
-  .perfil-acoes {
-    padding: 0 20px 12px;
-    gap: 8px;
-  }
-  .perfil-acoes button {
-    flex: 1 1 calc(50% - 4px);
-    min-height: 44px;
-    font-size: 13px;
-    padding: 10px 14px;
-  }
-
-  /* ============ LISTAS (Amigos, DMs, etc) ============ */
-  .lista li {
-    padding: 14px 16px;
-    border-radius: 16px;
-    min-height: 64px;
-  }
-  .lista li .nome {
-    font-size: 15px;
-    gap: 10px;
-  }
-  .lista li .avatar.mini {
     width: 40px;
     height: 40px;
-    font-size: 15px;
-  }
-  .lista li .email,
-  .lista li .preview {
-    font-size: 12px;
-  }
-  .lista li button.mini {
-    min-height: 40px;
-    min-width: 40px;
-    padding: 8px 12px;
-    font-size: 13px;
-  }
-  .lista li .nao-lidas {
-    padding: 5px 12px;
-    font-size: 12px;
-    min-height: 26px;
-  }
-
-  /* ============ TELAS ============ */
-  .tela-main {
-    padding: 16px;
-  }
-  .tela-main h3 {
+    padding: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.7);
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    color: var(--agua-2);
     font-size: 20px;
-    margin-bottom: 16px;
+    font-weight: 900;
+    cursor: pointer;
+    flex-shrink: 0;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,1),
+                0 2px 8px rgba(2,132,199,0.25);
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
   }
-  .tela-main h4 {
-    font-size: 12px;
-    margin: 16px 0 8px;
+  .btn-voltar-mobile::before { display: none !important; }
+  .btn-voltar-mobile:active {
+    transform: scale(0.92);
   }
-
-  /* ============ MENU CONTEXTUAL ============ */
-  #menu-contexto {
-    left: 12px !important;
-    right: 12px !important;
-    width: auto !important;
-    min-width: 0 !important;
-    max-width: none !important;
-    border-radius: 20px !important;
-    padding: 8px !important;
-  }
-  #menu-contexto button {
-    min-height: 52px !important;
-    padding: 12px 16px !important;
-    font-size: 15px !important;
-    border-radius: 12px !important;
-  }
-  #menu-contexto button .menu-emoji {
-    font-size: 20px !important;
-    width: 26px !important;
-  }
-
-  /* ============ PICKER REAÇÃO ============ */
-  #reacao-picker-global {
-    left: 12px !important;
-    right: 12px !important;
-    width: auto !important;
-    border-radius: 20px !important;
-    padding: 8px !important;
-  }
-  #reacao-picker-global span {
-    font-size: 26px !important;
-    padding: 10px 12px !important;
-    min-width: 44px;
-    min-height: 44px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  /* ============ CÂMERA ============ */
-  .camera-card {
-    max-width: 100% !important;
-    width: 100% !important;
-    border-radius: 24px 24px 0 0 !important;
-    padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px)) 16px;
-    max-height: 95vh;
-  }
-  .camera-shutter {
-    width: 72px;
-    height: 72px;
-    font-size: 26px;
-  }
-  .camera-controles button {
-    min-height: 48px;
-    font-size: 15px;
-  }
-
-  /* ============ GRAVAÇÃO ÁUDIO ============ */
-  .barra-gravacao {
-    padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px)) 14px;
-    gap: 10px;
-  }
-  .gravacao-btn {
-    width: 56px;
-    height: 56px;
-    font-size: 24px;
-  }
-  .gravacao-acoes button {
-    width: 48px;
-    height: 48px;
-    font-size: 18px;
-  }
-
-  /* ============ AUTH ============ */
-  #tela-auth {
-    padding: 12px;
-  }
-  .auth-card {
-    padding: 28px 22px;
-    border-radius: 24px;
-    max-width: 100%;
-  }
-  .auth-logo h1 {
-    font-size: 42px;
-  }
-  .aba-auth {
-    padding: 12px;
-    font-size: 14px;
-    min-height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  /* ============ UPLOAD BARRA ============ */
-  .upload-barra {
-    padding: 12px 14px;
-    max-width: 100%;
-    border-radius: 14px;
-  }
-  .upload-barra .upload-label {
-    font-size: 13px;
-  }
-
-  /* ============ BOTÃO HAMBURGER ============ */
-  .btn-hamburger {
+  .btn-voltar-mobile.escondido {
     display: none;
-    padding: 10px 14px;
-    font-size: 20px;
-    min-width: 44px;
-    min-height: 44px;
-  }
-  #app.canal-ativo .btn-hamburger {
-    display: inline-flex;
-  }
-
-  /* ============ DIGITANDO ============ */
-  .digitando-bar {
-    padding: 8px 14px;
-    font-size: 12px;
-    min-height: 32px;
-  }
-
-  /* ============ BARRAS DE REPLY ============ */
-  .barra-reply {
-    padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)) 14px;
-    font-size: 13px;
-  }
-  .barra-reply .btn-cancelar-reply {
-    min-width: 40px;
-    min-height: 40px;
-    font-size: 20px;
-  }
-}
-
-/* ============================================================
-   🔥 AJUSTES EXTRAS PARA TELAS MUITO PEQUENAS (<= 420px)
-   ============================================================ */
-@media (max-width: 420px) {
-  .topo-main .acoes button {
-    padding: 6px 8px;
-    min-width: 36px;
-    min-height: 36px;
-  }
-  .msg-com-avatar {
-    max-width: 95%;
-  }
-  .msg-com-avatar .avatar {
-    width: 30px;
-    height: 30px;
-  }
-  .emoji-grid {
-    grid-template-columns: repeat(7, 1fr);
-  }
-  .lista li {
-    padding: 12px 14px;
-  }
-  .perfil-acoes button {
-    flex: 1 1 100%;
-  }
-}
-
-/* ============================================================
-   🔥 SUPORTE A NOTCH / BARRA DE NAVEGAÇÃO
-   ============================================================ */
-@supports (padding: env(safe-area-inset-bottom)) {
-  @media (max-width: 768px) {
-    .barra-msg,
-    .barra-gravacao,
-    .barra-reply,
-    .modal,
-    #menu-anexo,
-    .emoji-picker,
-    .camera-card {
-      padding-bottom: calc(var(--pad-bottom, 12px) + env(safe-area-inset-bottom));
-    }
   }
 }
   </style>
@@ -3725,17 +3160,17 @@ body.tema-escuro .barra-usuario .status-pontinho {
 
     <div class="main">
       <div class="topo-main">
-        <h3 id="titulo-main">
-          <button class="btn-hamburger" onclick="abrirSidebarMobile()">☰</button>
-          Selecione um canal
-        </h3>
-        <div class="acoes">
-          <button class="secundario mini" onclick="abrirDM()">💬 DMs</button>
-          <button class="secundario mini" onclick="abrirAmigos()">👥 Amigos</button>
-          <button class="secundario mini" onclick="abrirBuscar()">🔍 Buscar</button>
-          <button class="secundario mini" onclick="abrirConfig()">⚙️</button>
-        </div>
-      </div>
+      <h3 id="titulo-main">
+  <button class="btn-voltar-mobile escondido" id="btn-voltar-mobile" onclick="voltarTelaMobile()" title="Voltar">←</button>
+  <button class="btn-hamburger" onclick="abrirSidebarMobile()">☰</button>
+  <span class="txt-titulo">Selecione um canal</span>
+</h3>
+    <div class="acoes">
+  <button class="secundario mini" onclick="abrirDM()" title="DMs">💬<span class="txt-btn"> DMs</span></button>
+  <button class="secundario mini" onclick="abrirAmigos()" title="Amigos">👥<span class="txt-btn"> Amigos</span></button>
+  <button class="secundario mini" onclick="abrirBuscar()" title="Buscar">🔍<span class="txt-btn"> Buscar</span></button>
+  <button class="secundario mini" onclick="abrirConfig()" title="Configurações">⚙️</button>
+</div>
 
       <div id="tela-canal" class="tela-main">
         <div class="chat-area" id="chat-canal"></div>
