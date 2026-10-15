@@ -2179,7 +2179,7 @@ async function abrirServidor(id) {
       atualizarTituloMain('Selecione um canal');
     }
   } catch (e) { console.warn(e); }
-}
+} 
 
 function renderizarCanais() {
   const el = document.getElementById('lista-canais');
