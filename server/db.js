@@ -1,5 +1,6 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const crypto = require('crypto');
 
 const DB_PATH = path.join(__dirname, '..', 'chat.db');
 const db = new Database(DB_PATH);
@@ -29,13 +30,11 @@ function migrarBanco() {
     console.warn('Aviso na migração:', e.message);
   }
 }
-
 migrarBanco();
 
 // ============================================================
 // CRIAÇÃO DAS TABELAS
 // ============================================================
-
 db.exec(`
   CREATE TABLE IF NOT EXISTS usuarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -169,9 +168,7 @@ db.exec(`
 // ============================================================
 // USUÁRIOS
 // ============================================================
-
 function buscarUsuarioPorId(id) {
-  // 🔥 Força número
   const idNum = Number(id);
   if (!Number.isInteger(idNum)) return null;
   return db.prepare('SELECT * FROM usuarios WHERE id = ?').get(idNum);
@@ -187,12 +184,8 @@ function criarUsuario({ nome, email, senhaHash }) {
   ).run(nome, email, senhaHash);
   const usuario = buscarUsuarioPorId(info.lastInsertRowid);
   return {
-    id: usuario.id,
-    nome: usuario.nome,
-    email: usuario.email,
-    avatar: usuario.avatar || '',
-    banner: usuario.banner || '',
-    bio: usuario.bio || '',
+    id: usuario.id, nome: usuario.nome, email: usuario.email,
+    avatar: usuario.avatar || '', banner: usuario.banner || '', bio: usuario.bio || '',
   };
 }
 
@@ -211,20 +204,16 @@ function atualizarBio(id, bio) {
 function buscarUsuariosPorNome(q, excetoId) {
   return db.prepare(
     `SELECT id, nome, email, avatar, banner, bio
-     FROM usuarios
-     WHERE nome LIKE ? AND id != ?
-     LIMIT 20`
+     FROM usuarios WHERE nome LIKE ? AND id != ? LIMIT 20`
   ).all('%' + q + '%', Number(excetoId));
 }
 
 // ============================================================
 // AMIZADES
 // ============================================================
-
 function buscarAmizadeEntre(a, b) {
   return db.prepare(
-    `SELECT * FROM amizades
-     WHERE (usuario_a = ? AND usuario_b = ?) OR (usuario_a = ? AND usuario_b = ?)`
+    `SELECT * FROM amizades WHERE (usuario_a = ? AND usuario_b = ?) OR (usuario_a = ? AND usuario_b = ?)`
   ).get(Number(a), Number(b), Number(b), Number(a));
 }
 
@@ -247,19 +236,15 @@ function listarAmigos(usuarioId) {
   const id = Number(usuarioId);
   return db.prepare(
     `SELECT u.id, u.nome, u.email, u.avatar, u.banner, u.bio, a.id as amizade_id
-     FROM amizades a
-     JOIN usuarios u ON (u.id = a.usuario_a OR u.id = a.usuario_b)
-     WHERE a.status = 'aceita'
-       AND (a.usuario_a = ? OR a.usuario_b = ?)
-       AND u.id != ?`
+     FROM amizades a JOIN usuarios u ON (u.id = a.usuario_a OR u.id = a.usuario_b)
+     WHERE a.status = 'aceita' AND (a.usuario_a = ? OR a.usuario_b = ?) AND u.id != ?`
   ).all(id, id, id);
 }
 
 function listarPedidosRecebidos(usuarioId) {
   return db.prepare(
     `SELECT u.id, u.nome, u.email, u.avatar, a.id as amizade_id, a.criado_em
-     FROM amizades a
-     JOIN usuarios u ON u.id = a.usuario_a
+     FROM amizades a JOIN usuarios u ON u.id = a.usuario_a
      WHERE a.usuario_b = ? AND a.status = 'pendente'`
   ).all(Number(usuarioId));
 }
@@ -267,93 +252,66 @@ function listarPedidosRecebidos(usuarioId) {
 function listarPedidosEnviados(usuarioId) {
   return db.prepare(
     `SELECT u.id, u.nome, u.email, u.avatar, a.id as amizade_id, a.criado_em
-     FROM amizades a
-     JOIN usuarios u ON u.id = a.usuario_b
+     FROM amizades a JOIN usuarios u ON u.id = a.usuario_b
      WHERE a.usuario_a = ? AND a.status = 'pendente'`
   ).all(Number(usuarioId));
 }
 
 function saoAmigos(a, b) {
   const amz = db.prepare(
-    `SELECT * FROM amizades
-     WHERE status = 'aceita'
-       AND ((usuario_a = ? AND usuario_b = ?) OR (usuario_a = ? AND usuario_b = ?))`
+    `SELECT * FROM amizades WHERE status = 'aceita' AND ((usuario_a = ? AND usuario_b = ?) OR (usuario_a = ? AND usuario_b = ?))`
   ).get(Number(a), Number(b), Number(b), Number(a));
   return !!amz;
 }
 
 // ============================================================
-// BLOQUEIOS
+// BLOQUEIOS E SILENCIADOS
 // ============================================================
-
 function bloquear(bloqueadorId, bloqueadoId) {
   try {
-    db.prepare(
-      'INSERT OR IGNORE INTO bloqueios (bloqueador_id, bloqueado_id) VALUES (?, ?)'
-    ).run(Number(bloqueadorId), Number(bloqueadoId));
+    db.prepare('INSERT OR IGNORE INTO bloqueios (bloqueador_id, bloqueado_id) VALUES (?, ?)').run(Number(bloqueadorId), Number(bloqueadoId));
   } catch (e) {}
 }
 
 function desbloquear(bloqueadorId, bloqueadoId) {
-  db.prepare(
-    'DELETE FROM bloqueios WHERE bloqueador_id = ? AND bloqueado_id = ?'
-  ).run(Number(bloqueadorId), Number(bloqueadoId));
+  db.prepare('DELETE FROM bloqueios WHERE bloqueador_id = ? AND bloqueado_id = ?').run(Number(bloqueadorId), Number(bloqueadoId));
 }
 
 function estaBloqueado(bloqueadorId, bloqueadoId) {
-  const r = db.prepare(
-    'SELECT 1 FROM bloqueios WHERE bloqueador_id = ? AND bloqueado_id = ?'
-  ).get(Number(bloqueadorId), Number(bloqueadoId));
+  const r = db.prepare('SELECT 1 FROM bloqueios WHERE bloqueador_id = ? AND bloqueado_id = ?').get(Number(bloqueadorId), Number(bloqueadoId));
   return !!r;
 }
 
 function listarBloqueados(usuarioId) {
   return db.prepare(
-    `SELECT u.id, u.nome, u.email, u.avatar
-     FROM bloqueios b
-     JOIN usuarios u ON u.id = b.bloqueado_id
-     WHERE b.bloqueador_id = ?`
+    `SELECT u.id, u.nome, u.email, u.avatar FROM bloqueios b
+     JOIN usuarios u ON u.id = b.bloqueado_id WHERE b.bloqueador_id = ?`
   ).all(Number(usuarioId));
 }
 
-// ============================================================
-// SILENCIADOS
-// ============================================================
-
 function silenciar(usuarioId, tipo, alvoId) {
   try {
-    db.prepare(
-      'INSERT OR IGNORE INTO silenciados (usuario_id, tipo, alvo_id) VALUES (?, ?, ?)'
-    ).run(Number(usuarioId), tipo, Number(alvoId));
+    db.prepare('INSERT OR IGNORE INTO silenciados (usuario_id, tipo, alvo_id) VALUES (?, ?, ?)').run(Number(usuarioId), tipo, Number(alvoId));
   } catch (e) {}
 }
 
 function dessilenciar(usuarioId, tipo, alvoId) {
-  db.prepare(
-    'DELETE FROM silenciados WHERE usuario_id = ? AND tipo = ? AND alvo_id = ?'
-  ).run(Number(usuarioId), tipo, Number(alvoId));
+  db.prepare('DELETE FROM silenciados WHERE usuario_id = ? AND tipo = ? AND alvo_id = ?').run(Number(usuarioId), tipo, Number(alvoId));
 }
 
 function estaSilenciado(usuarioId, tipo, alvoId) {
-  const r = db.prepare(
-    'SELECT 1 FROM silenciados WHERE usuario_id = ? AND tipo = ? AND alvo_id = ?'
-  ).get(Number(usuarioId), tipo, Number(alvoId));
+  const r = db.prepare('SELECT 1 FROM silenciados WHERE usuario_id = ? AND tipo = ? AND alvo_id = ?').get(Number(usuarioId), tipo, Number(alvoId));
   return !!r;
 }
 
 // ============================================================
-// CONVERSAS E MENSAGENS
+// CONVERSAS E MENSAGENS (M1 corrigido)
 // ============================================================
-
 function abrirConversa(a, b) {
   const [menor, maior] = [Number(a), Number(b)].sort((x, y) => x - y);
-  let conv = db.prepare(
-    'SELECT * FROM conversas WHERE usuario_a = ? AND usuario_b = ?'
-  ).get(menor, maior);
+  let conv = db.prepare('SELECT * FROM conversas WHERE usuario_a = ? AND usuario_b = ?').get(menor, maior);
   if (!conv) {
-    const info = db.prepare(
-      'INSERT INTO conversas (usuario_a, usuario_b) VALUES (?, ?)'
-    ).run(menor, maior);
+    const info = db.prepare('INSERT INTO conversas (usuario_a, usuario_b) VALUES (?, ?)').run(menor, maior);
     conv = { id: info.lastInsertRowid, usuario_a: menor, usuario_b: maior };
   }
   return conv;
@@ -366,37 +324,24 @@ function buscarConversaPorId(id) {
 function listarConversas(usuarioId) {
   const id = Number(usuarioId);
   const conversas = db.prepare(
-    `SELECT c.*,
-      CASE WHEN c.usuario_a = ? THEN c.usuario_b ELSE c.usuario_a END as amigo_id
-     FROM conversas c
-     WHERE c.usuario_a = ? OR c.usuario_b = ?
-     ORDER BY c.id DESC`
+    `SELECT c.*, CASE WHEN c.usuario_a = ? THEN c.usuario_b ELSE c.usuario_a END as amigo_id
+     FROM conversas c WHERE c.usuario_a = ? OR c.usuario_b = ? ORDER BY c.id DESC`
   ).all(id, id, id);
 
   return conversas.map((c) => {
     const amigo = buscarUsuarioPorId(c.amigo_id);
     const ultima = db.prepare(
-      `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
-       FROM mensagens m
-       LEFT JOIN usuarios u ON u.id = m.de_id
-       WHERE m.conversa_id = ?
-       ORDER BY m.id DESC LIMIT 1`
+      `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar FROM mensagens m
+       LEFT JOIN usuarios u ON u.id = m.de_id WHERE m.conversa_id = ? ORDER BY m.id DESC LIMIT 1`
     ).get(c.id);
-    if (ultima && ultima.anexo) {
-      try { ultima.anexo = JSON.parse(ultima.anexo); } catch (e) { ultima.anexo = null; }
-    }
+    if (ultima && ultima.anexo) { try { ultima.anexo = JSON.parse(ultima.anexo); } catch (e) { ultima.anexo = null; } }
     const naoLidas = db.prepare(
       'SELECT COUNT(*) as n FROM mensagens WHERE conversa_id = ? AND de_id != ? AND lida = 0'
     ).get(c.id, id).n;
     return {
       conversa_id: c.id,
-      amigo: amigo ? {
-        id: amigo.id, nome: amigo.nome, email: amigo.email,
-        avatar: amigo.avatar || '', banner: amigo.banner || '', bio: amigo.bio || '',
-      } : null,
-      ultima: ultima || null,
-      nao_lidas: naoLidas,
-      silenciado: estaSilenciado(id, 'usuario', c.amigo_id),
+      amigo: amigo ? { id: amigo.id, nome: amigo.nome, email: amigo.email, avatar: amigo.avatar || '', banner: amigo.banner || '', bio: amigo.bio || '' } : null,
+      ultima: ultima || null, nao_lidas: naoLidas, silenciado: estaSilenciado(id, 'usuario', c.amigo_id),
     };
   });
 }
@@ -405,39 +350,28 @@ function salvarMensagem({ conversaId, deId, texto, replyId, replyAutor, replyTex
   const info = db.prepare(
     `INSERT INTO mensagens (conversa_id, de_id, texto, reply_id, reply_autor, reply_texto, anexo)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    Number(conversaId), Number(deId), texto || '',
-    replyId ? Number(replyId) : null, replyAutor || null, replyTexto || null,
-    anexo ? JSON.stringify(anexo) : null
-  );
+  ).run(Number(conversaId), Number(deId), texto || '', replyId ? Number(replyId) : null, replyAutor || null, replyTexto || null, anexo ? JSON.stringify(anexo) : null);
   return buscarMensagemPorId(info.lastInsertRowid);
 }
 
 function buscarMensagemPorId(id) {
   const m = db.prepare(
-    `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
-     FROM mensagens m
-     LEFT JOIN usuarios u ON u.id = m.de_id
-     WHERE m.id = ?`
+    `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar FROM mensagens m
+     LEFT JOIN usuarios u ON u.id = m.de_id WHERE m.id = ?`
   ).get(Number(id));
-  if (m && m.anexo) {
-    try { m.anexo = JSON.parse(m.anexo); } catch (e) { m.anexo = null; }
-  }
+  if (m && m.anexo) { try { m.anexo = JSON.parse(m.anexo); } catch (e) { m.anexo = null; } }
   return m;
 }
 
+// 🔥 M1 CORRIGIDO: Busca as 200 mais recentes (DESC) e inverte (reverse)
 function listarMensagens(conversaId) {
   const msgs = db.prepare(
-    `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
-     FROM mensagens m
-     LEFT JOIN usuarios u ON u.id = m.de_id
-     WHERE m.conversa_id = ?
-     ORDER BY m.id ASC LIMIT 200`
+    `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar FROM mensagens m
+     LEFT JOIN usuarios u ON u.id = m.de_id WHERE m.conversa_id = ? ORDER BY m.id DESC LIMIT 200`
   ).all(Number(conversaId));
-  return msgs.map((m) => {
-    if (m.anexo) {
-      try { m.anexo = JSON.parse(m.anexo); } catch (e) { m.anexo = null; }
-    }
+  
+  return msgs.reverse().map((m) => {
+    if (m.anexo) { try { m.anexo = JSON.parse(m.anexo); } catch (e) { m.anexo = null; } }
     return m;
   });
 }
@@ -455,20 +389,17 @@ function limparHistoricoConversa(conversaId) {
 }
 
 function marcarComoLidas(conversaId, usuarioId) {
-  db.prepare(
-    'UPDATE mensagens SET lida = 1 WHERE conversa_id = ? AND de_id != ?'
-  ).run(Number(conversaId), Number(usuarioId));
+  db.prepare('UPDATE mensagens SET lida = 1 WHERE conversa_id = ? AND de_id != ?').run(Number(conversaId), Number(usuarioId));
 }
 
 // ============================================================
-// SERVIDORES
+// SERVIDORES (M7 corrigido - crypto.randomInt)
 // ============================================================
-
 function gerarCodigoConvite() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let codigo = '';
   for (let i = 0; i < 8; i++) {
-    codigo += chars[Math.floor(Math.random() * chars.length)];
+    codigo += chars[crypto.randomInt(chars.length)];
   }
   return codigo;
 }
@@ -481,19 +412,10 @@ function criarServidor({ nome, descricao, donoId }) {
     tentativas++;
   } while (db.prepare('SELECT 1 FROM servidores WHERE codigo_convite = ?').get(codigo) && tentativas < 10);
 
-  const info = db.prepare(
-    'INSERT INTO servidores (nome, descricao, dono_id, codigo_convite) VALUES (?, ?, ?, ?)'
-  ).run(nome, descricao || '', Number(donoId), codigo);
-
+  const info = db.prepare('INSERT INTO servidores (nome, descricao, dono_id, codigo_convite) VALUES (?, ?, ?, ?)').run(nome, descricao || '', Number(donoId), codigo);
   const servidorId = info.lastInsertRowid;
-  db.prepare(
-    'INSERT INTO membros_servidor (servidor_id, usuario_id) VALUES (?, ?)'
-  ).run(servidorId, Number(donoId));
-
-  db.prepare(
-    'INSERT INTO canais (servidor_id, nome) VALUES (?, ?)'
-  ).run(servidorId, 'geral');
-
+  db.prepare('INSERT INTO membros_servidor (servidor_id, usuario_id) VALUES (?, ?)').run(servidorId, Number(donoId));
+  db.prepare('INSERT INTO canais (servidor_id, nome) VALUES (?, ?)').run(servidorId, 'geral');
   return buscarServidorPorId(servidorId);
 }
 
@@ -508,10 +430,8 @@ function buscarServidorPorCodigo(codigo) {
 function listarServidoresDoUsuario(usuarioId) {
   return db.prepare(
     `SELECT s.*, (SELECT COUNT(*) FROM membros_servidor WHERE servidor_id = s.id) as total_membros
-     FROM servidores s
-     JOIN membros_servidor m ON m.servidor_id = s.id
-     WHERE m.usuario_id = ?
-     ORDER BY s.id ASC`
+     FROM servidores s JOIN membros_servidor m ON m.servidor_id = s.id
+     WHERE m.usuario_id = ? ORDER BY s.id ASC`
   ).all(Number(usuarioId));
 }
 
@@ -527,54 +447,38 @@ function deletarServidor(id, donoId) {
 }
 
 function ehMembro(servidorId, usuarioId) {
-  const r = db.prepare(
-    'SELECT 1 FROM membros_servidor WHERE servidor_id = ? AND usuario_id = ?'
-  ).get(Number(servidorId), Number(usuarioId));
+  const r = db.prepare('SELECT 1 FROM membros_servidor WHERE servidor_id = ? AND usuario_id = ?').get(Number(servidorId), Number(usuarioId));
   return !!r;
 }
 
 function adicionarMembro(servidorId, usuarioId) {
   try {
-    db.prepare(
-      'INSERT INTO membros_servidor (servidor_id, usuario_id) VALUES (?, ?)'
-    ).run(Number(servidorId), Number(usuarioId));
+    db.prepare('INSERT INTO membros_servidor (servidor_id, usuario_id) VALUES (?, ?)').run(Number(servidorId), Number(usuarioId));
     return true;
-  } catch (e) {
-    return false;
-  }
+  } catch (e) { return false; }
 }
 
 function removerMembro(servidorId, usuarioId) {
-  db.prepare(
-    'DELETE FROM membros_servidor WHERE servidor_id = ? AND usuario_id = ?'
-  ).run(Number(servidorId), Number(usuarioId));
+  db.prepare('DELETE FROM membros_servidor WHERE servidor_id = ? AND usuario_id = ?').run(Number(servidorId), Number(usuarioId));
 }
 
 function listarMembros(servidorId) {
   return db.prepare(
-    `SELECT u.id, u.nome, u.email, u.avatar
-     FROM membros_servidor m
-     JOIN usuarios u ON u.id = m.usuario_id
-     WHERE m.servidor_id = ?
-     ORDER BY u.nome ASC`
+    `SELECT u.id, u.nome, u.email, u.avatar FROM membros_servidor m
+     JOIN usuarios u ON u.id = m.usuario_id WHERE m.servidor_id = ? ORDER BY u.nome ASC`
   ).all(Number(servidorId));
 }
 
 // ============================================================
-// CANAIS
+// CANAIS E MENSAGENS DE CANAL
 // ============================================================
-
 function criarCanal(servidorId, nome) {
   const nomeLimpo = nome.toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
   if (!nomeLimpo) return null;
   try {
-    const info = db.prepare(
-      'INSERT INTO canais (servidor_id, nome) VALUES (?, ?)'
-    ).run(Number(servidorId), nomeLimpo);
+    const info = db.prepare('INSERT INTO canais (servidor_id, nome) VALUES (?, ?)').run(Number(servidorId), nomeLimpo);
     return { id: info.lastInsertRowid, servidor_id: Number(servidorId), nome: nomeLimpo };
-  } catch (e) {
-    return null;
-  }
+  } catch (e) { return null; }
 }
 
 function buscarCanalPorId(id) {
@@ -594,47 +498,32 @@ function deletarCanal(id, donoId) {
   return true;
 }
 
-// ============================================================
-// MENSAGENS DE CANAL
-// ============================================================
-
 function salvarMensagemCanal({ canalId, deId, texto, replyId, replyAutor, replyTexto, anexo }) {
   const info = db.prepare(
     `INSERT INTO mensagens_canal (canal_id, de_id, texto, reply_id, reply_autor, reply_texto, anexo)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    Number(canalId), Number(deId), texto || '',
-    replyId ? Number(replyId) : null, replyAutor || null, replyTexto || null,
-    anexo ? JSON.stringify(anexo) : null
-  );
+  ).run(Number(canalId), Number(deId), texto || '', replyId ? Number(replyId) : null, replyAutor || null, replyTexto || null, anexo ? JSON.stringify(anexo) : null);
   return buscarMensagemCanalPorId(info.lastInsertRowid);
 }
 
 function buscarMensagemCanalPorId(id) {
   const m = db.prepare(
-    `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
-     FROM mensagens_canal m
-     LEFT JOIN usuarios u ON u.id = m.de_id
-     WHERE m.id = ?`
+    `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar FROM mensagens_canal m
+     LEFT JOIN usuarios u ON u.id = m.de_id WHERE m.id = ?`
   ).get(Number(id));
-  if (m && m.anexo) {
-    try { m.anexo = JSON.parse(m.anexo); } catch (e) { m.anexo = null; }
-  }
+  if (m && m.anexo) { try { m.anexo = JSON.parse(m.anexo); } catch (e) { m.anexo = null; } }
   return m;
 }
 
+// 🔥 M1 CORRIGIDO: Busca as 200 mais recentes (DESC) e inverte (reverse)
 function listarMensagensCanal(canalId) {
   const msgs = db.prepare(
-    `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar
-     FROM mensagens_canal m
-     LEFT JOIN usuarios u ON u.id = m.de_id
-     WHERE m.canal_id = ?
-     ORDER BY m.id ASC LIMIT 200`
+    `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar FROM mensagens_canal m
+     LEFT JOIN usuarios u ON u.id = m.de_id WHERE m.canal_id = ? ORDER BY m.id DESC LIMIT 200`
   ).all(Number(canalId));
-  return msgs.map((m) => {
-    if (m.anexo) {
-      try { m.anexo = JSON.parse(m.anexo); } catch (e) { m.anexo = null; }
-    }
+  
+  return msgs.reverse().map((m) => {
+    if (m.anexo) { try { m.anexo = JSON.parse(m.anexo); } catch (e) { m.anexo = null; } }
     return m;
   });
 }
@@ -650,19 +539,14 @@ function deletarMensagemCanal(id) {
 // ============================================================
 // REAÇÕES
 // ============================================================
-
 function adicionarReacao({ tipo, alvoId, usuarioId, emoji }) {
   try {
-    db.prepare(
-      'INSERT OR IGNORE INTO reacoes (tipo, alvo_id, usuario_id, emoji) VALUES (?, ?, ?, ?)'
-    ).run(tipo, Number(alvoId), Number(usuarioId), emoji);
+    db.prepare('INSERT OR IGNORE INTO reacoes (tipo, alvo_id, usuario_id, emoji) VALUES (?, ?, ?, ?)').run(tipo, Number(alvoId), Number(usuarioId), emoji);
   } catch (e) {}
 }
 
 function removerReacao({ tipo, alvoId, usuarioId, emoji }) {
-  const info = db.prepare(
-    'DELETE FROM reacoes WHERE tipo = ? AND alvo_id = ? AND usuario_id = ? AND emoji = ?'
-  ).run(tipo, Number(alvoId), Number(usuarioId), emoji);
+  const info = db.prepare('DELETE FROM reacoes WHERE tipo = ? AND alvo_id = ? AND usuario_id = ? AND emoji = ?').run(tipo, Number(alvoId), Number(usuarioId), emoji);
   return { changes: info.changes };
 }
 
@@ -670,8 +554,7 @@ function listarReacoesDeMensagens(tipo, ids) {
   if (!ids.length) return {};
   const placeholders = ids.map(() => '?').join(',');
   const rows = db.prepare(
-    `SELECT alvo_id, emoji, usuario_id FROM reacoes
-     WHERE tipo = ? AND alvo_id IN (${placeholders})`
+    `SELECT alvo_id, emoji, usuario_id FROM reacoes WHERE tipo = ? AND alvo_id IN (${placeholders})`
   ).all(tipo, ...ids.map(Number));
   const mapa = {};
   rows.forEach((r) => {
@@ -682,63 +565,16 @@ function listarReacoesDeMensagens(tipo, ids) {
   return mapa;
 }
 
-// ============================================================
-// EXPORT
-// ============================================================
-
 module.exports = {
-  buscarUsuarioPorId,
-  buscarUsuarioPorEmail,
-  criarUsuario,
-  atualizarAvatar,
-  atualizarBanner,
-  atualizarBio,
-  buscarUsuariosPorNome,
-  buscarAmizadeEntre,
-  criarPedidoAmizade,
-  atualizarStatusAmizade,
-  deletarAmizade,
-  listarAmigos,
-  listarPedidosRecebidos,
-  listarPedidosEnviados,
-  saoAmigos,
-  bloquear,
-  desbloquear,
-  estaBloqueado,
-  listarBloqueados,
-  silenciar,
-  dessilenciar,
-  estaSilenciado,
-  abrirConversa,
-  buscarConversaPorId,
-  listarConversas,
-  salvarMensagem,
-  buscarMensagemPorId,
-  listarMensagens,
-  editarMensagem,
-  deletarMensagem,
-  limparHistoricoConversa,
-  marcarComoLidas,
-  criarServidor,
-  buscarServidorPorId,
-  buscarServidorPorCodigo,
-  listarServidoresDoUsuario,
-  atualizarServidor,
-  deletarServidor,
-  ehMembro,
-  adicionarMembro,
-  removerMembro,
-  listarMembros,
-  criarCanal,
-  buscarCanalPorId,
-  listarCanais,
-  deletarCanal,
-  salvarMensagemCanal,
-  buscarMensagemCanalPorId,
-  listarMensagensCanal,
-  editarMensagemCanal,
-  deletarMensagemCanal,
-  adicionarReacao,
-  removerReacao,
+  buscarUsuarioPorId, buscarUsuarioPorEmail, criarUsuario, atualizarAvatar, atualizarBanner, atualizarBio,
+  buscarUsuariosPorNome, buscarAmizadeEntre, criarPedidoAmizade, atualizarStatusAmizade, deletarAmizade,
+  listarAmigos, listarPedidosRecebidos, listarPedidosEnviados, saoAmigos, bloquear, desbloquear,
+  estaBloqueado, listarBloqueados, silenciar, dessilenciar, estaSilenciado, abrirConversa,
+  buscarConversaPorId, listarConversas, salvarMensagem, buscarMensagemPorId, listarMensagens,
+  editarMensagem, deletarMensagem, limparHistoricoConversa, marcarComoLidas, criarServidor,
+  buscarServidorPorId, buscarServidorPorCodigo, listarServidoresDoUsuario, atualizarServidor,
+  deletarServidor, ehMembro, adicionarMembro, removerMembro, listarMembros, criarCanal,
+  buscarCanalPorId, listarCanais, deletarCanal, salvarMensagemCanal, buscarMensagemCanalPorId,
+  listarMensagensCanal, editarMensagemCanal, deletarMensagemCanal, adicionarReacao, removerReacao,
   listarReacoesDeMensagens,
 };

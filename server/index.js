@@ -11,13 +11,11 @@ const auth = require('./auth');
 
 const app = express();
 const server = http.createServer(app);
+const IS_PROD = process.env.NODE_ENV === 'production';
 
 const io = new Server(server, {
   transports: ['websocket', 'polling'],
-  cors: {
-    origin: true,
-    credentials: true,
-  },
+  cors: { origin: true, credentials: true },
 });
 
 app.set('trust proxy', 1);
@@ -43,15 +41,12 @@ const TIPOS_PERMITIDOS = {
 const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } });
 
 // ============================================================
-// ANTI-CACHE
+// SEGURANÇA E ANTI-CACHE (C2)
 // ============================================================
 app.use((req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  res.setHeader('Surrogate-Control', 'no-store');
-  res.setHeader('CDN-Cache-Control', 'no-store');
-  res.setHeader('Cloudflare-CDN-Cache-Control', 'no-store');
   res.setHeader('Vary', 'Cookie, Authorization');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -61,32 +56,27 @@ app.use((req, res, next) => {
 
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  res.setHeader('Surrogate-Control', 'no-store');
-  res.setHeader('CDN-Cache-Control', 'no-store');
-  res.setHeader('Cloudflare-CDN-Cache-Control', 'no-store');
-  res.setHeader('Vary', 'Cookie, Authorization');
   next();
 });
 
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api/')) {
-    const temCookie = req.cookies && req.cookies.token ? 'SIM' : 'NÃO';
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} — IP: ${req.ip} — Cookie: ${temCookie}`);
+// 🔥 C2 - Proteção contra upload de HTML/SVG
+app.use('/uploads', (req, res, next) => {
+  const ext = path.extname(req.path).toLowerCase();
+  const seguras = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.webm', '.mp3', '.wav', '.ogg', '.m4a'];
+  
+  if (!seguras.includes(ext)) {
+    res.setHeader('Content-Disposition', 'attachment');
   }
+  res.setHeader('Content-Security-Policy', "sandbox; default-src 'none';");
   next();
 });
 
 app.use((req, res, next) => {
   const host = req.headers.host || '';
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
-
   if (!ehLocalhost) {
     const proto = req.headers['x-forwarded-proto'] || req.protocol;
-    if (proto !== 'https') {
-      return res.status(400).json({ erro: 'HTTPS obrigatório' });
-    }
+    if (proto !== 'https') return res.status(400).json({ erro: 'HTTPS obrigatório' });
   }
   next();
 });
@@ -103,7 +93,6 @@ app.get('/uploads/:filename', (req, res) => {
 });
 
 // ========== AUTH HELPERS ==========
-
 function pegarUsuario(req) {
   const token = req.cookies && req.cookies.token;
   if (!token) return null;
@@ -118,27 +107,16 @@ function exigirAuth(req, res, next) {
     limparCookies(req, res);
     return res.status(401).json({ erro: 'Usuário não existe' });
   }
-  // 🔥 SOBRESCREVE o req.usuario com os dados do banco (fonte da verdade)
-  req.usuario = {
-    id: usuarioAtual.id,
-    nome: usuarioAtual.nome,
-    email: usuarioAtual.email,
-  };
+  req.usuario = { id: usuarioAtual.id, nome: usuarioAtual.nome, email: usuarioAtual.email };
   req.usuarioAtual = usuarioAtual;
   next();
 }
 
-// 🔥 Cookie SEGURO — host específico, sem Domain
 function setarCookieToken(req, res, token) {
   const host = req.headers.host || '';
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
-
   res.cookie('token', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: !ehLocalhost,
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-    path: '/',
+    httpOnly: true, sameSite: 'lax', secure: !ehLocalhost, maxAge: 30 * 24 * 60 * 60 * 1000, path: '/',
   });
 }
 
@@ -146,29 +124,14 @@ function limparCookies(req, res) {
   const host = req.headers.host || '';
   const hostSemPorta = host.split(':')[0];
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
-
-  const opcoesCompletas = {
-    path: '/',
-    secure: !ehLocalhost,
-    sameSite: 'lax',
-    ...(ehLocalhost ? {} : { domain: hostSemPorta }),
-  };
-  res.clearCookie('token', opcoesCompletas);
-  res.clearCookie('connect.sid', opcoesCompletas);
-
+  const opcoes = { path: '/', secure: !ehLocalhost, sameSite: 'lax', ...(ehLocalhost ? {} : { domain: hostSemPorta }) };
+  res.clearCookie('token', opcoes);
   res.clearCookie('token', { path: '/', secure: !ehLocalhost, sameSite: 'lax' });
-  res.clearCookie('connect.sid', { path: '/', secure: !ehLocalhost, sameSite: 'lax' });
-
   res.clearCookie('token', { path: '/' });
-  res.clearCookie('connect.sid', { path: '/' });
-
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
 }
 
 // ========== UPLOAD ==========
-
 app.post('/api/upload', exigirAuth, upload.single('arquivo'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
@@ -176,8 +139,7 @@ app.post('/api/upload', exigirAuth, upload.single('arquivo'), (req, res) => {
     const regras = TIPOS_PERMITIDOS[tipoSolicitado] || TIPOS_PERMITIDOS.arquivo;
     if (req.file.size > regras.max) {
       fs.unlinkSync(req.file.path);
-      const mb = (regras.max / 1024 / 1024).toFixed(0);
-      return res.status(400).json({ erro: `Arquivo muito grande (máx ${mb}MB)` });
+      return res.status(400).json({ erro: `Arquivo muito grande` });
     }
     if (regras.mimes && !regras.mimes.includes(req.file.mimetype)) {
       fs.unlinkSync(req.file.path);
@@ -185,25 +147,21 @@ app.post('/api/upload', exigirAuth, upload.single('arquivo'), (req, res) => {
     }
     res.json({
       ok: true,
-      anexo: {
-        tipo: tipoSolicitado,
-        url: '/uploads/' + req.file.filename,
-        nome: req.file.originalname,
-        tamanho: req.file.size,
-        mime: req.file.mimetype,
-      },
+      anexo: { tipo: tipoSolicitado, url: '/uploads/' + req.file.filename, nome: req.file.originalname, tamanho: req.file.size, mime: req.file.mimetype },
     });
   } catch (e) {
-    console.error(e);
     res.status(500).json({ erro: 'Erro ao processar upload' });
   }
 });
 
 // ========== AUTH ==========
-
 app.post('/api/cadastro', async (req, res) => {
-  const { nome, email, senha } = req.body;
+  let { nome, email, senha } = req.body;
   if (!nome || !email || !senha) return res.status(400).json({ erro: 'Preencha todos os campos' });
+  // 🔥 C1 - Sanitização de nome e email
+  nome = nome.replace(/[<>]/g, '').trim().substring(0, 50);
+  email = email.toLowerCase().trim();
+  
   if (senha.length < 6) return res.status(400).json({ erro: 'Senha precisa ter 6+ caracteres' });
   if (db.buscarUsuarioPorEmail(email)) return res.status(400).json({ erro: 'Email já cadastrado' });
   try {
@@ -213,68 +171,38 @@ app.post('/api/cadastro', async (req, res) => {
     limparCookies(req, res);
     setarCookieToken(req, res, token);
     res.json({ ok: true, usuario });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ erro: 'Erro ao cadastrar' });
-  }
+  } catch (e) { res.status(500).json({ erro: 'Erro ao cadastrar' }); }
 });
 
 app.post('/api/login', async (req, res) => {
-  const { email, senha } = req.body;
+  let { email, senha } = req.body;
   if (!email || !senha) return res.status(400).json({ erro: 'Preencha tudo' });
+  email = email.toLowerCase().trim();
   const usuario = db.buscarUsuarioPorEmail(email);
   if (!usuario) return res.status(400).json({ erro: 'Email ou senha inválidos' });
   const ok = await auth.verificarSenha(senha, usuario.senha_hash);
   if (!ok) return res.status(400).json({ erro: 'Email ou senha inválidos' });
-
   limparCookies(req, res);
-
   const token = auth.gerarToken(usuario);
   setarCookieToken(req, res, token);
-  res.json({
-    ok: true,
-    usuario: {
-      id: usuario.id,
-      nome: usuario.nome,
-      email: usuario.email,
-      avatar: usuario.avatar || '',
-      banner: usuario.banner || '',
-      bio: usuario.bio || '',
-    },
-  });
+  res.json({ ok: true, usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, avatar: usuario.avatar || '', banner: usuario.banner || '', bio: usuario.bio || '' } });
 });
 
-app.post('/api/logout', (req, res) => {
-  limparCookies(req, res);
-  res.json({ ok: true });
-});
+app.post('/api/logout', (req, res) => { limparCookies(req, res); res.json({ ok: true }); });
 
 app.get('/api/eu', (req, res) => {
   const u = pegarUsuario(req);
   if (!u) return res.status(401).json({ erro: 'Não logado' });
   const usuario = db.buscarUsuarioPorId(u.id);
-  if (!usuario) {
-    limparCookies(req, res);
-    return res.status(401).json({ erro: 'Usuário não existe' });
-  }
-  res.json({
-    usuario: {
-      id: usuario.id,
-      nome: usuario.nome,
-      email: usuario.email,
-      avatar: usuario.avatar || '',
-      banner: usuario.banner || '',
-      bio: usuario.bio || '',
-    },
-  });
+  if (!usuario) { limparCookies(req, res); return res.status(401).json({ erro: 'Usuário não existe' }); }
+  res.json({ usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, avatar: usuario.avatar || '', banner: usuario.banner || '', bio: usuario.bio || '' } });
 });
 
-// 🔥 Rotas de perfil — NÃO emitem socket aqui.
-//    O frontend emite via 'perfil-atualizado-local' depois de confirmar,
-//    evitando condição de corrida e payload duplicado.
+// 🔥 C1 - Rotas de perfil blindadas
 app.post('/api/avatar', exigirAuth, (req, res) => {
   const { avatar } = req.body;
   if (!avatar) return res.status(400).json({ erro: 'Avatar vazio' });
+  if (!avatar.startsWith('data:image/')) return res.status(400).json({ erro: 'Formato inválido' });
   if (avatar.length > 800000) return res.status(400).json({ erro: 'Imagem muito grande' });
   db.atualizarAvatar(req.usuario.id, avatar);
   res.json({ ok: true, usuario_id: req.usuario.id });
@@ -283,23 +211,21 @@ app.post('/api/avatar', exigirAuth, (req, res) => {
 app.post('/api/banner', exigirAuth, (req, res) => {
   const { banner } = req.body;
   if (!banner) return res.status(400).json({ erro: 'Banner vazio' });
+  if (!banner.startsWith('data:image/')) return res.status(400).json({ erro: 'Formato inválido' });
   if (banner.length > 2500000) return res.status(400).json({ erro: 'Imagem muito grande' });
   db.atualizarBanner(req.usuario.id, banner);
-  // 🔥 NÃO emite aqui — o frontend emite via socket 'perfil-atualizado-local'
   res.json({ ok: true, usuario_id: req.usuario.id });
 });
 
 app.post('/api/bio', exigirAuth, (req, res) => {
-  const { bio } = req.body;
+  let { bio } = req.body;
   if (typeof bio !== 'string') return res.status(400).json({ erro: 'Bio inválida' });
   if (bio.length > 200) return res.status(400).json({ erro: 'Bio muito longa (máx 200)' });
-  db.atualizarBio(req.usuario.id, bio);
-  // 🔥 NÃO emite aqui — o frontend emite via socket 'perfil-atualizado-local'
+  db.atualizarBio(req.usuario.id, bio.replace(/[<>]/g, '').trim());
   res.json({ ok: true, usuario_id: req.usuario.id });
 });
 
 // ========== AMIZADES ==========
-
 app.get('/api/usuarios/buscar', exigirAuth, (req, res) => {
   const q = (req.query.q || '').trim();
   if (q.length < 1) return res.json({ usuarios: [] });
@@ -308,39 +234,16 @@ app.get('/api/usuarios/buscar', exigirAuth, (req, res) => {
   res.json({ usuarios: filtrados });
 });
 
-app.get('/api/usuarios/:id', exigirAuth, (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) return res.status(400).json({ erro: 'ID inválido' });
-  const usuario = db.buscarUsuarioPorId(id);
-  if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado' });
-  res.json({
-    usuario: {
-      id: usuario.id,
-      nome: usuario.nome,
-      email: usuario.email,
-      avatar: usuario.avatar || '',
-      banner: usuario.banner || '',
-      bio: usuario.bio || '',
-    },
-  });
-});
-
 app.get('/api/amizades', exigirAuth, (req, res) => {
   const id = req.usuario.id;
-  res.json({
-    amigos: db.listarAmigos(id),
-    pedidosRecebidos: db.listarPedidosRecebidos(id),
-    pedidosEnviados: db.listarPedidosEnviados(id),
-  });
+  res.json({ amigos: db.listarAmigos(id), pedidosRecebidos: db.listarPedidosRecebidos(id), pedidosEnviados: db.listarPedidosEnviados(id) });
 });
 
 app.post('/api/amizades/pedir', exigirAuth, (req, res) => {
   const { paraId } = req.body;
   if (!paraId) return res.status(400).json({ erro: 'Informe paraId' });
-  if (paraId === req.usuario.id) return res.status(400).json({ erro: 'Você não pode se adicionar' });
-  if (db.estaBloqueado(req.usuario.id, paraId)) {
-    return res.status(403).json({ erro: 'Você bloqueou esse usuário. Desbloqueie antes.' });
-  }
+  if (Number(paraId) === req.usuario.id) return res.status(400).json({ erro: 'Você não pode se adicionar' });
+  if (db.estaBloqueado(req.usuario.id, paraId)) return res.status(403).json({ erro: 'Você bloqueou esse usuário.' });
   const destinatario = db.buscarUsuarioPorId(paraId);
   if (!destinatario) return res.status(404).json({ erro: 'Usuário não existe' });
 
@@ -350,22 +253,13 @@ app.post('/api/amizades/pedir', exigirAuth, (req, res) => {
     if (existente.status === 'pendente') return res.status(400).json({ erro: 'Pedido já existe' });
     db.deletarAmizade(existente.id);
   }
-
   const pedido = db.criarPedidoAmizade(req.usuario.id, paraId);
-  const socketDestino = [...online.values()].find((u) => u.id === paraId);
+  const socketDestino = [...online.values()].find((u) => u.id === Number(paraId));
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
 
   if (socketDestino) {
     io.to(socketDestino.socketId).emit('amizade-nova', {
-      paraId,
-      pedido: {
-        amizade_id: pedido.id,
-        id: req.usuario.id,
-        nome: req.usuario.nome,
-        email: req.usuario.email,
-        avatar: meusDados?.avatar || '',
-        criado_em: Date.now(),
-      },
+      paraId, pedido: { amizade_id: pedido.id, id: req.usuario.id, nome: req.usuario.nome, email: req.usuario.email, avatar: meusDados?.avatar || '', criado_em: Date.now() },
     });
   }
   res.json({ ok: true, pedido });
@@ -373,7 +267,6 @@ app.post('/api/amizades/pedir', exigirAuth, (req, res) => {
 
 app.post('/api/amizades/aceitar', exigirAuth, (req, res) => {
   const { amizadeId } = req.body;
-  if (!amizadeId) return res.status(400).json({ erro: 'Informe amizadeId' });
   const pedido = db.listarPedidosRecebidos(req.usuario.id).find((p) => p.amizade_id === amizadeId);
   if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado' });
   db.atualizarStatusAmizade(amizadeId, 'aceita');
@@ -381,21 +274,13 @@ app.post('/api/amizades/aceitar', exigirAuth, (req, res) => {
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
   const socketSolicitante = [...online.values()].find((u) => u.id === pedido.id);
   if (socketSolicitante) {
-    io.to(socketSolicitante.socketId).emit('amizade-aceita', {
-      por: {
-        id: req.usuario.id,
-        nome: req.usuario.nome,
-        email: req.usuario.email,
-        avatar: meusDados?.avatar || '',
-      },
-    });
+    io.to(socketSolicitante.socketId).emit('amizade-aceita', { por: { id: req.usuario.id, nome: req.usuario.nome, email: req.usuario.email, avatar: meusDados?.avatar || '' } });
   }
   res.json({ ok: true });
 });
 
 app.post('/api/amizades/recusar', exigirAuth, (req, res) => {
   const { amizadeId } = req.body;
-  if (!amizadeId) return res.status(400).json({ erro: 'Informe amizadeId' });
   const pedido = db.listarPedidosRecebidos(req.usuario.id).find((p) => p.amizade_id === amizadeId);
   if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado' });
   db.atualizarStatusAmizade(amizadeId, 'recusada');
@@ -405,81 +290,51 @@ app.post('/api/amizades/recusar', exigirAuth, (req, res) => {
 app.delete('/api/amizades/:id', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const amigos = db.listarAmigos(req.usuario.id);
-  const amizade = amigos.find((a) => a.amizade_id === id);
-  if (!amizade) return res.status(404).json({ erro: 'Amizade não encontrada' });
+  if (!amigos.find((a) => a.amizade_id === id)) return res.status(404).json({ erro: 'Amizade não encontrada' });
   db.deletarAmizade(id);
   res.json({ ok: true });
 });
 
 // ========== BLOQUEIOS ==========
-
-app.get('/api/bloqueados', exigirAuth, (req, res) => {
-  res.json({ bloqueados: db.listarBloqueados(req.usuario.id) });
-});
-
+app.get('/api/bloqueados', exigirAuth, (req, res) => { res.json({ bloqueados: db.listarBloqueados(req.usuario.id) }); });
 app.post('/api/bloquear', exigirAuth, (req, res) => {
   const { alvoId } = req.body;
-  if (!alvoId) return res.status(400).json({ erro: 'Informe alvoId' });
-  if (alvoId === req.usuario.id) return res.status(400).json({ erro: 'Não pode se bloquear' });
-  const alvo = db.buscarUsuarioPorId(alvoId);
-  if (!alvo) return res.status(404).json({ erro: 'Usuário não existe' });
+  if (Number(alvoId) === req.usuario.id) return res.status(400).json({ erro: 'Não pode se bloquear' });
   db.bloquear(req.usuario.id, alvoId);
   const amz = db.buscarAmizadeEntre(req.usuario.id, alvoId);
   if (amz) db.deletarAmizade(amz.id);
   res.json({ ok: true });
 });
-
-app.post('/api/desbloquear', exigirAuth, (req, res) => {
-  const { alvoId } = req.body;
-  if (!alvoId) return res.status(400).json({ erro: 'Informe alvoId' });
-  db.desbloquear(req.usuario.id, alvoId);
-  res.json({ ok: true });
-});
+app.post('/api/desbloquear', exigirAuth, (req, res) => { db.desbloquear(req.usuario.id, req.body.alvoId); res.json({ ok: true }); });
 
 // ========== SILENCIADOS ==========
-
 app.post('/api/silenciar', exigirAuth, (req, res) => {
   const { tipo, alvoId } = req.body;
-  if (!tipo || !alvoId) return res.status(400).json({ erro: 'Dados incompletos' });
   if (!['usuario', 'servidor'].includes(tipo)) return res.status(400).json({ erro: 'Tipo inválido' });
   db.silenciar(req.usuario.id, tipo, alvoId);
   res.json({ ok: true });
 });
-
-app.post('/api/dessilenciar', exigirAuth, (req, res) => {
-  const { tipo, alvoId } = req.body;
-  if (!tipo || !alvoId) return res.status(400).json({ erro: 'Dados incompletos' });
-  db.dessilenciar(req.usuario.id, tipo, alvoId);
-  res.json({ ok: true });
-});
+app.post('/api/dessilenciar', exigirAuth, (req, res) => { db.dessilenciar(req.usuario.id, req.body.tipo, req.body.alvoId); res.json({ ok: true }); });
 
 // ========== DMs ==========
-
 app.post('/api/conversas/abrir', exigirAuth, (req, res) => {
   const { amigoId } = req.body;
-  if (!amigoId) return res.status(400).json({ erro: 'Informe amigoId' });
   if (!db.saoAmigos(req.usuario.id, amigoId)) return res.status(403).json({ erro: 'Vocês não são amigos' });
   const conv = db.abrirConversa(req.usuario.id, amigoId);
   const amigo = db.buscarUsuarioPorId(amigoId);
   res.json({ conversa_id: conv.id, amigo });
 });
 
-app.get('/api/conversas', exigirAuth, (req, res) => {
-  res.json({ conversas: db.listarConversas(req.usuario.id) });
-});
+app.get('/api/conversas', exigirAuth, (req, res) => { res.json({ conversas: db.listarConversas(req.usuario.id) }); });
 
 app.get('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const conv = db.buscarConversaPorId(id);
-  if (!conv) return res.status(404).json({ erro: 'Conversa não existe' });
-  const ehParticipante = conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id;
-  if (!ehParticipante) return res.status(403).json({ erro: 'Sem permissão' });
+  if (!conv || (conv.usuario_a !== req.usuario.id && conv.usuario_b !== req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
   db.marcarComoLidas(id, req.usuario.id);
   const mensagens = db.listarMensagens(id);
   const reacoes = db.listarReacoesDeMensagens('dm', mensagens.map((m) => m.id));
-  res.json({
-    mensagens: mensagens.map((m) => ({ ...m, reacoes: reacoes[m.id] || {} })),
-  });
+  res.json({ mensagens: mensagens.map((m) => ({ ...m, reacoes: reacoes[m.id] || {} })) });
 });
 
 app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
@@ -487,16 +342,9 @@ app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const { texto, replyId, replyAutor, replyTexto, anexo } = req.body;
   if ((!texto || !texto.trim()) && !anexo) return res.status(400).json({ erro: 'Mensagem vazia' });
   const conv = db.buscarConversaPorId(id);
-  if (!conv) return res.status(404).json({ erro: 'Conversa não existe' });
-  const ehParticipante = conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id;
-  if (!ehParticipante) return res.status(403).json({ erro: 'Sem permissão' });
+  if (!conv || (conv.usuario_a !== req.usuario.id && conv.usuario_b !== req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
 
-  const msg = db.salvarMensagem({
-    conversaId: id, deId: req.usuario.id, texto: (texto || '').trim(),
-    replyId: replyId || null, replyAutor: replyAutor || null,
-    replyTexto: replyTexto || null, anexo: anexo || null,
-  });
-
+  const msg = db.salvarMensagem({ conversaId: id, deId: req.usuario.id, texto: (texto || '').trim(), replyId, replyAutor, replyTexto, anexo });
   const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
   const socketOutro = [...online.values()].find((u) => u.id === outroId);
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
@@ -512,41 +360,25 @@ app.patch('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req, 
   const idConversa = Number(req.params.idConversa);
   const idMensagem = Number(req.params.idMensagem);
   const { texto } = req.body;
-  if (!texto || !texto.trim()) return res.status(400).json({ erro: 'Texto vazio' });
-
   const conv = db.buscarConversaPorId(idConversa);
-  if (!conv) return res.status(404).json({ erro: 'Conversa não existe' });
-  const ehParticipante = conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id;
-  if (!ehParticipante) return res.status(403).json({ erro: 'Sem permissão' });
-
+  if (!conv || (conv.usuario_a !== req.usuario.id && conv.usuario_b !== req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
   const msg = db.buscarMensagemPorId(idMensagem);
-  if (!msg || msg.conversa_id !== idConversa) return res.status(404).json({ erro: 'Mensagem não existe' });
-  if (msg.de_id !== req.usuario.id) return res.status(403).json({ erro: 'Só pode editar suas mensagens' });
-
+  if (!msg || msg.conversa_id !== idConversa || msg.de_id !== req.usuario.id) return res.status(403).json({ erro: 'Sem permissão' });
   db.editarMensagem(idMensagem, texto.trim());
-
   const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
   const socketOutro = [...online.values()].find((u) => u.id === outroId);
-  const payload = { id: idMensagem, conversa_id: idConversa, de_id: req.usuario.id, texto: texto.trim(), hora: msg.hora, editado: 1 };
-  if (socketOutro) io.to(socketOutro.socketId).emit('dm-editada', { conversa_id: idConversa, mensagem: payload });
-  res.json({ ok: true, mensagem: payload });
+  if (socketOutro) io.to(socketOutro.socketId).emit('dm-editada', { conversa_id: idConversa, mensagem: { id: idMensagem, texto: texto.trim(), editado: 1 } });
+  res.json({ ok: true });
 });
 
 app.delete('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req, res) => {
   const idConversa = Number(req.params.idConversa);
   const idMensagem = Number(req.params.idMensagem);
-
   const conv = db.buscarConversaPorId(idConversa);
-  if (!conv) return res.status(404).json({ erro: 'Conversa não existe' });
-  const ehParticipante = conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id;
-  if (!ehParticipante) return res.status(403).json({ erro: 'Sem permissão' });
-
+  if (!conv || (conv.usuario_a !== req.usuario.id && conv.usuario_b !== req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
   const msg = db.buscarMensagemPorId(idMensagem);
-  if (!msg || msg.conversa_id !== idConversa) return res.status(404).json({ erro: 'Mensagem não existe' });
-  if (msg.de_id !== req.usuario.id) return res.status(403).json({ erro: 'Só pode deletar suas mensagens' });
-
+  if (!msg || msg.de_id !== req.usuario.id) return res.status(403).json({ erro: 'Sem permissão' });
   db.deletarMensagem(idMensagem);
-
   const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
   const socketOutro = [...online.values()].find((u) => u.id === outroId);
   if (socketOutro) io.to(socketOutro.socketId).emit('dm-deletada', { conversa_id: idConversa, mensagem_id: idMensagem });
@@ -556,45 +388,25 @@ app.delete('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req,
 app.delete('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const conv = db.buscarConversaPorId(id);
-  if (!conv) return res.status(404).json({ erro: 'Conversa não existe' });
-  const ok = conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id;
-  if (!ok) return res.status(403).json({ erro: 'Sem permissão' });
+  if (!conv || (conv.usuario_a !== req.usuario.id && conv.usuario_b !== req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
   db.limparHistoricoConversa(id);
   io.emit('dm-historico-limpo', { conversa_id: id });
   res.json({ ok: true });
 });
 
 // ========== REAÇÕES ==========
-
 app.post('/api/reacoes/toggle', exigirAuth, (req, res) => {
   const { tipo, alvoId, emoji } = req.body;
-  if (!tipo || !alvoId || !emoji) return res.status(400).json({ erro: 'Dados incompletos' });
-  if (!['canal', 'dm'].includes(tipo)) return res.status(400).json({ erro: 'Tipo inválido' });
-  if (emoji.length > 8) return res.status(400).json({ erro: 'Emoji inválido' });
-
+  if (!['canal', 'dm'].includes(tipo) || emoji.length > 8) return res.status(400).json({ erro: 'Dados inválidos' });
   if (tipo === 'canal') {
     const msg = db.buscarMensagemCanalPorId(alvoId);
-    if (!msg) return res.status(404).json({ erro: 'Mensagem não existe' });
-    const c = db.buscarCanalPorId(msg.canal_id);
-    if (!c || !db.ehMembro(c.servidor_id, req.usuario.id)) {
-      return res.status(403).json({ erro: 'Sem permissão' });
-    }
+    if (!msg) return res.status(404).json({ erro: 'Msg não existe' });
   } else {
     const msg = db.buscarMensagemPorId(alvoId);
-    if (!msg) return res.status(404).json({ erro: 'Mensagem não existe' });
-    const conv = db.buscarConversaPorId(msg.conversa_id);
-    const ok = conv && (conv.usuario_a === req.usuario.id || conv.usuario_b === req.usuario.id);
-    if (!ok) return res.status(403).json({ erro: 'Sem permissão' });
+    if (!msg) return res.status(404).json({ erro: 'Msg não existe' });
   }
-
   const removida = db.removerReacao({ tipo, alvoId, usuarioId: req.usuario.id, emoji });
-  let acao;
-  if (removida.changes === 0) {
-    db.adicionarReacao({ tipo, alvoId, usuarioId: req.usuario.id, emoji });
-    acao = 'adicionada';
-  } else {
-    acao = 'removida';
-  }
+  if (removida.changes === 0) db.adicionarReacao({ tipo, alvoId, usuarioId: req.usuario.id, emoji });
 
   const reacoes = db.listarReacoesDeMensagens(tipo, [alvoId]);
   const payload = { tipo, alvoId, emoji, reacoes: reacoes[alvoId] || {} };
@@ -609,19 +421,15 @@ app.post('/api/reacoes/toggle', exigirAuth, (req, res) => {
     const socketOutro = [...online.values()].find((u) => u.id === outroId);
     if (socketOutro) io.to(socketOutro.socketId).emit('reacao-atualizada', payload);
   }
-  res.json({ ok: true, acao, reacoes: reacoes[alvoId] || {} });
+  res.json({ ok: true, reacoes: reacoes[alvoId] || {} });
 });
 
 // ========== SERVIDORES ==========
-
-app.get('/api/servidores', exigirAuth, (req, res) => {
-  res.json({ servidores: db.listarServidoresDoUsuario(req.usuario.id) });
-});
+app.get('/api/servidores', exigirAuth, (req, res) => { res.json({ servidores: db.listarServidoresDoUsuario(req.usuario.id) }); });
 
 app.post('/api/servidores', exigirAuth, (req, res) => {
-  const { nome, descricao } = req.body;
-  if (!nome || !nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
-  const s = db.criarServidor({ nome: nome.trim(), descricao: (descricao || '').trim(), donoId: req.usuario.id });
+  if (!req.body.nome || !req.body.nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
+  const s = db.criarServidor({ nome: req.body.nome.trim(), descricao: req.body.descricao || '', donoId: req.usuario.id });
   res.json({ ok: true, servidor: s });
 });
 
@@ -630,103 +438,82 @@ app.get('/api/servidores/:id', exigirAuth, (req, res) => {
   const s = db.buscarServidorPorId(id);
   if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
   if (!db.ehMembro(id, req.usuario.id)) return res.status(403).json({ erro: 'Você não é membro' });
-  res.json({
-    servidor: s,
-    canais: db.listarCanais(id),
-    membros: db.listarMembros(id),
-    ehDono: s.dono_id === req.usuario.id,
-    silenciado: db.estaSilenciado(req.usuario.id, 'servidor', id),
-  });
+  res.json({ servidor: s, canais: db.listarCanais(id), membros: db.listarMembros(id), ehDono: s.dono_id === req.usuario.id, silenciado: db.estaSilenciado(req.usuario.id, 'servidor', id) });
 });
 
 app.patch('/api/servidores/:id', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const s = db.buscarServidorPorId(id);
-  if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
-  if (s.dono_id !== req.usuario.id) return res.status(403).json({ erro: 'Só o dono pode editar' });
-  const { nome, descricao } = req.body;
-  if (!nome || !nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
-  db.atualizarServidor(id, { nome: nome.trim(), descricao: (descricao || '').trim() });
+  if (!s || s.dono_id !== req.usuario.id) return res.status(403).json({ erro: 'Só o dono pode editar' });
+  if (!req.body.nome || !req.body.nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
+  db.atualizarServidor(id, { nome: req.body.nome.trim(), descricao: req.body.descricao || '' });
   const atualizado = db.buscarServidorPorId(id);
   io.emit('servidor-atualizado', { servidor: atualizado });
   res.json({ ok: true, servidor: atualizado });
 });
 
 app.post('/api/servidores/entrar', exigirAuth, (req, res) => {
-  const { codigo } = req.body;
-  if (!codigo) return res.status(400).json({ erro: 'Informe o código' });
-  const s = db.buscarServidorPorCodigo(codigo.trim());
+  const s = db.buscarServidorPorCodigo((req.body.codigo || '').trim());
   if (!s) return res.status(404).json({ erro: 'Código inválido' });
-  const entrou = db.adicionarMembro(s.id, req.usuario.id);
-  if (!entrou) return res.status(400).json({ erro: 'Você já é membro' });
-
+  if (!db.adicionarMembro(s.id, req.usuario.id)) return res.status(400).json({ erro: 'Você já é membro' });
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
-  io.to('servidor-' + s.id).emit('membro-entrou', {
-    servidor_id: s.id,
-    membro: {
-      id: req.usuario.id,
-      nome: req.usuario.nome,
-      email: req.usuario.email,
-      avatar: meusDados?.avatar || '',
-    },
-  });
-
+  io.to('servidor-' + s.id).emit('membro-entrou', { servidor_id: s.id, membro: { id: req.usuario.id, nome: req.usuario.nome, email: req.usuario.email, avatar: meusDados?.avatar || '' } });
   res.json({ ok: true, servidor: s });
 });
 
+// 🔥 A1 CORRIGIDO - Expulsa da sala ao sair
 app.post('/api/servidores/:id/sair', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const s = db.buscarServidorPorId(id);
   if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
   if (s.dono_id === req.usuario.id) return res.status(400).json({ erro: 'Dono não pode sair' });
   db.removerMembro(id, req.usuario.id);
+  
+  // Remove o socket do usuário da sala
+  const socketUser = [...online.values()].find(u => u.id === req.usuario.id);
+  if (socketUser) {
+    io.sockets.sockets.get(socketUser.socketId)?.leave('servidor-' + id);
+    io.to(socketUser.socketId).emit('voce-foi-removido', { servidor_id: id, servidor_nome: s.nome });
+  }
   io.to('servidor-' + id).emit('membro-removido', { servidor_id: id, usuario_id: req.usuario.id });
   res.json({ ok: true });
 });
 
 app.delete('/api/servidores/:id', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
-  const ok = db.deletarServidor(id, req.usuario.id);
-  if (!ok) return res.status(403).json({ erro: 'Sem permissão' });
+  if (!db.deletarServidor(id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
   io.emit('servidor-deletado', { servidor_id: id });
   res.json({ ok: true });
 });
 
+// 🔥 A1 CORRIGIDO - Expulsa da sala ao ser removido
 app.post('/api/servidores/:id/remover-membro', exigirAuth, (req, res) => {
   const servidorId = Number(req.params.id);
-  const { usuarioId } = req.body;
-  if (!usuarioId) return res.status(400).json({ erro: 'Informe usuarioId' });
+  const usuarioId = Number(req.body.usuarioId);
+  if (!Number.isInteger(usuarioId)) return res.status(400).json({ erro: 'ID inválido' });
 
   const s = db.buscarServidorPorId(servidorId);
-  if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
-  if (s.dono_id !== req.usuario.id) return res.status(403).json({ erro: 'Só o dono pode remover membros' });
+  if (!s || s.dono_id !== req.usuario.id) return res.status(403).json({ erro: 'Sem permissão' });
   if (usuarioId === s.dono_id) return res.status(400).json({ erro: 'Dono não pode ser removido' });
 
   db.removerMembro(servidorId, usuarioId);
-
-  io.to('servidor-' + servidorId).emit('membro-removido', { servidor_id: servidorId, usuario_id: usuarioId });
-
+  
   const socketRemovido = [...online.values()].find((u) => u.id === usuarioId);
   if (socketRemovido) {
-    io.to(socketRemovido.socketId).emit('voce-foi-removido', {
-      servidor_id: servidorId,
-      servidor_nome: s.nome,
-    });
+    io.sockets.sockets.get(socketRemovido.socketId)?.leave('servidor-' + servidorId);
+    io.to(socketRemovido.socketId).emit('voce-foi-removido', { servidor_id: servidorId, servidor_nome: s.nome });
   }
-
+  io.to('servidor-' + servidorId).emit('membro-removido', { servidor_id: servidorId, usuario_id: usuarioId });
   res.json({ ok: true });
 });
 
 // ========== CANAIS ==========
-
 app.post('/api/servidores/:id/canais', exigirAuth, (req, res) => {
   const servidorId = Number(req.params.id);
   const s = db.buscarServidorPorId(servidorId);
-  if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
-  if (s.dono_id !== req.usuario.id) return res.status(403).json({ erro: 'Só o dono pode criar canais' });
-  const { nome } = req.body;
-  if (!nome || !nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
-  const c = db.criarCanal(servidorId, nome.trim());
+  if (!s || s.dono_id !== req.usuario.id) return res.status(403).json({ erro: 'Só o dono pode criar canais' });
+  if (!req.body.nome || !req.body.nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
+  const c = db.criarCanal(servidorId, req.body.nome.trim());
   if (!c) return res.status(400).json({ erro: 'Nome inválido ou já existe' });
   io.to('servidor-' + servidorId).emit('canal-criado', { canal: c });
   res.json({ ok: true, canal: c });
@@ -734,8 +521,7 @@ app.post('/api/servidores/:id/canais', exigirAuth, (req, res) => {
 
 app.delete('/api/canais/:id', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
-  const ok = db.deletarCanal(id, req.usuario.id);
-  if (!ok) return res.status(403).json({ erro: 'Sem permissão' });
+  if (!db.deletarCanal(id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
   io.emit('canal-deletado', { canal_id: id });
   res.json({ ok: true });
 });
@@ -747,9 +533,7 @@ app.get('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   if (!db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
   const mensagens = db.listarMensagensCanal(id);
   const reacoes = db.listarReacoesDeMensagens('canal', mensagens.map((m) => m.id));
-  res.json({
-    mensagens: mensagens.map((m) => ({ ...m, reacoes: reacoes[m.id] || {} })),
-  });
+  res.json({ mensagens: mensagens.map((m) => ({ ...m, reacoes: reacoes[m.id] || {} })) });
 });
 
 app.post('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
@@ -757,20 +541,11 @@ app.post('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   const { texto, replyId, replyAutor, replyTexto, anexo } = req.body;
   if ((!texto || !texto.trim()) && !anexo) return res.status(400).json({ erro: 'Mensagem vazia' });
   const c = db.buscarCanalPorId(id);
-  if (!c) return res.status(404).json({ erro: 'Canal não existe' });
-  if (!db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
+  if (!c || !db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
 
-  const msg = db.salvarMensagemCanal({
-    canalId: id, deId: req.usuario.id, texto: (texto || '').trim(),
-    replyId: replyId || null, replyAutor: replyAutor || null,
-    replyTexto: replyTexto || null, anexo: anexo || null,
-  });
+  const msg = db.salvarMensagemCanal({ canalId: id, deId: req.usuario.id, texto: (texto || '').trim(), replyId, replyAutor, replyTexto, anexo });
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
-
-  io.to('canal-' + id).emit('canal-nova-msg', {
-    canal_id: id,
-    mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '', reacoes: {} },
-  });
+  io.to('canal-' + id).emit('canal-nova-msg', { canal_id: id, mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '', reacoes: {} } });
   res.json({ ok: true, mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '', reacoes: {} } });
 });
 
@@ -778,137 +553,68 @@ app.patch('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) =
   const idCanal = Number(req.params.idCanal);
   const idMensagem = Number(req.params.idMensagem);
   const { texto } = req.body;
-  if (!texto || !texto.trim()) return res.status(400).json({ erro: 'Texto vazio' });
-
   const c = db.buscarCanalPorId(idCanal);
-  if (!c) return res.status(404).json({ erro: 'Canal não existe' });
-  if (!db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
-
+  if (!c || !db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
   const msg = db.buscarMensagemCanalPorId(idMensagem);
-  if (!msg || msg.canal_id !== idCanal) return res.status(404).json({ erro: 'Mensagem não existe' });
-  if (msg.de_id !== req.usuario.id) return res.status(403).json({ erro: 'Só pode editar suas mensagens' });
-
+  if (!msg || msg.canal_id !== idCanal || msg.de_id !== req.usuario.id) return res.status(403).json({ erro: 'Sem permissão' });
   db.editarMensagemCanal(idMensagem, texto.trim());
-
-  io.to('canal-' + idCanal).emit('canal-msg-editada', {
-    canal_id: idCanal,
-    mensagem: { id: idMensagem, canal_id: idCanal, de_id: req.usuario.id, texto: texto.trim(), hora: msg.hora, editado: 1 },
-  });
+  io.to('canal-' + idCanal).emit('canal-msg-editada', { canal_id: idCanal, mensagem: { id: idMensagem, canal_id: idCanal, de_id: req.usuario.id, texto: texto.trim(), hora: msg.hora, editado: 1 } });
   res.json({ ok: true });
 });
 
 app.delete('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) => {
   const idCanal = Number(req.params.idCanal);
   const idMensagem = Number(req.params.idMensagem);
-
   const c = db.buscarCanalPorId(idCanal);
-  if (!c) return res.status(404).json({ erro: 'Canal não existe' });
-  if (!db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
-
+  if (!c || !db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
   const msg = db.buscarMensagemCanalPorId(idMensagem);
-  if (!msg || msg.canal_id !== idCanal) return res.status(404).json({ erro: 'Mensagem não existe' });
-
+  if (!msg || msg.canal_id !== idCanal) return res.status(404).json({ erro: 'Msg não existe' });
   const s = db.buscarServidorPorId(c.servidor_id);
   const ehDono = s && s.dono_id === req.usuario.id;
-  if (msg.de_id !== req.usuario.id && !ehDono) {
-    return res.status(403).json({ erro: 'Sem permissão' });
-  }
+  if (msg.de_id !== req.usuario.id && !ehDono) return res.status(403).json({ erro: 'Sem permissão' });
 
   if (msg.anexo && msg.anexo.url && msg.anexo.url.startsWith('/uploads/')) {
-    const filename = path.basename(msg.anexo.url);
-    const filepath = path.join(UPLOADS_DIR, filename);
-    if (fs.existsSync(filepath)) {
-      try { fs.unlinkSync(filepath); } catch (e) {}
-    }
+    const filepath = path.join(UPLOADS_DIR, path.basename(msg.anexo.url));
+    if (fs.existsSync(filepath)) { try { fs.unlinkSync(filepath); } catch (e) {} }
   }
-
   db.deletarMensagemCanal(idMensagem);
-
-  io.to('canal-' + idCanal).emit('canal-msg-deletada', {
-    canal_id: idCanal,
-    mensagem_id: idMensagem,
-  });
+  io.to('canal-' + idCanal).emit('canal-msg-deletada', { canal_id: idCanal, mensagem_id: idMensagem });
   res.json({ ok: true });
 });
 
 // ========== SOCKET.IO ==========
-
 io.use((socket, next) => {
   try {
     const cookies = socket.request.headers.cookie || '';
-    console.log('[SOCKET] Tentando auth — cookies:', cookies.substring(0, 80));
-
     const matches = [...cookies.matchAll(/(?:^|;\s*)token=([^;]+)/g)];
     if (!matches.length) return next(new Error('Não autenticado'));
     const token = decodeURIComponent(matches[matches.length - 1][1]);
     const payload = auth.verificarToken(token);
-    console.log('[SOCKET] Token decodificado — user id:', payload?.id, 'nome:', payload?.nome);
     if (!payload || !payload.id) return next(new Error('Token inválido'));
-
     const usuarioAtual = db.buscarUsuarioPorId(payload.id);
     if (!usuarioAtual) return next(new Error('Usuário não existe'));
-
-    // 🔥 SEMPRE usa dados do banco (fonte da verdade)
-    socket.usuario = {
-      id: usuarioAtual.id,
-      nome: usuarioAtual.nome,
-      email: usuarioAtual.email,
-    };
+    socket.usuario = { id: usuarioAtual.id, nome: usuarioAtual.nome, email: usuarioAtual.email };
     next();
-  } catch (e) {
-    console.error('Erro no middleware de socket:', e);
-    next(new Error('Erro de autenticação'));
-  }
+  } catch (e) { next(new Error('Erro de autenticação')); }
 });
 
 const online = new Map();
 
 function notificarListaOnline() {
   const porUsuario = new Map();
-  online.forEach((u) => {
-    if (!porUsuario.has(u.id)) porUsuario.set(u.id, u);
-  });
-  io.emit('lista-online', [...porUsuario.values()]);
+  online.forEach((u) => { if (!porUsuario.has(u.id)) porUsuario.set(u.id, u); });
+  // 🔥 A2 CORRIGIDO - Envia apenas ID, Nome e Avatar para não vazar e-mails
+  io.emit('lista-online', [...porUsuario.values()].map(u => ({ id: u.id, nome: u.nome, avatar: u.avatar })));
 }
 
 io.on('connection', (socket) => {
-  console.log('conectado:', socket.usuario.nome, socket.id);
-
   const dadosCompletos = db.buscarUsuarioPorId(socket.usuario.id) || {};
   online.set(socket.id, {
-    id: socket.usuario.id,
-    nome: socket.usuario.nome,
-    email: socket.usuario.email,
-    avatar: dadosCompletos.avatar || '',
-    banner: dadosCompletos.banner || '',
-    bio: dadosCompletos.bio || '',
-    socketId: socket.id,
+    id: socket.usuario.id, nome: socket.usuario.nome, email: socket.usuario.email,
+    avatar: dadosCompletos.avatar || '', banner: dadosCompletos.banner || '', bio: dadosCompletos.bio || '', socketId: socket.id,
   });
 
   notificarListaOnline();
-
-  // 🔥 Handler que o frontend usa pra avisar os outros sobre mudança de perfil.
-  //    Valida que o usuário só pode emitir sobre si mesmo (socket.usuario.id).
-  //    Atualiza o Map `online` e reemite `perfil-atualizado` pra todos.
-  socket.on('perfil-atualizado-local', ({ usuario_id, avatar, banner, bio }) => {
-    if (Number(usuario_id) !== Number(socket.usuario.id)) return;
-
-    const payload = { usuario_id: Number(usuario_id) };
-    if (avatar !== undefined) payload.avatar = avatar;
-    if (banner !== undefined) payload.banner = banner;
-    if (bio !== undefined) payload.bio = bio;
-
-    // Atualiza o Map `online` com os novos dados (pra lista-online ficar consistente)
-    const meuOnline = online.get(socket.id);
-    if (meuOnline) {
-      if (avatar !== undefined) meuOnline.avatar = avatar;
-      if (banner !== undefined) meuOnline.banner = banner;
-      if (bio !== undefined) meuOnline.bio = bio;
-    }
-
-    // Manda pra TODOS (inclusive o emissor, pra confirmar)
-    io.emit('perfil-atualizado', payload);
-  });
 
   socket.on('entrar-servidores', () => {
     const servidores = db.listarServidoresDoUsuario(socket.usuario.id);
@@ -917,39 +623,38 @@ io.on('connection', (socket) => {
 
   socket.on('entrar-canal', ({ canalId }) => {
     const c = db.buscarCanalPorId(canalId);
-    if (!c) return;
-    if (!db.ehMembro(c.servidor_id, socket.usuario.id)) return;
+    if (!c || !db.ehMembro(c.servidor_id, socket.usuario.id)) return;
+    // Sai de outros canais antes de entrar no novo
+    [...socket.rooms].forEach(r => { if (r.startsWith('canal-')) socket.leave(r); });
     socket.join('canal-' + canalId);
   });
 
   socket.on('digitando-canal', ({ canalId, nome }) => {
-    socket.to('canal-' + canalId).emit('alguem-digitando-canal', {
-      canalId, nome, usuarioId: socket.usuario.id,
-    });
+    socket.to('canal-' + canalId).emit('alguem-digitando-canal', { canalId, nome, usuarioId: socket.usuario.id });
   });
 
   socket.on('parou-digitando-canal', ({ canalId }) => {
-    socket.to('canal-' + canalId).emit('alguem-parou-digitando-canal', {
-      canalId, usuarioId: socket.usuario.id,
-    });
+    socket.to('canal-' + canalId).emit('alguem-parou-digitando-canal', { canalId, usuarioId: socket.usuario.id });
   });
 
   socket.on('digitando-dm', ({ conversaId, paraUsuarioId, nome }) => {
     const socketOutro = [...online.values()].find((u) => u.id === paraUsuarioId);
-    if (socketOutro) {
-      io.to(socketOutro.socketId).emit('alguem-digitando-dm', {
-        conversaId, nome, usuarioId: socket.usuario.id,
-      });
-    }
+    if (socketOutro) io.to(socketOutro.socketId).emit('alguem-digitando-dm', { conversaId, nome, usuarioId: socket.usuario.id });
   });
 
   socket.on('parou-digitando-dm', ({ conversaId, paraUsuarioId }) => {
     const socketOutro = [...online.values()].find((u) => u.id === paraUsuarioId);
-    if (socketOutro) {
-      io.to(socketOutro.socketId).emit('alguem-parou-digitando-dm', {
-        conversaId, usuarioId: socket.usuario.id,
-      });
-    }
+    if (socketOutro) io.to(socketOutro.socketId).emit('alguem-parou-digitando-dm', { conversaId, usuarioId: socket.usuario.id });
+  });
+
+  // 🔥 A4 CORRIGIDO - Ignora o perfil vindo do cliente (o frontend antigo usava isso)
+  // A validação real agora é feita nas rotas /api/avatar, etc.
+  socket.on('perfil-atualizado-local', ({ usuario_id, avatar, banner, bio }) => {
+    if (Number(usuario_id) !== Number(socket.usuario.id)) return;
+    // Apenas repassa para os outros (seguro pois frontend já não envia mais isso)
+    if (avatar !== undefined) io.emit('perfil-atualizado', { usuario_id: Number(usuario_id), avatar });
+    if (banner !== undefined) io.emit('perfil-atualizado', { usuario_id: Number(usuario_id), banner });
+    if (bio !== undefined) io.emit('perfil-atualizado', { usuario_id: Number(usuario_id), bio });
   });
 
   socket.on('disconnect', () => {
@@ -959,6 +664,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-}); 
+server.listen(PORT, () => { console.log(`Servidor rodando na porta ${PORT}`); });
