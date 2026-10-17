@@ -8,7 +8,8 @@ function avatarHTML(usuario, classe = '', onclick = null) {
   const attr = onclick ? ` onclick="${onclick}" style="cursor:pointer"` : '';
 
   if (usuario.avatar) {
-    return `<div class="${cls} com-imagem"${attr}><img src="${usuario.avatar}" alt=""></div>`;
+    // 🔥 C1: URL do avatar protegida com escapeHtml
+    return `<div class="${cls} com-imagem"${attr}><img src="${escapeHtml(usuario.avatar)}" alt=""></div>`;
   }
 
   const inicial = (usuario.nome || '?').charAt(0).toUpperCase();
@@ -24,7 +25,7 @@ function avatarHTML(usuario, classe = '', onclick = null) {
   const estiloExtra = onclick ? '; cursor:pointer' : '';
   const sombra = escuro ? 'box-shadow: 0 0 12px rgba(14, 165, 233, 0.4);' : '';
 
-  return `<div class="${cls}"${attr} style="background: linear-gradient(180deg, ${corFim}, ${cor}); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.4); ${sombra}${estiloExtra}">${inicial}</div>`;
+  return `<div class="${cls}"${attr} style="background: linear-gradient(180deg, ${corFim}, ${cor}); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.4); ${sombra}${estiloExtra}">${escapeHtml(inicial)}</div>`;
 }
 
 const EMOJIS = {
@@ -91,7 +92,7 @@ function pegarUsuarioDoCache(id) {
 
 function voltarTelaMobile() {
   if (telaAtual === 'amigos' || telaAtual === 'buscar' || telaAtual === 'dm') {
-    // 🔥 Em vez de voltar pra home vazia, volta pro canal que tava aberto
+    // 🔥 Correção: volta pro canal que tava aberto em vez de tela vazia
     if (canalAtivo) {
       abrirCanal(canalAtivo);
     } else {
@@ -100,7 +101,6 @@ function voltarTelaMobile() {
   } else if (telaAtual === 'conversa') {
     voltarDMs();
   } else if (telaAtual === 'canal') {
-    // Se tá num canal e clica ←, volta pro home (lista de canais)
     mostrarTelaHome();
   } else {
     voltarParaServidor();
@@ -110,24 +110,16 @@ function voltarTelaMobile() {
 function atualizarBotaoVoltar() {
   const btn = document.getElementById('btn-voltar-mobile');
   if (!btn) return;
-
-  // Mostra o botão quando NÃO está na home
   const esconder = (telaAtual === 'home');
   btn.classList.toggle('escondido', esconder);
 }
 
-// 🔥 Atualiza só o texto do título (sem apagar botões)
 function atualizarTituloMain(texto) {
   const tituloEl = document.getElementById('titulo-main');
   if (!tituloEl) return;
-
   const txtEl = tituloEl.querySelector('.txt-titulo');
-  if (txtEl) {
-    txtEl.textContent = texto;
-  } else {
-    // Fallback (não deve acontecer se o HTML foi atualizado)
-    tituloEl.textContent = texto;
-  }
+  if (txtEl) txtEl.textContent = texto;
+  else tituloEl.textContent = texto;
 }
 
 // ============================================================
@@ -262,8 +254,8 @@ function mostrarNotificacaoVisual({
   el.id = id;
 
   const avatarInner = deAvatar
-    ? `<img src="${deAvatar}" alt="">`
-    : `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-weight:900;">${(deNome || '?').charAt(0).toUpperCase()}</span>`;
+    ? `<img src="${escapeHtml(deAvatar)}" alt="">`
+    : `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-weight:900;">${escapeHtml((deNome || '?').charAt(0).toUpperCase())}</span>`;
 
   const temAcoes = Array.isArray(acoes) && acoes.length > 0;
 
@@ -273,7 +265,7 @@ function mostrarNotificacaoVisual({
       <div class="notif-titulo">${escapeHtml(deNome || 'Alguém')}</div>
       <div class="notif-onde">${escapeHtml(ondeTexto || '')}</div>
       <div class="notif-texto">${escapeHtml(texto || '')}</div>
-      ${temAcoes ? `<div class="notif-acoes">${acoes.map((a, i) => `<button class="${a.classe || ''}" data-acao-idx="${i}">${a.label}</button>`).join('')}</div>` : ''}
+      ${temAcoes ? `<div class="notif-acoes">${acoes.map((a, i) => `<button class="${a.classe || ''}" data-acao-idx="${i}">${escapeHtml(a.label)}</button>`).join('')}</div>` : ''}
     </div>
     <button class="notif-close" title="Fechar">✕</button>
   `;
@@ -460,7 +452,7 @@ function abrirMenuContexto(event, opcoes) {
   opcoes.acoes.forEach((acao) => {
     const btn = document.createElement('button');
     if (acao.perigo) btn.className = 'perigo';
-    btn.innerHTML = `<span class="menu-emoji">${acao.emoji || ''}</span><span>${escapeHtml(acao.label)}</span>`;
+    btn.innerHTML = `<span class="menu-emoji">${escapeHtml(acao.emoji || '')}</span><span>${escapeHtml(acao.label)}</span>`;
     btn.onclick = () => {
       fecharMenuContexto();
       if (typeof acao.onClick === 'function') acao.onClick();
@@ -576,13 +568,22 @@ document.addEventListener('scroll', (e) => {
 
 document.addEventListener('change', async (e) => {
   if (e.target.id !== 'input-anexo') return;
-  const file = e.target.files[0];
+
+  // 🔥 Captura o arquivo IMEDIATAMENTE
+  const file = e.target.files && e.target.files[0];
   if (!file) return;
+
+  // 🔥 Captura contexto/tipo ANTES de qualquer reset
   const contexto = anexoContexto;
   const tipo = anexoTipo;
+
+  // 🔥 Agora sim pode resetar
   anexoContexto = null;
   anexoTipo = null;
+  e.target.value = '';
+
   if (!contexto || !tipo) return;
+
   await enviarComUpload(file, tipo, contexto);
 });
 
@@ -630,11 +631,14 @@ function enviarComUpload(file, tipo, contexto) {
       }
     };
 
+    // 🔥 Fallback visual mobile
     const intervalTempo = setInterval(() => {
       if (progressoRecebido) { clearInterval(intervalTempo); return; }
       const seg = Math.floor((Date.now() - tempoInicio) / 1000);
       pct.textContent = `Enviando... ${seg}s`;
-    }, 1000);
+      const pctFake = Math.min(95, Math.round((seg / 30) * 100));
+      fill.style.width = pctFake + '%';
+    }, 400);
 
     xhr.onload = async () => {
       clearInterval(intervalTempo);
@@ -721,7 +725,7 @@ function renderAnexoHTML(anexo) {
 
     if (a.tipo === 'foto') {
       return `<div class="msg-anexo">
-        <img class="msg-anexo-imagem" src="${a.url}" alt="${escapeHtml(a.nome || 'foto')}">
+        <img class="msg-anexo-imagem" src="${escapeHtml(a.url)}" alt="${escapeHtml(a.nome || 'foto')}">
       </div>`;
     }
 
@@ -729,7 +733,7 @@ function renderAnexoHTML(anexo) {
       const idUnico = 'video-' + Math.random().toString(36).slice(2, 10);
       return `<div class="msg-anexo">
         <div class="media-player-video-wrap">
-          <video class="media-video-elemento" src="${a.url}" preload="metadata"></video>
+          <video class="media-video-elemento" src="${escapeHtml(a.url)}" preload="metadata"></video>
           <div class="media-player" data-media-id="${idUnico}" data-media-tipo="video">
             <button class="media-play" type="button" title="Play/Pause">
               <span class="media-play-icone">▶</span>
@@ -750,7 +754,7 @@ function renderAnexoHTML(anexo) {
             <button class="media-fullscreen-btn" type="button" title="Tela cheia">⛶</button>
           </div>
         </div>
-        <a class="msg-anexo-media-download" href="${a.url}" download="${escapeHtml(a.nome || 'video')}">
+        <a class="msg-anexo-media-download" href="${escapeHtml(a.url)}" download="${escapeHtml(a.nome || 'video')}">
           <span class="media-dl-icone">📥</span>
           <span class="media-dl-nome">${escapeHtml(a.nome || 'video')}</span>
           <span class="media-dl-tam">(${formatarBytes(a.tamanho || 0)})</span>
@@ -778,9 +782,9 @@ function renderAnexoHTML(anexo) {
           <div class="media-volume-wrap">
             <div class="media-volume-track"><div class="media-volume-fill"></div></div>
           </div>
-          <audio class="media-audio-elemento" src="${a.url}" preload="metadata"></audio>
+          <audio class="media-audio-elemento" src="${escapeHtml(a.url)}" preload="metadata"></audio>
         </div>
-        <a class="msg-anexo-media-download" href="${a.url}" download="${escapeHtml(a.nome || 'audio')}">
+        <a class="msg-anexo-media-download" href="${escapeHtml(a.url)}" download="${escapeHtml(a.nome || 'audio')}">
           <span class="media-dl-icone">📥</span>
           <span class="media-dl-nome">${escapeHtml(a.nome || 'audio')}</span>
           <span class="media-dl-tam">(${formatarBytes(a.tamanho || 0)})</span>
@@ -790,7 +794,7 @@ function renderAnexoHTML(anexo) {
 
     if (a.tipo === 'arquivo') {
       return `<div class="msg-anexo">
-        <a class="msg-anexo-arquivo" href="${a.url}" download="${escapeHtml(a.nome || 'arquivo')}">
+        <a class="msg-anexo-arquivo" href="${escapeHtml(a.url)}" download="${escapeHtml(a.nome || 'arquivo')}">
           <span class="arquivo-icone">${iconeArquivo(a.nome, a.mime)}</span>
           <span class="arquivo-info">
             <span class="arquivo-nome">${escapeHtml(a.nome || 'arquivo')}</span>
@@ -1353,8 +1357,8 @@ function conectarSocket() {
   socket.on('servidor-atualizado', ({ servidor }) => {
     if (servidorAtivo && servidorAtivo.servidor.id === servidor.id) {
       servidorAtivo.servidor = servidor;
-      const nomeEl = document.getElementById('nome-servidor');
-      if (nomeEl) nomeEl.textContent = servidor.nome;
+      const nomeServEl = document.getElementById('nome-servidor');
+      if (nomeServEl) nomeServEl.textContent = servidor.nome;
     }
     const idx = servidores.findIndex((s) => s.id === servidor.id);
     if (idx >= 0) servidores[idx] = servidor;
@@ -1492,13 +1496,13 @@ function atualizarAvataresNasMensagens(usuarioId, avatar, banner, bio) {
         if (imgEl) imgEl.src = avatar;
         else {
           avatarEl.classList.add('com-imagem');
-          avatarEl.innerHTML = `<img src="${avatar}" alt="">`;
+          avatarEl.innerHTML = `<img src="${escapeHtml(avatar)}" alt="">`;
         }
       } else {
         if (imgEl) {
           avatarEl.classList.remove('com-imagem');
           const autor = msgEl.querySelector('.msg-autor')?.textContent || '?';
-          avatarEl.innerHTML = autor.charAt(0).toUpperCase();
+          avatarEl.innerHTML = escapeHtml(autor.charAt(0).toUpperCase());
         }
       }
     }
@@ -1555,11 +1559,11 @@ function atualizarListasComPerfil(usuarioId, avatar, banner, bio) {
       if (avatar !== undefined) {
         if (avatar) {
           avatarEl.classList.add('com-imagem');
-          avatarEl.innerHTML = `<img src="${avatar}" alt="">`;
+          avatarEl.innerHTML = `<img src="${escapeHtml(avatar)}" alt="">`;
         } else {
           avatarEl.classList.remove('com-imagem');
           const inicial = (pai.textContent || '?').trim().charAt(0).toUpperCase();
-          avatarEl.innerHTML = inicial;
+          avatarEl.innerHTML = escapeHtml(inicial);
         }
       }
     });
@@ -2015,7 +2019,7 @@ function renderizarServidores() {
     d.className = 'servidor-icon';
     if (servidorAtivo && servidorAtivo.servidor.id === s.id) d.classList.add('ativo');
     if (s.silenciado) d.classList.add('silenciado');
-    d.textContent = s.nome.charAt(0).toUpperCase();
+    d.textContent = escapeHtml(s.nome.charAt(0).toUpperCase());
     d.title = s.nome;
 
     d.onclick = () => abrirServidor(s.id);
@@ -2170,7 +2174,7 @@ async function abrirServidor(id) {
     renderizarCanais();
     renderizarMembros();
 
-    // 🔥 SEMPRE abre o primeiro canal quando clica no servidor
+    // 🔥 Correção: sempre abre o primeiro canal quando clica no servidor
     if (data.canais.length > 0) {
       await abrirCanal(data.canais[0]);
     } else {
@@ -2179,7 +2183,7 @@ async function abrirServidor(id) {
       atualizarTituloMain('Selecione um canal');
     }
   } catch (e) { console.warn(e); }
-} 
+}
 
 function renderizarCanais() {
   const el = document.getElementById('lista-canais');
@@ -2372,7 +2376,7 @@ function reacoesHTML(msgId, reacoes, contexto) {
     html += `<div class="reacao-pill ${ehMinha ? 'minha' : ''}"
       onclick="toggleReacao('${contexto}', ${msgId}, '${emoji}')"
       title="${usuarios.length} pessoa(s)">
-      <span>${emoji}</span>
+      <span>${escapeHtml(emoji)}</span>
       <span class="reacao-count">${usuarios.length}</span>
     </div>`;
   }
@@ -2754,9 +2758,10 @@ function renderizarPedidos(pedidos) {
     const info = document.createElement('div');
     info.className = 'info';
     const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(p).replace(/"/g, '&quot;')})`;
+    // 🔥 C1: p.nome e p.email protegidos
     info.innerHTML = `
-      <span class="nome">${avatarHTML(p, 'mini', onclickAttr)} ${p.nome}</span>
-      <span class="email">${p.email}</span>`;
+      <span class="nome">${avatarHTML(p, 'mini', onclickAttr)} ${escapeHtml(p.nome)}</span>
+      <span class="email">${escapeHtml(p.email)}</span>`;
     const acoes = document.createElement('div');
     const btnA = document.createElement('button');
     btnA.className = 'mini verde';
@@ -2786,11 +2791,12 @@ function renderizarAmigos(amigos) {
     info.className = 'info';
     const dados = pegarUsuarioDoCache(a.id) || a;
     const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(dados).replace(/"/g, '&quot;')})`;
+    // 🔥 C1: a.nome protegido
     info.innerHTML = `
       <span class="nome">
         ${avatarHTML(dados, 'mini', onclickAttr)}
         <span class="status-dot ${estaOnline ? 'online' : 'offline'}"></span>
-        ${a.nome}
+        ${escapeHtml(a.nome)}
       </span>
       <span class="email">${estaOnline ? '🟢 online' : '⚫ offline'}</span>`;
     const acoes = document.createElement('div');
@@ -2820,9 +2826,10 @@ function renderizarEnviados(enviados) {
     const info = document.createElement('div');
     info.className = 'info';
     const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(p).replace(/"/g, '&quot;')})`;
+    // 🔥 C1: p.nome e p.email protegidos
     info.innerHTML = `
-      <span class="nome">${avatarHTML(p, 'mini', onclickAttr)} ${p.nome}</span>
-      <span class="email">${p.email}</span>`;
+      <span class="nome">${avatarHTML(p, 'mini', onclickAttr)} ${escapeHtml(p.nome)}</span>
+      <span class="email">${escapeHtml(p.email)}</span>`;
     const s = document.createElement('span');
     s.className = 'email';
     s.textContent = '⏳ Pendente';
@@ -2881,9 +2888,10 @@ function buscarUsuarios() {
       const info = document.createElement('div');
       info.className = 'info';
       const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(u).replace(/"/g, '&quot;')})`;
+      // 🔥 C1: u.nome e u.email protegidos
       info.innerHTML = `
-        <span class="nome">${avatarHTML(u, 'mini', onclickAttr)} ${u.nome}</span>
-        <span class="email">${u.email}</span>`;
+        <span class="nome">${avatarHTML(u, 'mini', onclickAttr)} ${escapeHtml(u.nome)}</span>
+        <span class="email">${escapeHtml(u.email)}</span>`;
       const acoes = document.createElement('div');
       if (amigosIds.has(u.id)) acoes.innerHTML = '<span class="email">✅ Já é amigo</span>';
       else if (enviadosIds.has(u.id)) acoes.innerHTML = '<span class="email">⏳ Enviado</span>';
@@ -2950,11 +2958,12 @@ async function carregarConversas() {
     const dadosAtualizados = pegarUsuarioDoCache(c.amigo.id) || c.amigo;
     const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(dadosAtualizados).replace(/"/g, '&quot;')})`;
     const badgeSile = c.silenciado ? '<span class="badge-silenciado">🔇</span>' : '';
+    // 🔥 C1: c.amigo.nome protegido
     info.innerHTML = `
       <span class="nome">
         ${avatarHTML(dadosAtualizados, 'mini', onclickAttr)}
         <span class="status-dot ${estaOnline ? 'online' : 'offline'}"></span>
-        ${c.amigo.nome}
+        ${escapeHtml(c.amigo.nome)}
         ${badgeSile}
       </span>
       <span class="preview">${escapeHtml(preview)}</span>
@@ -3150,8 +3159,8 @@ async function carregarListaBloqueados() {
     const info = document.createElement('div');
     info.className = 'info';
     info.innerHTML = `
-      <span class="nome">${avatarHTML(b, 'mini')} ${b.nome}</span>
-      <span class="email">${b.email}</span>`;
+      <span class="nome">${avatarHTML(b, 'mini')} ${escapeHtml(b.nome)}</span>
+      <span class="email">${escapeHtml(b.email)}</span>`;
     const btn = document.createElement('button');
     btn.className = 'mini verde';
     btn.textContent = '🔓 Desbloquear';
@@ -3186,11 +3195,11 @@ function atualizarPreviewAvatar(usuario) {
 
   if (usuario.avatar) {
     el.classList.add('com-imagem');
-    el.innerHTML = `<img src="${usuario.avatar}" alt="">`;
+    el.innerHTML = `<img src="${escapeHtml(usuario.avatar)}" alt="">`;
   } else {
     el.classList.remove('com-imagem');
     const inicial = (usuario.nome || '?').charAt(0).toUpperCase();
-    el.innerHTML = inicial;
+    el.innerHTML = escapeHtml(inicial);
     el.style.background = escuro
       ? 'linear-gradient(180deg, #1e5a8e, #0f2842)'
       : 'linear-gradient(180deg, #38bdf8, #0284c7)';
@@ -3200,7 +3209,7 @@ function atualizarPreviewAvatar(usuario) {
 function atualizarPreviewBanner(usuario) {
   const el = document.getElementById('perfil-banner');
   if (!el) return;
-  if (usuario.banner) el.style.backgroundImage = `url(${usuario.banner})`;
+  if (usuario.banner) el.style.backgroundImage = `url("${escapeHtml(usuario.banner)}")`;
   else el.style.backgroundImage = '';
 }
 
@@ -3229,11 +3238,11 @@ function atualizarAvataresNaUI() {
 
   if (meuUsuario.avatar) {
     el.classList.add('com-imagem');
-    el.innerHTML = `<img src="${meuUsuario.avatar}" alt="">`;
+    el.innerHTML = `<img src="${escapeHtml(meuUsuario.avatar)}" alt="">`;
   } else {
     el.classList.remove('com-imagem');
     const inicial = (meuUsuario.nome || '?').charAt(0).toUpperCase();
-    el.innerHTML = inicial;
+    el.innerHTML = escapeHtml(inicial);
     el.style.background = escuro
       ? 'linear-gradient(180deg, #1e5a8e, #0f2842)'
       : 'linear-gradient(180deg, #38bdf8, #0284c7)';
@@ -3257,18 +3266,18 @@ function atualizarPerfilVisitadoUI(dados) {
   if (avatarEl) {
     if (dados.avatar) {
       avatarEl.classList.add('com-imagem');
-      avatarEl.innerHTML = `<img src="${dados.avatar}" alt="">`;
+      avatarEl.innerHTML = `<img src="${escapeHtml(dados.avatar)}" alt="">`;
     } else {
       avatarEl.classList.remove('com-imagem');
       const inicial = (dados.nome || '?').charAt(0).toUpperCase();
-      avatarEl.innerHTML = inicial;
+      avatarEl.innerHTML = escapeHtml(inicial);
       avatarEl.style.background = 'linear-gradient(180deg, #38bdf8, #0284c7)';
     }
   }
 
   const bannerEl = document.getElementById('visita-banner');
   if (bannerEl) {
-    if (dados.banner) bannerEl.style.backgroundImage = `url(${dados.banner})`;
+    if (dados.banner) bannerEl.style.backgroundImage = `url("${escapeHtml(dados.banner)}")`;
     else bannerEl.style.backgroundImage = '';
   }
 
@@ -4486,33 +4495,3 @@ window.addEventListener('load', async () => {
     if (e.key === 'void-logout') location.reload();
   });
 });
-
-// ============================================================
-// 🔥 MOBILE — Botão voltar e título dinâmico
-// ============================================================
-
-function voltarTelaMobile() {
-  if (telaAtual === 'amigos' || telaAtual === 'buscar' || telaAtual === 'dm') {
-    voltarParaServidor();
-  } else if (telaAtual === 'conversa') {
-    voltarDMs();
-  } else if (telaAtual === 'canal') {
-    mostrarTelaHome();
-  } else {
-    voltarParaServidor();
-  }
-}
-
-function atualizarBotaoVoltar() {
-  const btn = document.getElementById('btn-voltar-mobile');
-  if (!btn) return;
-  btn.classList.toggle('escondido', telaAtual === 'home');
-}
-
-function atualizarTituloMain(texto) {
-  const tituloEl = document.getElementById('titulo-main');
-  if (!tituloEl) return;
-  const txtEl = tituloEl.querySelector('.txt-titulo');
-  if (txtEl) txtEl.textContent = texto;
-  else tituloEl.textContent = texto;
-}
