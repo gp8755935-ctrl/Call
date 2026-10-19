@@ -3694,6 +3694,15 @@ async function iniciarGravacaoAudio(contexto) {
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
   catch (e) { alert('Não foi possível acessar o microfone.'); return; }
 
+  // 🔥 AQUI: Move a barra de gravação para cima da caixa de texto correta
+  const barraEl = document.getElementById('barra-gravacao');
+  const alvo = contexto === 'canal' ? document.querySelector('#tela-canal') : document.querySelector('#tela-conversa');
+  const barraMsg = alvo.querySelector('.barra-msg');
+  
+  if (barraEl && barraMsg) {
+    alvo.insertBefore(barraEl, barraMsg);
+  }
+
   const barra = document.getElementById('barra-gravacao');
   const timer = document.getElementById('gravacao-timer');
   const dica = document.getElementById('gravacao-dica');
@@ -4482,4 +4491,4 @@ window.addEventListener('load', async () => {
   window.addEventListener('storage', (e) => {
     if (e.key === 'void-logout') location.reload();
   });
-});
+}); 
