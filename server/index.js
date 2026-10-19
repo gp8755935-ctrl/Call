@@ -14,8 +14,7 @@ const app = express();
 const server = http.createServer(app);
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-// 🔥 M6: CORS restrito ao domínio oficial (configurável via env)
-const ORIGEM_PERMITIDA = process.env.ORIGEM_PERMITIDA || false; // false = mesma origem
+const ORIGEM_PERMITIDA = process.env.ORIGEM_PERMITIDA || false;
 const io = new Server(server, {
   transports: ['websocket', 'polling'],
   cors: { origin: ORIGEM_PERMITIDA || true, credentials: true },
@@ -35,7 +34,6 @@ const storage = multer.diskStorage({
   },
 });
 
-// 🔥 C2: lista fechada de extensões permitidas para "arquivo"
 const EXTENSOES_ARQUIVO_PERMITIDAS = [
   '.pdf', '.zip', '.rar', '.7z', '.tar', '.gz',
   '.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.opus', '.weba',
@@ -63,15 +61,16 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
-  // 🔥 C1: CSP restritiva (permite só o necessário para o app)
+  
+  // 🔥 CSP Atualizado para permitir o Google Fonts
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
     "img-src 'self' data: blob:; " +
     "media-src 'self' blob:; " +
-    "style-src 'self' 'unsafe-inline'; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src 'self' data: https://fonts.gstatic.com; " +
     "script-src 'self' 'unsafe-inline'; " +
     "connect-src 'self' ws: wss:; " +
-    "font-src 'self' data:; " +
     "object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
   );
   next();
@@ -82,7 +81,6 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-// 🔥 M3: cache longo para /uploads (imagens/vídeos não mudam)
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   const ext = path.extname(req.path).toLowerCase();
@@ -122,7 +120,6 @@ function pegarUsuario(req) {
   return auth.verificarToken(token);
 }
 
-// 🔥 M2: usa busca leve (sem avatar/banner) na auth
 function exigirAuth(req, res, next) {
   const u = pegarUsuario(req);
   if (!u) return res.status(401).json({ erro: 'Não logado' });
@@ -155,10 +152,10 @@ function limparCookies(req, res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
 }
 
-// ========== RATE LIMIT (A3) ==========
+// ========== RATE LIMIT ==========
 const limiterAuth = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 min
-  max: 30, // 30 tentativas por IP
+  windowMs: 15 * 60 * 1000,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: { erro: 'Muitas tentativas. Tente novamente em 15 minutos.' },
@@ -172,7 +169,7 @@ const limiterEntrarServidor = rateLimit({
   message: { erro: 'Muitas tentativas. Tente novamente em 15 minutos.' },
 });
 
-// ========== UPLOAD (C2) ==========
+// ========== UPLOAD ==========
 app.post('/api/upload', exigirAuth, upload.single('arquivo'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
@@ -186,7 +183,6 @@ app.post('/api/upload', exigirAuth, upload.single('arquivo'), (req, res) => {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ erro: `Tipo não permitido` });
     }
-    // 🔥 C2: valida extensão real para "arquivo"
     if (regras.ext) {
       const ext = path.extname(req.file.originalname).toLowerCase();
       if (!regras.ext.includes(ext)) {
@@ -246,7 +242,7 @@ app.get('/api/eu', (req, res) => {
   res.json({ usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, avatar: usuario.avatar || '', banner: usuario.banner || '', bio: usuario.bio || '' } });
 });
 
-// 🔥 C1 - Rotas de perfil blindadas + emitir perfil-atualizado após gravar
+// ========== PERFIL ==========
 app.post('/api/avatar', exigirAuth, (req, res) => {
   const { avatar } = req.body;
   if (!avatar) return res.status(400).json({ erro: 'Avatar vazio' });
@@ -286,7 +282,6 @@ app.get('/api/usuarios/buscar', exigirAuth, (req, res) => {
   res.json({ usuarios: filtrados });
 });
 
-// 🔥 A2: rota de usuário individual sem email
 app.get('/api/usuarios/:id', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ erro: 'ID inválido' });
@@ -295,7 +290,7 @@ app.get('/api/usuarios/:id', exigirAuth, (req, res) => {
   const souEu = Number(req.usuario.id) === id;
   res.json({ usuario: {
     id: u.id, nome: u.nome,
-    email: souEu ? u.email : undefined, // só o próprio dono vê o email
+    email: souEu ? u.email : undefined,
     avatar: u.avatar || '', banner: u.banner || '', bio: u.bio || '',
   }});
 });
@@ -403,7 +398,6 @@ app.get('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   res.json({ mensagens: mensagens.map((m) => ({ ...m, reacoes: reacoes[m.id] || {} })) });
 });
 
-// 🔥 B1: DM verifica bloqueio + anexo validado (C1)
 app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const { texto, replyId, replyAutor, replyTexto, anexo } = req.body;
@@ -414,7 +408,6 @@ app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
   if (db.estaBloqueado(outroId, req.usuario.id)) return res.status(403).json({ erro: 'Você foi bloqueado' });
 
-  // 🔥 C1: valida anexo.url
   let anexoLimpo = null;
   if (anexo) {
     if (!anexo.url || !/^\/uploads\/[a-f0-9]{32}\.[a-z0-9]{1,10}$/.test(anexo.url)) {
@@ -449,7 +442,6 @@ app.patch('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req, 
   res.json({ ok: true });
 });
 
-// 🔥 B2: apaga arquivo do anexo ao deletar DM
 app.delete('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req, res) => {
   const idConversa = Number(req.params.idConversa);
   const idMensagem = Number(req.params.idMensagem);
@@ -546,7 +538,6 @@ app.post('/api/servidores/entrar', limiterEntrarServidor, exigirAuth, (req, res)
   res.json({ ok: true, servidor: s });
 });
 
-// 🔥 A1 CORRIGIDO - Expulsa da sala ao sair
 app.post('/api/servidores/:id/sair', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const s = db.buscarServidorPorId(id);
@@ -570,7 +561,6 @@ app.delete('/api/servidores/:id', exigirAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// 🔥 A1 CORRIGIDO - Expulsa da sala ao ser removido
 app.post('/api/servidores/:id/remover-membro', exigirAuth, (req, res) => {
   const servidorId = Number(req.params.id);
   const usuarioId = Number(req.body.usuarioId);
@@ -620,7 +610,6 @@ app.get('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   res.json({ mensagens: mensagens.map((m) => ({ ...m, reacoes: reacoes[m.id] || {} })) });
 });
 
-// 🔥 C1: valida anexo.url também no canal
 app.post('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const { texto, replyId, replyAutor, replyTexto, anexo } = req.body;
@@ -696,7 +685,6 @@ const online = new Map();
 function notificarListaOnline() {
   const porUsuario = new Map();
   online.forEach((u) => { if (!porUsuario.has(u.id)) porUsuario.set(u.id, u); });
-  // 🔥 A2: sem email
   io.emit('lista-online', [...porUsuario.values()].map(u => ({ id: u.id, nome: u.nome, avatar: u.avatar })));
 }
 
@@ -739,8 +727,6 @@ io.on('connection', (socket) => {
     if (socketOutro) io.to(socketOutro.socketId).emit('alguem-parou-digitando-dm', { conversaId, usuarioId: socket.usuario.id });
   });
 
-  // 🔥 A4 CORRIGIDO - Valida payload e ignora se inválido
-  // (o front novo já atualiza localmente e as rotas /api/avatar etc. já emitem)
   socket.on('perfil-atualizado-local', ({ usuario_id, avatar, banner, bio }) => {
     if (Number(usuario_id) !== Number(socket.usuario.id)) return;
 
@@ -767,4 +753,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => { console.log(`Servidor rodando na porta ${PORT}`); }); 
+server.listen(PORT, () => { console.log(`Servidor rodando na porta ${PORT}`); });

@@ -2919,6 +2919,7 @@
       }
 
       /* 🔥 CORRIGIDO: Seta centralizada puxada 2px pra cima */
+            /* 🔥 CORRIGIDO: Seta centralizada */
       .btn-voltar-mobile {
         display: inline-flex;
         align-items: center;
@@ -2927,7 +2928,7 @@
         min-height: 36px;
         width: 36px;
         height: 36px;
-        padding: 0;
+        padding: 0 0 2px 0; /* AQUI: O padding-bottom de 2px empurra a seta pra cima no eixo Y */
         line-height: 1;
         border-radius: 50%;
         background: rgba(255, 255, 255, 0.7);
@@ -2939,7 +2940,6 @@
         flex-shrink: 0;
         box-shadow: inset 0 1px 0 rgba(255,255,255,1),
                     0 2px 8px rgba(2,132,199,0.25);
-        transform: translateY(-2px); /* 🔥 AQUI */
       }
       .btn-voltar-mobile::before { display: none !important; }
       .btn-voltar-mobile:active { transform: scale(0.92); }

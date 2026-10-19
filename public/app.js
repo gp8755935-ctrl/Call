@@ -3757,8 +3757,8 @@ async function iniciarGravacaoAudio(contexto) {
     e.preventDefault();
     if (gravacaoEstado.gravando) pararGravacao();
   };
-}
-
+} 
+ 
 async function comecarAGravar() {
   if (gravacaoEstado.gravando) return;
   const stream = gravacaoEstado.stream;
