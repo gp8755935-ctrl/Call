@@ -9,7 +9,7 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 // ============================================================
-// MIGRAÇÃO
+// MIGRAÇÃO (B3 - não destrutiva quando possível)
 // ============================================================
 function migrarBanco() {
   try {
@@ -17,15 +17,26 @@ function migrarBanco() {
       "SELECT name FROM sqlite_master WHERE type='table' AND name='amizades'"
     ).get();
 
-    if (tabelaExiste) {
-      const colunas = db.prepare("PRAGMA table_info(amizades)").all();
-      const nomesColunas = colunas.map(c => c.name);
+    if (!tabelaExiste) return;
 
-      if (!nomesColunas.includes('usuario_a') || !nomesColunas.includes('usuario_b')) {
-        console.log('🔧 Migrando tabela amizades...');
+    const colunas = db.prepare('PRAGMA table_info(amizades)').all();
+    const nomesColunas = colunas.map((c) => c.name);
+
+    // Schema antigo sem usuario_a/usuario_b: tenta reconstruir preservando o que der
+    if (!nomesColunas.includes('usuario_a') || !nomesColunas.includes('usuario_b')) {
+      console.log('🔧 Migrando tabela amizades (schema antigo detectado)...');
+
+      // Backup antes de mexer
+      try {
+        db.exec('ALTER TABLE amizades RENAME TO amizades_backup');
+        console.log('   Backup criado: amizades_backup');
+      } catch (e) {
+        console.warn('   Não foi possível renomear para backup:', e.message);
         db.exec('DROP TABLE IF EXISTS amizades');
       }
     }
+
+    // Garante que a tabela nova existe com o schema correto (criada abaixo no CREATE TABLE IF NOT EXISTS)
   } catch (e) {
     console.warn('Aviso na migração:', e.message);
   }
@@ -166,12 +177,19 @@ db.exec(`
 `);
 
 // ============================================================
-// USUÁRIOS
+// USUÁRIOS (M2 - opção de colunas leves)
 // ============================================================
 function buscarUsuarioPorId(id) {
   const idNum = Number(id);
   if (!Number.isInteger(idNum)) return null;
   return db.prepare('SELECT * FROM usuarios WHERE id = ?').get(idNum);
+}
+
+// 🔥 M2: busca só o necessário para auth (sem avatar/banner gigantes)
+function buscarUsuarioLevePorId(id) {
+  const idNum = Number(id);
+  if (!Number.isInteger(idNum)) return null;
+  return db.prepare('SELECT id, nome, email FROM usuarios WHERE id = ?').get(idNum);
 }
 
 function buscarUsuarioPorEmail(email) {
@@ -201,9 +219,10 @@ function atualizarBio(id, bio) {
   db.prepare('UPDATE usuarios SET bio = ? WHERE id = ?').run(bio, Number(id));
 }
 
+// 🔥 A2: não retorna email nas buscas públicas
 function buscarUsuariosPorNome(q, excetoId) {
   return db.prepare(
-    `SELECT id, nome, email, avatar, banner, bio
+    `SELECT id, nome, avatar, banner, bio
      FROM usuarios WHERE nome LIKE ? AND id != ? LIMIT 20`
   ).all('%' + q + '%', Number(excetoId));
 }
@@ -232,10 +251,11 @@ function deletarAmizade(id) {
   db.prepare('DELETE FROM amizades WHERE id = ?').run(Number(id));
 }
 
+// 🔥 A2: sem email nas listas
 function listarAmigos(usuarioId) {
   const id = Number(usuarioId);
   return db.prepare(
-    `SELECT u.id, u.nome, u.email, u.avatar, u.banner, u.bio, a.id as amizade_id
+    `SELECT u.id, u.nome, u.avatar, u.banner, u.bio, a.id as amizade_id
      FROM amizades a JOIN usuarios u ON (u.id = a.usuario_a OR u.id = a.usuario_b)
      WHERE a.status = 'aceita' AND (a.usuario_a = ? OR a.usuario_b = ?) AND u.id != ?`
   ).all(id, id, id);
@@ -243,7 +263,7 @@ function listarAmigos(usuarioId) {
 
 function listarPedidosRecebidos(usuarioId) {
   return db.prepare(
-    `SELECT u.id, u.nome, u.email, u.avatar, a.id as amizade_id, a.criado_em
+    `SELECT u.id, u.nome, u.avatar, a.id as amizade_id, a.criado_em
      FROM amizades a JOIN usuarios u ON u.id = a.usuario_a
      WHERE a.usuario_b = ? AND a.status = 'pendente'`
   ).all(Number(usuarioId));
@@ -251,7 +271,7 @@ function listarPedidosRecebidos(usuarioId) {
 
 function listarPedidosEnviados(usuarioId) {
   return db.prepare(
-    `SELECT u.id, u.nome, u.email, u.avatar, a.id as amizade_id, a.criado_em
+    `SELECT u.id, u.nome, u.avatar, a.id as amizade_id, a.criado_em
      FROM amizades a JOIN usuarios u ON u.id = a.usuario_b
      WHERE a.usuario_a = ? AND a.status = 'pendente'`
   ).all(Number(usuarioId));
@@ -282,9 +302,10 @@ function estaBloqueado(bloqueadorId, bloqueadoId) {
   return !!r;
 }
 
+// 🔥 A2: sem email
 function listarBloqueados(usuarioId) {
   return db.prepare(
-    `SELECT u.id, u.nome, u.email, u.avatar FROM bloqueios b
+    `SELECT u.id, u.nome, u.avatar FROM bloqueios b
      JOIN usuarios u ON u.id = b.bloqueado_id WHERE b.bloqueador_id = ?`
   ).all(Number(usuarioId));
 }
@@ -338,9 +359,10 @@ function listarConversas(usuarioId) {
     const naoLidas = db.prepare(
       'SELECT COUNT(*) as n FROM mensagens WHERE conversa_id = ? AND de_id != ? AND lida = 0'
     ).get(c.id, id).n;
+    // 🔥 A2: amigo sem email
     return {
       conversa_id: c.id,
-      amigo: amigo ? { id: amigo.id, nome: amigo.nome, email: amigo.email, avatar: amigo.avatar || '', banner: amigo.banner || '', bio: amigo.bio || '' } : null,
+      amigo: amigo ? { id: amigo.id, nome: amigo.nome, avatar: amigo.avatar || '', banner: amigo.banner || '', bio: amigo.bio || '' } : null,
       ultima: ultima || null, nao_lidas: naoLidas, silenciado: estaSilenciado(id, 'usuario', c.amigo_id),
     };
   });
@@ -369,7 +391,7 @@ function listarMensagens(conversaId) {
     `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar FROM mensagens m
      LEFT JOIN usuarios u ON u.id = m.de_id WHERE m.conversa_id = ? ORDER BY m.id DESC LIMIT 200`
   ).all(Number(conversaId));
-  
+
   return msgs.reverse().map((m) => {
     if (m.anexo) { try { m.anexo = JSON.parse(m.anexo); } catch (e) { m.anexo = null; } }
     return m;
@@ -441,7 +463,7 @@ function atualizarServidor(id, { nome, descricao }) {
 
 function deletarServidor(id, donoId) {
   const s = buscarServidorPorId(id);
-  if (!s || s.dono_id !== Number(donoId)) return false;
+  if (!s || Number(s.dono_id) !== Number(donoId)) return false;
   db.prepare('DELETE FROM servidores WHERE id = ?').run(Number(id));
   return true;
 }
@@ -462,9 +484,10 @@ function removerMembro(servidorId, usuarioId) {
   db.prepare('DELETE FROM membros_servidor WHERE servidor_id = ? AND usuario_id = ?').run(Number(servidorId), Number(usuarioId));
 }
 
+// 🔥 A2: sem email
 function listarMembros(servidorId) {
   return db.prepare(
-    `SELECT u.id, u.nome, u.email, u.avatar FROM membros_servidor m
+    `SELECT u.id, u.nome, u.avatar FROM membros_servidor m
      JOIN usuarios u ON u.id = m.usuario_id WHERE m.servidor_id = ? ORDER BY u.nome ASC`
   ).all(Number(servidorId));
 }
@@ -493,7 +516,7 @@ function deletarCanal(id, donoId) {
   const c = buscarCanalPorId(id);
   if (!c) return false;
   const s = buscarServidorPorId(c.servidor_id);
-  if (!s || s.dono_id !== Number(donoId)) return false;
+  if (!s || Number(s.dono_id) !== Number(donoId)) return false;
   db.prepare('DELETE FROM canais WHERE id = ?').run(Number(id));
   return true;
 }
@@ -521,7 +544,7 @@ function listarMensagensCanal(canalId) {
     `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar FROM mensagens_canal m
      LEFT JOIN usuarios u ON u.id = m.de_id WHERE m.canal_id = ? ORDER BY m.id DESC LIMIT 200`
   ).all(Number(canalId));
-  
+
   return msgs.reverse().map((m) => {
     if (m.anexo) { try { m.anexo = JSON.parse(m.anexo); } catch (e) { m.anexo = null; } }
     return m;
@@ -566,7 +589,7 @@ function listarReacoesDeMensagens(tipo, ids) {
 }
 
 module.exports = {
-  buscarUsuarioPorId, buscarUsuarioPorEmail, criarUsuario, atualizarAvatar, atualizarBanner, atualizarBio,
+  buscarUsuarioPorId, buscarUsuarioLevePorId, buscarUsuarioPorEmail, criarUsuario, atualizarAvatar, atualizarBanner, atualizarBio,
   buscarUsuariosPorNome, buscarAmizadeEntre, criarPedidoAmizade, atualizarStatusAmizade, deletarAmizade,
   listarAmigos, listarPedidosRecebidos, listarPedidosEnviados, saoAmigos, bloquear, desbloquear,
   estaBloqueado, listarBloqueados, silenciar, dessilenciar, estaSilenciado, abrirConversa,

@@ -8,7 +8,6 @@ function avatarHTML(usuario, classe = '', onclick = null) {
   const attr = onclick ? ` onclick="${onclick}" style="cursor:pointer"` : '';
 
   if (usuario.avatar) {
-    // 🔥 C1: URL do avatar protegida com escapeHtml
     return `<div class="${cls} com-imagem"${attr}><img src="${escapeHtml(usuario.avatar)}" alt=""></div>`;
   }
 
@@ -67,7 +66,6 @@ let perfilVisitadoAtual = null;
 const CONFIG_PADRAO = { somMsg: true, somReacao: true, notifVisual: true, notifSistema: true, digitando: true, darkMode: false };
 let config = { ...CONFIG_PADRAO };
 
-// 🔥 Cache de usuários (id → dados atualizados)
 const usuariosCache = new Map();
 
 function atualizarUsuarioCache(usuario) {
@@ -87,12 +85,11 @@ function pegarUsuarioDoCache(id) {
 }
 
 // ============================================================
-// 🔥 MOBILE — Botão voltar e título dinâmico
+// MOBILE
 // ============================================================
 
 function voltarTelaMobile() {
   if (telaAtual === 'amigos' || telaAtual === 'buscar' || telaAtual === 'dm') {
-    // 🔥 Correção: volta pro canal que tava aberto em vez de tela vazia
     if (canalAtivo) {
       abrirCanal(canalAtivo);
     } else {
@@ -569,15 +566,12 @@ document.addEventListener('scroll', (e) => {
 document.addEventListener('change', async (e) => {
   if (e.target.id !== 'input-anexo') return;
 
-  // 🔥 Captura o arquivo IMEDIATAMENTE
   const file = e.target.files && e.target.files[0];
   if (!file) return;
 
-  // 🔥 Captura contexto/tipo ANTES de qualquer reset
   const contexto = anexoContexto;
   const tipo = anexoTipo;
 
-  // 🔥 Agora sim pode resetar
   anexoContexto = null;
   anexoTipo = null;
   e.target.value = '';
@@ -631,7 +625,6 @@ function enviarComUpload(file, tipo, contexto) {
       }
     };
 
-    // 🔥 Fallback visual mobile
     const intervalTempo = setInterval(() => {
       if (progressoRecebido) { clearInterval(intervalTempo); return; }
       const seg = Math.floor((Date.now() - tempoInicio) / 1000);
@@ -1136,7 +1129,7 @@ function conectarSocket() {
       tipo: 'amizade',
       deNome: pedido.nome, deAvatar: pedido.avatar, deId: pedido.id,
       ondeTexto: '👥 Pedido de amizade',
-      texto: pedido.email || 'quer ser seu amigo',
+      texto: 'quer ser seu amigo',
       acoes: [
         { label: '✅ Aceitar', classe: 'btn-aceitar', onClick: async () => {
           await fetch('/api/amizades/aceitar', {
@@ -1585,7 +1578,6 @@ function atualizarListasComPerfil(usuarioId, avatar, banner, bio) {
     }
   });
 }
-
 // ============================================================
 // BLOQUEIOS E SILENCIADOS
 // ============================================================
@@ -2174,7 +2166,6 @@ async function abrirServidor(id) {
     renderizarCanais();
     renderizarMembros();
 
-    // 🔥 Correção: sempre abre o primeiro canal quando clica no servidor
     if (data.canais.length > 0) {
       await abrirCanal(data.canais[0]);
     } else {
@@ -2748,6 +2739,7 @@ async function carregarAmizades() {
   } catch (e) { console.warn(e); }
 }
 
+// 🔥 A2: sem email (backend não retorna mais)
 function renderizarPedidos(pedidos) {
   const ul = document.getElementById('lista-pedidos');
   if (!ul) return;
@@ -2758,10 +2750,9 @@ function renderizarPedidos(pedidos) {
     const info = document.createElement('div');
     info.className = 'info';
     const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(p).replace(/"/g, '&quot;')})`;
-    // 🔥 C1: p.nome e p.email protegidos
     info.innerHTML = `
       <span class="nome">${avatarHTML(p, 'mini', onclickAttr)} ${escapeHtml(p.nome)}</span>
-      <span class="email">${escapeHtml(p.email)}</span>`;
+      <span class="email">${escapeHtml(p.bio || '')}</span>`;
     const acoes = document.createElement('div');
     const btnA = document.createElement('button');
     btnA.className = 'mini verde';
@@ -2791,7 +2782,6 @@ function renderizarAmigos(amigos) {
     info.className = 'info';
     const dados = pegarUsuarioDoCache(a.id) || a;
     const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(dados).replace(/"/g, '&quot;')})`;
-    // 🔥 C1: a.nome protegido
     info.innerHTML = `
       <span class="nome">
         ${avatarHTML(dados, 'mini', onclickAttr)}
@@ -2816,6 +2806,7 @@ function renderizarAmigos(amigos) {
   });
 }
 
+// 🔥 A2: sem email
 function renderizarEnviados(enviados) {
   const ul = document.getElementById('lista-enviados');
   if (!ul) return;
@@ -2826,10 +2817,8 @@ function renderizarEnviados(enviados) {
     const info = document.createElement('div');
     info.className = 'info';
     const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(p).replace(/"/g, '&quot;')})`;
-    // 🔥 C1: p.nome e p.email protegidos
     info.innerHTML = `
-      <span class="nome">${avatarHTML(p, 'mini', onclickAttr)} ${escapeHtml(p.nome)}</span>
-      <span class="email">${escapeHtml(p.email)}</span>`;
+      <span class="nome">${avatarHTML(p, 'mini', onclickAttr)} ${escapeHtml(p.nome)}</span>`;
     const s = document.createElement('span');
     s.className = 'email';
     s.textContent = '⏳ Pendente';
@@ -2888,10 +2877,9 @@ function buscarUsuarios() {
       const info = document.createElement('div');
       info.className = 'info';
       const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(u).replace(/"/g, '&quot;')})`;
-      // 🔥 C1: u.nome e u.email protegidos
+      // 🔥 A2: sem email
       info.innerHTML = `
-        <span class="nome">${avatarHTML(u, 'mini', onclickAttr)} ${escapeHtml(u.nome)}</span>
-        <span class="email">${escapeHtml(u.email)}</span>`;
+        <span class="nome">${avatarHTML(u, 'mini', onclickAttr)} ${escapeHtml(u.nome)}</span>`;
       const acoes = document.createElement('div');
       if (amigosIds.has(u.id)) acoes.innerHTML = '<span class="email">✅ Já é amigo</span>';
       else if (enviadosIds.has(u.id)) acoes.innerHTML = '<span class="email">⏳ Enviado</span>';
@@ -2958,7 +2946,6 @@ async function carregarConversas() {
     const dadosAtualizados = pegarUsuarioDoCache(c.amigo.id) || c.amigo;
     const onclickAttr = `abrirPerfilVisitado(${JSON.stringify(dadosAtualizados).replace(/"/g, '&quot;')})`;
     const badgeSile = c.silenciado ? '<span class="badge-silenciado">🔇</span>' : '';
-    // 🔥 C1: c.amigo.nome protegido
     info.innerHTML = `
       <span class="nome">
         ${avatarHTML(dadosAtualizados, 'mini', onclickAttr)}
@@ -3142,6 +3129,7 @@ function fecharBloqueados() {
   document.getElementById('modal-bloqueados').classList.remove('ativo');
 }
 
+// 🔥 A2: sem email
 async function carregarListaBloqueados() {
   const ul = document.getElementById('lista-bloqueados');
   if (!ul) return;
@@ -3159,8 +3147,7 @@ async function carregarListaBloqueados() {
     const info = document.createElement('div');
     info.className = 'info';
     info.innerHTML = `
-      <span class="nome">${avatarHTML(b, 'mini')} ${escapeHtml(b.nome)}</span>
-      <span class="email">${escapeHtml(b.email)}</span>`;
+      <span class="nome">${avatarHTML(b, 'mini')} ${escapeHtml(b.nome)}</span>`;
     const btn = document.createElement('button');
     btn.className = 'mini verde';
     btn.textContent = '🔓 Desbloquear';
@@ -3260,6 +3247,7 @@ function atualizarPerfilVisitadoUI(dados) {
   if (nomeEl) nomeEl.textContent = dados.nome || '';
 
   const emailEl = document.getElementById('visita-email');
+  // 🔥 A2: email só aparece se vier (o próprio dono); para terceiros fica vazio
   if (emailEl) emailEl.textContent = dados.email || '';
 
   const avatarEl = document.getElementById('visita-avatar');

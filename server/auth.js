@@ -13,7 +13,7 @@ if (!SECRET || SECRET.length < 32) {
 }
 
 // 🔥 Aumentado para 4 para invalidar TODOS os tokens antigos e forçar novo login geral
-const TOKEN_VERSION = 4; 
+const TOKEN_VERSION = 4;
 
 async function hashearSenha(senha) {
   return bcrypt.hash(senha, 10);

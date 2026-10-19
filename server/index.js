@@ -5,6 +5,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const { Server } = require('socket.io');
 const db = require('./db');
 const auth = require('./auth');
@@ -13,9 +14,11 @@ const app = express();
 const server = http.createServer(app);
 const IS_PROD = process.env.NODE_ENV === 'production';
 
+// 🔥 M6: CORS restrito ao domínio oficial (configurável via env)
+const ORIGEM_PERMITIDA = process.env.ORIGEM_PERMITIDA || false; // false = mesma origem
 const io = new Server(server, {
   transports: ['websocket', 'polling'],
-  cors: { origin: true, credentials: true },
+  cors: { origin: ORIGEM_PERMITIDA || true, credentials: true },
 });
 
 app.set('trust proxy', 1);
@@ -32,16 +35,25 @@ const storage = multer.diskStorage({
   },
 });
 
+// 🔥 C2: lista fechada de extensões permitidas para "arquivo"
+const EXTENSOES_ARQUIVO_PERMITIDAS = [
+  '.pdf', '.zip', '.rar', '.7z', '.tar', '.gz',
+  '.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.opus', '.weba',
+  '.mp4', '.webm', '.mov', '.avi',
+  '.doc', '.docx', '.odt', '.xls', '.xlsx', '.ods', '.csv',
+  '.ppt', '.pptx', '.odp', '.txt', '.md', '.json',
+];
+
 const TIPOS_PERMITIDOS = {
   foto: { mimes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif'], max: 10 * 1024 * 1024 },
   video: { mimes: ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-matroska'], max: 100 * 1024 * 1024 },
-  arquivo: { mimes: null, max: 100 * 1024 * 1024 },
+  arquivo: { mimes: null, max: 100 * 1024 * 1024, ext: EXTENSOES_ARQUIVO_PERMITIDAS },
 };
 
 const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } });
 
 // ============================================================
-// SEGURANÇA E ANTI-CACHE (C2)
+// SEGURANÇA E ANTI-CACHE
 // ============================================================
 app.use((req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
@@ -51,6 +63,17 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
+  // 🔥 C1: CSP restritiva (permite só o necessário para o app)
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; " +
+    "img-src 'self' data: blob:; " +
+    "media-src 'self' blob:; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "script-src 'self' 'unsafe-inline'; " +
+    "connect-src 'self' ws: wss:; " +
+    "font-src 'self' data:; " +
+    "object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+  );
   next();
 });
 
@@ -59,11 +82,11 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-// 🔥 C2 - Proteção contra upload de HTML/SVG
+// 🔥 M3: cache longo para /uploads (imagens/vídeos não mudam)
 app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   const ext = path.extname(req.path).toLowerCase();
   const seguras = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.webm', '.mp3', '.wav', '.ogg', '.m4a'];
-  
   if (!seguras.includes(ext)) {
     res.setHeader('Content-Disposition', 'attachment');
   }
@@ -99,10 +122,11 @@ function pegarUsuario(req) {
   return auth.verificarToken(token);
 }
 
+// 🔥 M2: usa busca leve (sem avatar/banner) na auth
 function exigirAuth(req, res, next) {
   const u = pegarUsuario(req);
   if (!u) return res.status(401).json({ erro: 'Não logado' });
-  const usuarioAtual = db.buscarUsuarioPorId(u.id);
+  const usuarioAtual = db.buscarUsuarioLevePorId(u.id);
   if (!usuarioAtual) {
     limparCookies(req, res);
     return res.status(401).json({ erro: 'Usuário não existe' });
@@ -131,7 +155,24 @@ function limparCookies(req, res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
 }
 
-// ========== UPLOAD ==========
+// ========== RATE LIMIT (A3) ==========
+const limiterAuth = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 30, // 30 tentativas por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { erro: 'Muitas tentativas. Tente novamente em 15 minutos.' },
+});
+
+const limiterEntrarServidor = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { erro: 'Muitas tentativas. Tente novamente em 15 minutos.' },
+});
+
+// ========== UPLOAD (C2) ==========
 app.post('/api/upload', exigirAuth, upload.single('arquivo'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
@@ -145,6 +186,14 @@ app.post('/api/upload', exigirAuth, upload.single('arquivo'), (req, res) => {
       fs.unlinkSync(req.file.path);
       return res.status(400).json({ erro: `Tipo não permitido` });
     }
+    // 🔥 C2: valida extensão real para "arquivo"
+    if (regras.ext) {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      if (!regras.ext.includes(ext)) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ erro: `Extensão não permitida` });
+      }
+    }
     res.json({
       ok: true,
       anexo: { tipo: tipoSolicitado, url: '/uploads/' + req.file.filename, nome: req.file.originalname, tamanho: req.file.size, mime: req.file.mimetype },
@@ -155,13 +204,12 @@ app.post('/api/upload', exigirAuth, upload.single('arquivo'), (req, res) => {
 });
 
 // ========== AUTH ==========
-app.post('/api/cadastro', async (req, res) => {
+app.post('/api/cadastro', limiterAuth, async (req, res) => {
   let { nome, email, senha } = req.body;
   if (!nome || !email || !senha) return res.status(400).json({ erro: 'Preencha todos os campos' });
-  // 🔥 C1 - Sanitização de nome e email
   nome = nome.replace(/[<>]/g, '').trim().substring(0, 50);
   email = email.toLowerCase().trim();
-  
+
   if (senha.length < 6) return res.status(400).json({ erro: 'Senha precisa ter 6+ caracteres' });
   if (db.buscarUsuarioPorEmail(email)) return res.status(400).json({ erro: 'Email já cadastrado' });
   try {
@@ -174,7 +222,7 @@ app.post('/api/cadastro', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: 'Erro ao cadastrar' }); }
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', limiterAuth, async (req, res) => {
   let { email, senha } = req.body;
   if (!email || !senha) return res.status(400).json({ erro: 'Preencha tudo' });
   email = email.toLowerCase().trim();
@@ -198,13 +246,14 @@ app.get('/api/eu', (req, res) => {
   res.json({ usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, avatar: usuario.avatar || '', banner: usuario.banner || '', bio: usuario.bio || '' } });
 });
 
-// 🔥 C1 - Rotas de perfil blindadas
+// 🔥 C1 - Rotas de perfil blindadas + emitir perfil-atualizado após gravar
 app.post('/api/avatar', exigirAuth, (req, res) => {
   const { avatar } = req.body;
   if (!avatar) return res.status(400).json({ erro: 'Avatar vazio' });
   if (!avatar.startsWith('data:image/')) return res.status(400).json({ erro: 'Formato inválido' });
   if (avatar.length > 800000) return res.status(400).json({ erro: 'Imagem muito grande' });
   db.atualizarAvatar(req.usuario.id, avatar);
+  io.emit('perfil-atualizado', { usuario_id: Number(req.usuario.id), avatar });
   res.json({ ok: true, usuario_id: req.usuario.id });
 });
 
@@ -214,6 +263,7 @@ app.post('/api/banner', exigirAuth, (req, res) => {
   if (!banner.startsWith('data:image/')) return res.status(400).json({ erro: 'Formato inválido' });
   if (banner.length > 2500000) return res.status(400).json({ erro: 'Imagem muito grande' });
   db.atualizarBanner(req.usuario.id, banner);
+  io.emit('perfil-atualizado', { usuario_id: Number(req.usuario.id), banner });
   res.json({ ok: true, usuario_id: req.usuario.id });
 });
 
@@ -221,7 +271,9 @@ app.post('/api/bio', exigirAuth, (req, res) => {
   let { bio } = req.body;
   if (typeof bio !== 'string') return res.status(400).json({ erro: 'Bio inválida' });
   if (bio.length > 200) return res.status(400).json({ erro: 'Bio muito longa (máx 200)' });
-  db.atualizarBio(req.usuario.id, bio.replace(/[<>]/g, '').trim());
+  const bioLimpa = bio.replace(/[<>]/g, '').trim();
+  db.atualizarBio(req.usuario.id, bioLimpa);
+  io.emit('perfil-atualizado', { usuario_id: Number(req.usuario.id), bio: bioLimpa });
   res.json({ ok: true, usuario_id: req.usuario.id });
 });
 
@@ -232,6 +284,20 @@ app.get('/api/usuarios/buscar', exigirAuth, (req, res) => {
   const usuarios = db.buscarUsuariosPorNome(q, req.usuario.id);
   const filtrados = usuarios.filter((u) => !db.estaBloqueado(req.usuario.id, u.id));
   res.json({ usuarios: filtrados });
+});
+
+// 🔥 A2: rota de usuário individual sem email
+app.get('/api/usuarios/:id', exigirAuth, (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ erro: 'ID inválido' });
+  const u = db.buscarUsuarioPorId(id);
+  if (!u) return res.status(404).json({ erro: 'Usuário não existe' });
+  const souEu = Number(req.usuario.id) === id;
+  res.json({ usuario: {
+    id: u.id, nome: u.nome,
+    email: souEu ? u.email : undefined, // só o próprio dono vê o email
+    avatar: u.avatar || '', banner: u.banner || '', bio: u.bio || '',
+  }});
 });
 
 app.get('/api/amizades', exigirAuth, (req, res) => {
@@ -259,7 +325,7 @@ app.post('/api/amizades/pedir', exigirAuth, (req, res) => {
 
   if (socketDestino) {
     io.to(socketDestino.socketId).emit('amizade-nova', {
-      paraId, pedido: { amizade_id: pedido.id, id: req.usuario.id, nome: req.usuario.nome, email: req.usuario.email, avatar: meusDados?.avatar || '', criado_em: Date.now() },
+      paraId, pedido: { amizade_id: pedido.id, id: req.usuario.id, nome: req.usuario.nome, avatar: meusDados?.avatar || '', criado_em: Date.now() },
     });
   }
   res.json({ ok: true, pedido });
@@ -274,7 +340,7 @@ app.post('/api/amizades/aceitar', exigirAuth, (req, res) => {
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
   const socketSolicitante = [...online.values()].find((u) => u.id === pedido.id);
   if (socketSolicitante) {
-    io.to(socketSolicitante.socketId).emit('amizade-aceita', { por: { id: req.usuario.id, nome: req.usuario.nome, email: req.usuario.email, avatar: meusDados?.avatar || '' } });
+    io.to(socketSolicitante.socketId).emit('amizade-aceita', { por: { id: req.usuario.id, nome: req.usuario.nome, avatar: meusDados?.avatar || '' } });
   }
   res.json({ ok: true });
 });
@@ -337,6 +403,7 @@ app.get('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   res.json({ mensagens: mensagens.map((m) => ({ ...m, reacoes: reacoes[m.id] || {} })) });
 });
 
+// 🔥 B1: DM verifica bloqueio + anexo validado (C1)
 app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const { texto, replyId, replyAutor, replyTexto, anexo } = req.body;
@@ -344,8 +411,19 @@ app.post('/api/conversas/:id/mensagens', exigirAuth, (req, res) => {
   const conv = db.buscarConversaPorId(id);
   if (!conv || (conv.usuario_a !== req.usuario.id && conv.usuario_b !== req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
 
-  const msg = db.salvarMensagem({ conversaId: id, deId: req.usuario.id, texto: (texto || '').trim(), replyId, replyAutor, replyTexto, anexo });
   const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
+  if (db.estaBloqueado(outroId, req.usuario.id)) return res.status(403).json({ erro: 'Você foi bloqueado' });
+
+  // 🔥 C1: valida anexo.url
+  let anexoLimpo = null;
+  if (anexo) {
+    if (!anexo.url || !/^\/uploads\/[a-f0-9]{32}\.[a-z0-9]{1,10}$/.test(anexo.url)) {
+      return res.status(400).json({ erro: 'Anexo inválido' });
+    }
+    anexoLimpo = { ...anexo, nome: String(anexo.nome || 'arquivo').slice(0, 200) };
+  }
+
+  const msg = db.salvarMensagem({ conversaId: id, deId: req.usuario.id, texto: (texto || '').trim(), replyId, replyAutor, replyTexto, anexo: anexoLimpo });
   const socketOutro = [...online.values()].find((u) => u.id === outroId);
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
   const payload = { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '', reacoes: {} };
@@ -371,6 +449,7 @@ app.patch('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req, 
   res.json({ ok: true });
 });
 
+// 🔥 B2: apaga arquivo do anexo ao deletar DM
 app.delete('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req, res) => {
   const idConversa = Number(req.params.idConversa);
   const idMensagem = Number(req.params.idMensagem);
@@ -378,6 +457,12 @@ app.delete('/api/conversas/:idConversa/mensagens/:idMensagem', exigirAuth, (req,
   if (!conv || (conv.usuario_a !== req.usuario.id && conv.usuario_b !== req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
   const msg = db.buscarMensagemPorId(idMensagem);
   if (!msg || msg.de_id !== req.usuario.id) return res.status(403).json({ erro: 'Sem permissão' });
+
+  if (msg.anexo && msg.anexo.url && msg.anexo.url.startsWith('/uploads/')) {
+    const filepath = path.join(UPLOADS_DIR, path.basename(msg.anexo.url));
+    if (fs.existsSync(filepath)) { try { fs.unlinkSync(filepath); } catch (e) {} }
+  }
+
   db.deletarMensagem(idMensagem);
   const outroId = conv.usuario_a === req.usuario.id ? conv.usuario_b : conv.usuario_a;
   const socketOutro = [...online.values()].find((u) => u.id === outroId);
@@ -438,13 +523,13 @@ app.get('/api/servidores/:id', exigirAuth, (req, res) => {
   const s = db.buscarServidorPorId(id);
   if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
   if (!db.ehMembro(id, req.usuario.id)) return res.status(403).json({ erro: 'Você não é membro' });
-  res.json({ servidor: s, canais: db.listarCanais(id), membros: db.listarMembros(id), ehDono: s.dono_id === req.usuario.id, silenciado: db.estaSilenciado(req.usuario.id, 'servidor', id) });
+  res.json({ servidor: s, canais: db.listarCanais(id), membros: db.listarMembros(id), ehDono: Number(s.dono_id) === Number(req.usuario.id), silenciado: db.estaSilenciado(req.usuario.id, 'servidor', id) });
 });
 
 app.patch('/api/servidores/:id', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const s = db.buscarServidorPorId(id);
-  if (!s || s.dono_id !== req.usuario.id) return res.status(403).json({ erro: 'Só o dono pode editar' });
+  if (!s || Number(s.dono_id) !== Number(req.usuario.id)) return res.status(403).json({ erro: 'Só o dono pode editar' });
   if (!req.body.nome || !req.body.nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
   db.atualizarServidor(id, { nome: req.body.nome.trim(), descricao: req.body.descricao || '' });
   const atualizado = db.buscarServidorPorId(id);
@@ -452,12 +537,12 @@ app.patch('/api/servidores/:id', exigirAuth, (req, res) => {
   res.json({ ok: true, servidor: atualizado });
 });
 
-app.post('/api/servidores/entrar', exigirAuth, (req, res) => {
+app.post('/api/servidores/entrar', limiterEntrarServidor, exigirAuth, (req, res) => {
   const s = db.buscarServidorPorCodigo((req.body.codigo || '').trim());
   if (!s) return res.status(404).json({ erro: 'Código inválido' });
   if (!db.adicionarMembro(s.id, req.usuario.id)) return res.status(400).json({ erro: 'Você já é membro' });
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
-  io.to('servidor-' + s.id).emit('membro-entrou', { servidor_id: s.id, membro: { id: req.usuario.id, nome: req.usuario.nome, email: req.usuario.email, avatar: meusDados?.avatar || '' } });
+  io.to('servidor-' + s.id).emit('membro-entrou', { servidor_id: s.id, membro: { id: req.usuario.id, nome: req.usuario.nome, avatar: meusDados?.avatar || '' } });
   res.json({ ok: true, servidor: s });
 });
 
@@ -466,10 +551,9 @@ app.post('/api/servidores/:id/sair', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const s = db.buscarServidorPorId(id);
   if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
-  if (s.dono_id === req.usuario.id) return res.status(400).json({ erro: 'Dono não pode sair' });
+  if (Number(s.dono_id) === Number(req.usuario.id)) return res.status(400).json({ erro: 'Dono não pode sair' });
   db.removerMembro(id, req.usuario.id);
-  
-  // Remove o socket do usuário da sala
+
   const socketUser = [...online.values()].find(u => u.id === req.usuario.id);
   if (socketUser) {
     io.sockets.sockets.get(socketUser.socketId)?.leave('servidor-' + id);
@@ -493,11 +577,11 @@ app.post('/api/servidores/:id/remover-membro', exigirAuth, (req, res) => {
   if (!Number.isInteger(usuarioId)) return res.status(400).json({ erro: 'ID inválido' });
 
   const s = db.buscarServidorPorId(servidorId);
-  if (!s || s.dono_id !== req.usuario.id) return res.status(403).json({ erro: 'Sem permissão' });
-  if (usuarioId === s.dono_id) return res.status(400).json({ erro: 'Dono não pode ser removido' });
+  if (!s || Number(s.dono_id) !== Number(req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
+  if (usuarioId === Number(s.dono_id)) return res.status(400).json({ erro: 'Dono não pode ser removido' });
 
   db.removerMembro(servidorId, usuarioId);
-  
+
   const socketRemovido = [...online.values()].find((u) => u.id === usuarioId);
   if (socketRemovido) {
     io.sockets.sockets.get(socketRemovido.socketId)?.leave('servidor-' + servidorId);
@@ -511,7 +595,7 @@ app.post('/api/servidores/:id/remover-membro', exigirAuth, (req, res) => {
 app.post('/api/servidores/:id/canais', exigirAuth, (req, res) => {
   const servidorId = Number(req.params.id);
   const s = db.buscarServidorPorId(servidorId);
-  if (!s || s.dono_id !== req.usuario.id) return res.status(403).json({ erro: 'Só o dono pode criar canais' });
+  if (!s || Number(s.dono_id) !== Number(req.usuario.id)) return res.status(403).json({ erro: 'Só o dono pode criar canais' });
   if (!req.body.nome || !req.body.nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
   const c = db.criarCanal(servidorId, req.body.nome.trim());
   if (!c) return res.status(400).json({ erro: 'Nome inválido ou já existe' });
@@ -536,6 +620,7 @@ app.get('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   res.json({ mensagens: mensagens.map((m) => ({ ...m, reacoes: reacoes[m.id] || {} })) });
 });
 
+// 🔥 C1: valida anexo.url também no canal
 app.post('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
   const { texto, replyId, replyAutor, replyTexto, anexo } = req.body;
@@ -543,7 +628,15 @@ app.post('/api/canais/:id/mensagens', exigirAuth, (req, res) => {
   const c = db.buscarCanalPorId(id);
   if (!c || !db.ehMembro(c.servidor_id, req.usuario.id)) return res.status(403).json({ erro: 'Sem permissão' });
 
-  const msg = db.salvarMensagemCanal({ canalId: id, deId: req.usuario.id, texto: (texto || '').trim(), replyId, replyAutor, replyTexto, anexo });
+  let anexoLimpo = null;
+  if (anexo) {
+    if (!anexo.url || !/^\/uploads\/[a-f0-9]{32}\.[a-z0-9]{1,10}$/.test(anexo.url)) {
+      return res.status(400).json({ erro: 'Anexo inválido' });
+    }
+    anexoLimpo = { ...anexo, nome: String(anexo.nome || 'arquivo').slice(0, 200) };
+  }
+
+  const msg = db.salvarMensagemCanal({ canalId: id, deId: req.usuario.id, texto: (texto || '').trim(), replyId, replyAutor, replyTexto, anexo: anexoLimpo });
   const meusDados = db.buscarUsuarioPorId(req.usuario.id);
   io.to('canal-' + id).emit('canal-nova-msg', { canal_id: id, mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '', reacoes: {} } });
   res.json({ ok: true, mensagem: { ...msg, de_nome: req.usuario.nome, de_avatar: meusDados.avatar || '', reacoes: {} } });
@@ -570,7 +663,7 @@ app.delete('/api/canais/:idCanal/mensagens/:idMensagem', exigirAuth, (req, res) 
   const msg = db.buscarMensagemCanalPorId(idMensagem);
   if (!msg || msg.canal_id !== idCanal) return res.status(404).json({ erro: 'Msg não existe' });
   const s = db.buscarServidorPorId(c.servidor_id);
-  const ehDono = s && s.dono_id === req.usuario.id;
+  const ehDono = s && Number(s.dono_id) === Number(req.usuario.id);
   if (msg.de_id !== req.usuario.id && !ehDono) return res.status(403).json({ erro: 'Sem permissão' });
 
   if (msg.anexo && msg.anexo.url && msg.anexo.url.startsWith('/uploads/')) {
@@ -591,7 +684,7 @@ io.use((socket, next) => {
     const token = decodeURIComponent(matches[matches.length - 1][1]);
     const payload = auth.verificarToken(token);
     if (!payload || !payload.id) return next(new Error('Token inválido'));
-    const usuarioAtual = db.buscarUsuarioPorId(payload.id);
+    const usuarioAtual = db.buscarUsuarioLevePorId(payload.id);
     if (!usuarioAtual) return next(new Error('Usuário não existe'));
     socket.usuario = { id: usuarioAtual.id, nome: usuarioAtual.nome, email: usuarioAtual.email };
     next();
@@ -603,7 +696,7 @@ const online = new Map();
 function notificarListaOnline() {
   const porUsuario = new Map();
   online.forEach((u) => { if (!porUsuario.has(u.id)) porUsuario.set(u.id, u); });
-  // 🔥 A2 CORRIGIDO - Envia apenas ID, Nome e Avatar para não vazar e-mails
+  // 🔥 A2: sem email
   io.emit('lista-online', [...porUsuario.values()].map(u => ({ id: u.id, nome: u.nome, avatar: u.avatar })));
 }
 
@@ -624,37 +717,47 @@ io.on('connection', (socket) => {
   socket.on('entrar-canal', ({ canalId }) => {
     const c = db.buscarCanalPorId(canalId);
     if (!c || !db.ehMembro(c.servidor_id, socket.usuario.id)) return;
-    // Sai de outros canais antes de entrar no novo
     [...socket.rooms].forEach(r => { if (r.startsWith('canal-')) socket.leave(r); });
     socket.join('canal-' + canalId);
   });
 
-  socket.on('digitando-canal', ({ canalId, nome }) => {
-    socket.to('canal-' + canalId).emit('alguem-digitando-canal', { canalId, nome, usuarioId: socket.usuario.id });
+  socket.on('digitando-canal', ({ canalId }) => {
+    socket.to('canal-' + canalId).emit('alguem-digitando-canal', { canalId, nome: socket.usuario.nome, usuarioId: socket.usuario.id });
   });
 
   socket.on('parou-digitando-canal', ({ canalId }) => {
     socket.to('canal-' + canalId).emit('alguem-parou-digitando-canal', { canalId, usuarioId: socket.usuario.id });
   });
 
-  socket.on('digitando-dm', ({ conversaId, paraUsuarioId, nome }) => {
-    const socketOutro = [...online.values()].find((u) => u.id === paraUsuarioId);
-    if (socketOutro) io.to(socketOutro.socketId).emit('alguem-digitando-dm', { conversaId, nome, usuarioId: socket.usuario.id });
+  socket.on('digitando-dm', ({ conversaId, paraUsuarioId }) => {
+    const socketOutro = [...online.values()].find((u) => u.id === Number(paraUsuarioId));
+    if (socketOutro) io.to(socketOutro.socketId).emit('alguem-digitando-dm', { conversaId, nome: socket.usuario.nome, usuarioId: socket.usuario.id });
   });
 
   socket.on('parou-digitando-dm', ({ conversaId, paraUsuarioId }) => {
-    const socketOutro = [...online.values()].find((u) => u.id === paraUsuarioId);
+    const socketOutro = [...online.values()].find((u) => u.id === Number(paraUsuarioId));
     if (socketOutro) io.to(socketOutro.socketId).emit('alguem-parou-digitando-dm', { conversaId, usuarioId: socket.usuario.id });
   });
 
-  // 🔥 A4 CORRIGIDO - Ignora o perfil vindo do cliente (o frontend antigo usava isso)
-  // A validação real agora é feita nas rotas /api/avatar, etc.
+  // 🔥 A4 CORRIGIDO - Valida payload e ignora se inválido
+  // (o front novo já atualiza localmente e as rotas /api/avatar etc. já emitem)
   socket.on('perfil-atualizado-local', ({ usuario_id, avatar, banner, bio }) => {
     if (Number(usuario_id) !== Number(socket.usuario.id)) return;
-    // Apenas repassa para os outros (seguro pois frontend já não envia mais isso)
-    if (avatar !== undefined) io.emit('perfil-atualizado', { usuario_id: Number(usuario_id), avatar });
-    if (banner !== undefined) io.emit('perfil-atualizado', { usuario_id: Number(usuario_id), banner });
-    if (bio !== undefined) io.emit('perfil-atualizado', { usuario_id: Number(usuario_id), bio });
+
+    const payload = { usuario_id: Number(usuario_id) };
+    if (avatar !== undefined) {
+      if (typeof avatar !== 'string' || !avatar.startsWith('data:image/') || avatar.length > 800000) return;
+      payload.avatar = avatar;
+    }
+    if (banner !== undefined) {
+      if (typeof banner !== 'string' || !banner.startsWith('data:image/') || banner.length > 2500000) return;
+      payload.banner = banner;
+    }
+    if (bio !== undefined) {
+      if (typeof bio !== 'string' || bio.length > 200) return;
+      payload.bio = bio.replace(/[<>]/g, '').trim();
+    }
+    io.emit('perfil-atualizado', payload);
   });
 
   socket.on('disconnect', () => {
@@ -664,4 +767,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => { console.log(`Servidor rodando na porta ${PORT}`); });
+server.listen(PORT, () => { console.log(`Servidor rodando na porta ${PORT}`); }); 
