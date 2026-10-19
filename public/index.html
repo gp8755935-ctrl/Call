@@ -2127,7 +2127,8 @@
       .servidor-icon { width: 46px; height: 46px; font-size: 18px; }
       .sidebar-canais {
         position: fixed; left: 0; top: 0; bottom: 0;
-        z-index: 500; transform: translateX(-100%);
+        z-index: 1500; /* 🔥 CORRIGIDO AQUI */
+        transform: translateX(-100%);
         transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
         width: 85%; max-width: 320px;
         box-shadow: 8px 0 40px rgba(2, 132, 199, 0.4);
@@ -2170,7 +2171,7 @@
         width: 90px;
         height: 90px;
       }
-      .barra-usuario { left: 10px; bottom: 10px; width: 48px; height: 48px; }
+      .barra-usuario { left: 10px; bottom: 10px; width: 48px; height: 48px; z-index: 1000 !important; /* 🔥 CORRIGIDO AQUI */ }
       .barra-usuario .avatar { width: 38px; height: 38px; }
       .modal-perfil { max-width: 100% !important; margin: 10px; }
       .perfil-banner { height: 110px; }
@@ -2207,7 +2208,8 @@
     .overlay-mobile {
       display: none; position: fixed; inset: 0;
       background: rgba(2, 132, 199, 0.4);
-      backdrop-filter: blur(4px); z-index: 400;
+      backdrop-filter: blur(4px);
+      z-index: 1400; /* 🔥 CORRIGIDO AQUI */
     }
     .overlay-mobile.ativo { display: block; }
 
@@ -2916,6 +2918,7 @@
         display: none;
       }
 
+      /* 🔥 CORRIGIDO: Seta centralizada */
       .btn-voltar-mobile {
         display: inline-flex;
         align-items: center;
@@ -2925,6 +2928,7 @@
         width: 36px;
         height: 36px;
         padding: 0;
+        line-height: 1;
         border-radius: 50%;
         background: rgba(255, 255, 255, 0.7);
         border: 2px solid rgba(255, 255, 255, 0.9);
@@ -3181,7 +3185,6 @@
       <div id="tela-conversa" class="tela-main">
         <div class="topo-conversa">
           <div style="display:flex; align-items:center; gap:12px;">
-            <button class="secundario mini" onclick="voltarDMs()">←</button>
             <strong id="nome-conversa" style="color:var(--texto-escuro); text-shadow:0 1px 0 rgba(255,255,255,0.8);">...</strong>
             <span id="status-conversa" style="font-size:12px; color:var(--texto-medio); font-weight:700;"></span>
           </div>
