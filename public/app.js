@@ -2,6 +2,9 @@
 // HELPERS
 // ============================================================
 
+// 🔥 INTEGRAÇÃO DE CHAMADAS
+window.usuarioAtual = null;
+
 function avatarHTML(usuario, classe = '', onclick = null) {
   if (!usuario) return '';
   const cls = 'avatar ' + classe;
@@ -1066,6 +1069,10 @@ function entrarNoApp(usuario) {
     return;
   }
   meuUsuario = usuario;
+  window.usuarioAtual = usuario; // 🔥 Integração de chamadas
+  
+  if (window.inicializarPeerJS) window.inicializarPeerJS(); // 🔥 Liga o motor de voz
+  
   atualizarUsuarioCache(usuario);
   document.getElementById('tela-auth').style.display = 'none';
   document.getElementById('app').classList.add('ativo');
@@ -1112,6 +1119,11 @@ function conectarSocket() {
   socket.on('disconnect', (motivo) => console.log('Desconectado:', motivo));
   socket.io.on('reconnect', (t) => console.log('Reconectado após', t, 'tentativas'));
   socket.on('connect_error', (err) => console.error('Erro de conexão socket:', err.message));
+
+  // 🔥 INTEGRAÇÃO: Escuta chamada recebida do servidor e repassa pro call.js
+  socket.on('receber-chamada', (data) => {
+    if (window.receberChamadaSocket) window.receberChamadaSocket(data);
+  });
 
   socket.on('lista-online', (users) => {
     onlineIds = new Set(users.map((u) => u.id));
@@ -1578,6 +1590,7 @@ function atualizarListasComPerfil(usuarioId, avatar, banner, bio) {
     }
   });
 }
+
 // ============================================================
 // BLOQUEIOS E SILENCIADOS
 // ============================================================
@@ -2775,6 +2788,7 @@ function renderizarAmigos(amigos) {
   if (!ul) return;
   ul.innerHTML = '';
   if (amigos.length === 0) { ul.innerHTML = '<div class="vazio">Sem amigos ainda</div>'; return; }
+  
   amigos.forEach((a) => {
     const estaOnline = onlineIds.has(a.id);
     const li = document.createElement('li');
@@ -2789,17 +2803,35 @@ function renderizarAmigos(amigos) {
         ${escapeHtml(a.nome)}
       </span>
       <span class="email">${estaOnline ? '🟢 online' : '⚫ offline'}</span>`;
+      
     const acoes = document.createElement('div');
+    
+    // 🔥 INTEGRAÇÃO: Botão de Ligar adicionado ao lado do botão de conversar
+    const btnLigar = document.createElement('button');
+    btnLigar.className = 'btn-ligar-perfil mini';
+    btnLigar.textContent = '📞 Ligar';
+    btnLigar.onclick = () => {
+      if (window.ligarParaAmigo) {
+        window.ligarParaAmigo(a.id, a.nome, dados.avatar || '');
+      } else {
+        alert('Sistema de chamadas não inicializado.');
+      }
+    };
+
     const btnConv = document.createElement('button');
     btnConv.className = 'mini';
     btnConv.textContent = '💬 Conversar';
     btnConv.onclick = () => abrirConversa(a);
+
     const btnRem = document.createElement('button');
     btnRem.className = 'secundario mini';
     btnRem.textContent = '🗑️';
     btnRem.onclick = () => removerAmigo(a.amizade_id, a.nome);
+
+    acoes.appendChild(btnLigar);
     acoes.appendChild(btnConv);
     acoes.appendChild(btnRem);
+    
     li.appendChild(info);
     li.appendChild(acoes);
     ul.appendChild(li);
@@ -3333,6 +3365,19 @@ function montarAcoesPerfil(usuario) {
     const ehAmigo = amz.amigos.some((a) => a.id === usuario.id);
     const pedidoEnviado = amz.pedidosEnviados.some((p) => p.id === usuario.id);
     const pedidoRecebido = amz.pedidosRecebidos.some((p) => p.id === usuario.id);
+
+    // 🔥 INTEGRAÇÃO: Se for amigo, mostra o botão de ligar!
+    if (ehAmigo) {
+      const btnLigar = document.createElement('button');
+      btnLigar.className = 'btn-ligar-perfil mini';
+      btnLigar.textContent = '📞 Ligar';
+      btnLigar.onclick = () => {
+        if (window.ligarParaAmigo) {
+          window.ligarParaAmigo(usuario.id, usuario.nome, usuario.avatar || '');
+        }
+      };
+      acoesEl.appendChild(btnLigar);
+    }
 
     if (!ehAmigo && !pedidoEnviado && !pedidoRecebido) {
       const btn = document.createElement('button');
@@ -4491,4 +4536,4 @@ window.addEventListener('load', async () => {
   window.addEventListener('storage', (e) => {
     if (e.key === 'void-logout') location.reload();
   });
-}); 
+});
