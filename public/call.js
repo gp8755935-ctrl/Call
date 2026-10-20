@@ -172,12 +172,28 @@ async function toggleTransmissao() {
     document.getElementById('btn-compartilhar-tela').classList.remove('ativo');
     return;
   }
-  
+
   try {
     console.log('🖥️ Solicitando captura de tela...');
-    streamTela = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-    console.log('✅ Tela capturada. Tracks:', streamTela.getTracks().length);
     
+    // Força o navegador a pedir a tela novamente sem cache
+    const constraints = {
+      video: {
+        cursor: "always",
+        frameRate: { ideal: 30, max: 60 }
+      },
+      audio: true
+    };
+
+    streamTela = await navigator.mediaDevices.getDisplayMedia(constraints);
+    console.log('✅ Tela capturada. Tracks:', streamTela.getTracks().length);
+
+    // Verifica se o stream tem vídeo
+    const videoTrack = streamTela.getVideoTracks()[0];
+    if (!videoTrack) {
+      throw new Error('Nenhuma track de vídeo encontrada.');
+    }
+
     // Mostra o vídeo local
     const videoEl = document.getElementById('video-transmitido');
     videoEl.srcObject = streamTela;
@@ -190,10 +206,14 @@ async function toggleTransmissao() {
     if (!chamadaAtual) {
       console.error('❌ Não há chamada ativa para transmitir.');
       alert('Você precisa estar em uma chamada para transmitir a tela.');
+      streamTela.getTracks().forEach(t => t.stop());
+      streamTela = null;
+      document.getElementById('video-container').classList.remove('ativa');
+      document.getElementById('btn-compartilhar-tela').classList.remove('ativo');
       return;
     }
 
-    // O ID do destino é o peerId do amigo (que já contém o prefixo void_user_)
+    // Envia a transmissão para o amigo
     const idDestino = chamadaAtual.peer;
     console.log('📤 Enviando transmissão para:', idDestino);
     
@@ -207,18 +227,25 @@ async function toggleTransmissao() {
       console.error('❌ peer.call retornou null para a transmissão.');
     }
 
-    streamTela.getVideoTracks()[0].onended = () => {
+    // Quando o usuário parar a transmissão pelo navegador
+    videoTrack.onended = () => {
       console.log('🛑 Usuário parou a transmissão.');
       streamTela = null;
       document.getElementById('video-container').classList.remove('ativa');
       document.getElementById('btn-compartilhar-tela').classList.remove('ativo');
     };
+
   } catch (err) {
     console.error('❌ Erro detalhado na transmissão:', err.name, err.message);
-    alert('Erro ao transmitir: ' + err.message);
+    // Se for AbortError, significa que o usuário cancelou ou o navegador bloqueou
+    if (err.name === 'AbortError') {
+      alert('A captura de tela foi cancelada ou bloqueada pelo navegador. Certifique-se de permitir a captura de tela nas configurações do site.');
+    } else {
+      alert('Erro ao transmitir: ' + err.message);
+    }
     streamTela = null;
   }
-} 
+}
 
 function fecharTransmissao() {
   document.getElementById('video-container').classList.remove('ativa');
