@@ -3169,7 +3169,7 @@
     <div class="sidebar-servidores" id="lista-servidores"></div>
     <div class="overlay-mobile" id="overlay-mobile" onclick="fecharSidebarMobile()"></div>
 
-      <div class="sidebar-canais" id="sidebar-canais" style="display:none">
+    <div class="sidebar-canais" id="sidebar-canais" style="display:none">
       <div class="topo-servidor">
         <div class="topo-servidor-linha">
           <span class="nome" id="nome-servidor">Servidor</span>
@@ -3191,12 +3191,6 @@
         <button onclick="criarCanalVozPrompt()" title="Novo canal de voz">+</button>
       </div>
       <div class="lista-canais" id="lista-canais-voz"></div>
-    </div>
-      <div class="secao">
-        <span>Canais de texto</span>
-        <button onclick="criarCanalPrompt()" title="Novo canal">+</button>
-      </div>
-      <div class="lista-canais" id="lista-canais"></div>
     </div>
 
     <!-- Painel de membros -->
@@ -3477,7 +3471,8 @@
             <div><div>Som de mensagens</div><span class="config-desc">Toca ao receber DM ou mensagem em canal</span></div>
           </div>
           <div class="toggle"><input type="checkbox" id="cfg-som-msg"><span class="slider"></span></div>
-                <label class="config-item">
+        </label>
+        <label class="config-item">
           <div class="config-label">
             <span class="config-icone">🫧</span>
             <div><div>Balão Flutuante na Chamada</div><span class="config-desc">Mini-janela sobreposta para usar outros apps</span></div>
@@ -3583,8 +3578,8 @@
   <!-- ============================================================
        🔥 ELEMENTOS DE CHAMADA (ADICIONADOS)
        ============================================================ -->
-    <!-- NOVO LAYOUT DE CHAMADA (DISCORD STYLE) -->
-  <  <!-- Chamada Ativa -->
+  <!-- NOVO LAYOUT DE CHAMADA (DISCORD STYLE) -->
+  <!-- Chamada Ativa -->
   <div id="chamada-overlay" class="chamada-overlay">
     <div class="chamada-topo">
       <h4 id="chamada-nome-exibicao">Chamada</h4>
@@ -3628,4 +3623,4 @@
   <!-- 🔥 Script de Chamadas -->
   <script src="/call.js"></script>
 </body>
-</html>
+</html> 
