@@ -13,7 +13,6 @@ let localMuted = false;
 
 // Inicializa o PeerJS com o ID do usuário logado
 function inicializarPeerJS() {
-  // Se o usuário não estiver definido ainda, avisa no console
   if (!window.usuarioAtual) {
     console.warn('⚠️ inicializarPeerJS: window.usuarioAtual não está definido.');
     return;
@@ -36,7 +35,6 @@ function inicializarPeerJS() {
 
   peer.on('error', (err) => {
     console.error('❌ Erro no PeerJS:', err.type, err.message);
-    // Se o erro for de "ID já em uso", pode ser que você recarregou a página rápido demais.
     if (err.type === 'unavailable-id') {
       alert('Erro: Seu ID de chamada já está em uso (talvez em outra aba). Feche a outra aba e recarregue.');
     }
@@ -47,26 +45,51 @@ function inicializarPeerJS() {
     console.log('📞 Chamada P2P recebida de:', call.peer);
     const metadata = call.metadata || {};
     
-    // Recebendo transmissão de tela
+    // -----------------------------------------
+    // RECEBENDO TRANSMISSÃO DE TELA
+    // -----------------------------------------
     if (metadata.type === 'video') {
       console.log('🖥️ Recebendo transmissão de tela...');
       call.answer();
+      
       const player = document.getElementById('player-video-transmissao');
       if (player) player.classList.add('ativa');
       
       call.on('stream', (remoteStream) => {
         const videoEl = document.getElementById('video-transmitido');
-        if (videoEl) videoEl.srcObject = remoteStream;
+        if (videoEl) {
+          videoEl.srcObject = remoteStream;
+          videoEl.muted = false; // Garante que o áudio da tela não está mutado
+          
+          // Tenta tocar o vídeo automaticamente
+          videoEl.play().catch(err => {
+            console.warn("Autoplay bloqueado pelo navegador. Exibindo botão de play.");
+            
+            // Se o celular bloquear, cria um botão no meio da tela
+            if (player && !document.getElementById('btn-desbloquear-video')) {
+              const btn = document.createElement('button');
+              btn.id = 'btn-desbloquear-video';
+              btn.textContent = '▶ Clique para ver a transmissão';
+              btn.style.cssText = "position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:9999; padding:12px 24px; font-size:16px; font-weight:bold; background:#0284c7; color:white; border:none; border-radius:8px; cursor:pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5);";
+              btn.onclick = () => {
+                videoEl.play();
+                btn.remove();
+              };
+              player.appendChild(btn);
+            }
+          });
+        }
       });
       return;
     }
 
-    // Recebendo chamada de voz
+    // -----------------------------------------
+    // RECEBENDO CHAMADA DE VOZ
+    // -----------------------------------------
     if (metadata.type === 'audio') {
       console.log('🎙️ Recebendo chamada de voz de:', metadata.nome);
       chamadaRecebidaPendente = call;
       
-      // Atualiza a interface
       const nomeEl = document.getElementById('chamada-recebida-nome');
       const avatarEl = document.getElementById('chamada-recebida-avatar');
       const modalEl = document.getElementById('modal-chamada-recebida');
@@ -84,8 +107,6 @@ function inicializarPeerJS() {
 function tocarSomChamada() {
   try {
     if (!canvasAudioCtx) canvasAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    
-    // Retoma o contexto de áudio se o navegador tiver suspendido
     if (canvasAudioCtx.state === 'suspended') canvasAudioCtx.resume();
 
     const osc = canvasAudioCtx.createOscillator();
@@ -94,7 +115,6 @@ function tocarSomChamada() {
     gain.connect(canvasAudioCtx.destination);
     osc.type = 'sine';
     
-    // Bipe duplo (Dó agudo e Mi agudo)
     osc.frequency.setValueAtTime(800, canvasAudioCtx.currentTime);
     osc.frequency.setValueAtTime(1200, canvasAudioCtx.currentTime + 0.15);
     gain.gain.setValueAtTime(0.5, canvasAudioCtx.currentTime);
@@ -182,7 +202,12 @@ function configurarChamadaAtiva(call, amigoId, nome, avatar) {
     audioEl.srcObject = remoteStream;
     audioEl.autoplay = true;
     audioEl.volume = 1.0;
+    // O navegador exige que o áudio esteja no DOM para tocar em alguns casos
+    audioEl.style.display = 'none'; 
+    document.body.appendChild(audioEl);
     
+    audioEl.play().catch(() => console.warn('Clique na tela para liberar o áudio da voz.'));
+
     participantesNaChamada[amigoId] = { nome, volume: 1.0, audioEl };
   });
 
@@ -225,6 +250,7 @@ function toggleMute() {
 }
 
 async function toggleTransmissao() {
+  // Se já estiver transmitindo, para a transmissão
   if (streamTela) {
     streamTela.getTracks().forEach(t => t.stop());
     streamTela = null;
@@ -239,7 +265,12 @@ async function toggleTransmissao() {
     });
 
     const amigoIds = Object.keys(participantesNaChamada);
-    if (amigoIds.length === 0) return;
+    if (amigoIds.length === 0) {
+      alert('Não há ninguém na chamada para transmitir.');
+      streamTela.getTracks().forEach(t => t.stop());
+      streamTela = null;
+      return;
+    }
 
     const idDestino = 'void_user_' + amigoIds[0];
     peer.call(idDestino, streamTela, { metadata: { type: 'video' } });
@@ -259,6 +290,8 @@ async function toggleTransmissao() {
 function fecharTransmissao() {
   document.getElementById('player-video-transmissao').classList.remove('ativa');
   document.getElementById('video-transmitido').srcObject = null;
+  const btn = document.getElementById('btn-desbloquear-video');
+  if (btn) btn.remove();
 }
 
 function desligarChamada() {
@@ -266,14 +299,20 @@ function desligarChamada() {
   if (streamLocal) streamLocal.getTracks().forEach(t => t.stop());
   if (streamTela) streamTela.getTracks().forEach(t => t.stop());
   
+  // Limpa os áudios dos participantes
+  Object.values(participantesNaChamada).forEach(p => {
+    if (p.audioEl) p.audioEl.remove();
+  });
+
   chamadaAtual = null;
   streamLocal = null;
   streamTela = null;
   participantesNaChamada = {};
   
   document.getElementById('janela-chamada').classList.remove('ativa');
-  document.getElementById('player-video-transmissao').classList.remove('ativa');
+  fecharTransmissao();
   document.getElementById('btn-mutar-chamada').textContent = '🎤';
+  document.getElementById('btn-mutar-chamada').style.background = 'linear-gradient(180deg, #fbbf24, #d97706)';
   localMuted = false;
 }
 
