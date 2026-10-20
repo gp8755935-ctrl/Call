@@ -508,7 +508,21 @@ app.get('/api/servidores/:id', exigirAuth, (req, res) => {
   const s = db.buscarServidorPorId(id);
   if (!s) return res.status(404).json({ erro: 'Servidor não existe' });
   if (!db.ehMembro(id, req.usuario.id)) return res.status(403).json({ erro: 'Você não é membro' });
-  res.json({ servidor: s, canais: db.listarCanais(id), membros: db.listarMembros(id), ehDono: Number(s.dono_id) === Number(req.usuario.id), silenciado: db.estaSilenciado(req.usuario.id, 'servidor', id) });
+  
+  const todosCanais = db.listarCanais(id);
+  
+  // 🔥 AQUI: Separa os canais antes de enviar pro Front-end
+  const canaisTexto = todosCanais.filter(c => c.tipo !== 'voz');
+  const canaisVoz = todosCanais.filter(c => c.tipo === 'voz');
+
+  res.json({ 
+    servidor: s, 
+    canais: canaisTexto,       // Envia só os de texto na array principal
+    canais_voz: canaisVoz,     // Envia os de voz na array separada
+    membros: db.listarMembros(id), 
+    ehDono: Number(s.dono_id) === Number(req.usuario.id), 
+    silenciado: db.estaSilenciado(req.usuario.id, 'servidor', id) 
+  });
 });
 
 app.patch('/api/servidores/:id', exigirAuth, (req, res) => {
@@ -580,11 +594,18 @@ app.post('/api/servidores/:id/canais', exigirAuth, (req, res) => {
   const s = db.buscarServidorPorId(servidorId);
   if (!s || Number(s.dono_id) !== Number(req.usuario.id)) return res.status(403).json({ erro: 'Só o dono pode criar canais' });
   if (!req.body.nome || !req.body.nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
-  const c = db.criarCanal(servidorId, req.body.nome.trim());
+  
+  // 🔥 AQUI: Pega o tipo enviado pelo app.js (padrão é 'texto' se não vier nada)
+  const tipo = req.body.tipo === 'voz' ? 'voz' : 'texto'; 
+
+  // Passa o tipo para o banco de dados
+  const c = db.criarCanal(servidorId, req.body.nome.trim(), tipo); 
+  
   if (!c) return res.status(400).json({ erro: 'Nome inválido ou já existe' });
+  
   io.to('servidor-' + servidorId).emit('canal-criado', { canal: c });
   res.json({ ok: true, canal: c });
-});
+}); 
 
 app.delete('/api/canais/:id', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
