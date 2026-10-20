@@ -62,15 +62,14 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
   
-  // 🔥 CSP Atualizado para permitir o Google Fonts
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
     "img-src 'self' data: blob:; " +
     "media-src 'self' blob:; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' data: https://fonts.gstatic.com; " +
-    "script-src 'self' 'unsafe-inline'; " +
-    "connect-src 'self' ws: wss:; " +
+    "script-src 'self' 'unsafe-inline' https://unpkg.com; " +
+    "connect-src 'self' ws: wss: https://0.peerjs.com wss://0.peerjs.com; " +
     "object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
   );
   next();
@@ -154,18 +153,12 @@ function limparCookies(req, res) {
 
 // ========== RATE LIMIT ==========
 const limiterAuth = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
+  windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false,
   message: { erro: 'Muitas tentativas. Tente novamente em 15 minutos.' },
 });
 
 const limiterEntrarServidor = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
+  windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
   message: { erro: 'Muitas tentativas. Tente novamente em 15 minutos.' },
 });
 
@@ -697,6 +690,31 @@ io.on('connection', (socket) => {
 
   notificarListaOnline();
 
+  // ============================================================
+  // 🔥 EVENTOS ADICIONADOS PARA CHAMADAS DE VOZ E VÍDEO
+  // ============================================================
+  
+  socket.on('iniciar-chamada', ({ paraId }) => {
+    const socketDestino = [...online.values()].find(u => u.id === Number(paraId));
+    if (socketDestino) {
+      io.to(socketDestino.socketId).emit('receber-chamada', {
+        deId: socket.usuario.id,
+        nome: socket.usuario.nome,
+        avatar: dadosCompletos.avatar || ''
+      });
+    }
+  });
+
+  socket.on('entrar-canal-voz', ({ canalId }) => {
+    socket.join('voz-' + canalId);
+    socket.to('voz-' + canalId).emit('usuario-entrou-voz', {
+      usuarioId: socket.usuario.id,
+      nome: socket.usuario.nome
+    });
+  });
+
+  // ============================================================
+
   socket.on('entrar-servidores', () => {
     const servidores = db.listarServidoresDoUsuario(socket.usuario.id);
     servidores.forEach((s) => socket.join('servidor-' + s.id));
@@ -753,4 +771,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => { console.log(`Servidor rodando na porta ${PORT}`); });
+server.listen(PORT, () => { console.log(`Servidor rodando na porta ${PORT}`); }); 
