@@ -2415,20 +2415,18 @@ async function abrirCanal(canal) {
   setTimeout(() => salvarUltimaTela(), 100);
 }
 
-async function criarCanalVozPrompt() {
-  const nome = prompt('Nome do canal de voz (ex: Sala de Jogos):');
+async function criarCanalPrompt() {
+  const nome = prompt('Nome do canal de texto:');
   if (!nome || !nome.trim()) return;
   
   const r = await fetch(`/api/servidores/${servidorAtivo.servidor.id}/canais`, {
     method: 'POST', 
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nome: nome.trim(), tipo: 'voz' }), // Manda o tipo correto
+    body: JSON.stringify({ nome: nome.trim(), tipo: 'texto' }), // Manda como texto
   });
   
   const data = await r.json();
   if (!r.ok) { alert(data.erro || 'Erro'); return; }
-  
-  // O Socket vai receber a resposta e atualizar a tela automaticamente
 }
 
 async function deletarCanal(id, nome) {

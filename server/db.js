@@ -26,7 +26,6 @@ function migrarBanco() {
     if (!nomesColunas.includes('usuario_a') || !nomesColunas.includes('usuario_b')) {
       console.log('🔧 Migrando tabela amizades (schema antigo detectado)...');
 
-      // Backup antes de mexer
       try {
         db.exec('ALTER TABLE amizades RENAME TO amizades_backup');
         console.log('   Backup criado: amizades_backup');
@@ -35,8 +34,6 @@ function migrarBanco() {
         db.exec('DROP TABLE IF EXISTS amizades');
       }
     }
-
-    // Garante que a tabela nova existe com o schema correto (criada abaixo no CREATE TABLE IF NOT EXISTS)
   } catch (e) {
     console.warn('Aviso na migração:', e.message);
   }
@@ -133,10 +130,12 @@ db.exec(`
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
   );
 
+  -- 🔥 ADICIONADA A COLUNA TIPO AQUI
   CREATE TABLE IF NOT EXISTS canais (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     servidor_id INTEGER NOT NULL,
     nome TEXT NOT NULL,
+    tipo TEXT DEFAULT 'texto',
     criado_em INTEGER DEFAULT (strftime('%s','now') * 1000),
     UNIQUE(servidor_id, nome),
     FOREIGN KEY (servidor_id) REFERENCES servidores(id) ON DELETE CASCADE
@@ -176,6 +175,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_membros_usuario ON membros_servidor(usuario_id);
 `);
 
+// 🔥 SCRIPT DE MIGRAÇÃO PARA O BANCO DE DADOS ATUAL
+// Se a tabela canais já existia (sem a coluna tipo), isso adiciona a coluna sem apagar nada
+try {
+  db.exec("ALTER TABLE canais ADD COLUMN tipo TEXT DEFAULT 'texto'");
+  console.log('✅ Coluna "tipo" adicionada à tabela canais.');
+} catch (e) {
+  // Se cair aqui, é porque a coluna já existe. Pode ignorar.
+}
+
 // ============================================================
 // USUÁRIOS (M2 - opção de colunas leves)
 // ============================================================
@@ -185,7 +193,6 @@ function buscarUsuarioPorId(id) {
   return db.prepare('SELECT * FROM usuarios WHERE id = ?').get(idNum);
 }
 
-// 🔥 M2: busca só o necessário para auth (sem avatar/banner gigantes)
 function buscarUsuarioLevePorId(id) {
   const idNum = Number(id);
   if (!Number.isInteger(idNum)) return null;
@@ -219,7 +226,6 @@ function atualizarBio(id, bio) {
   db.prepare('UPDATE usuarios SET bio = ? WHERE id = ?').run(bio, Number(id));
 }
 
-// 🔥 A2: não retorna email nas buscas públicas
 function buscarUsuariosPorNome(q, excetoId) {
   return db.prepare(
     `SELECT id, nome, avatar, banner, bio
@@ -251,7 +257,6 @@ function deletarAmizade(id) {
   db.prepare('DELETE FROM amizades WHERE id = ?').run(Number(id));
 }
 
-// 🔥 A2: sem email nas listas
 function listarAmigos(usuarioId) {
   const id = Number(usuarioId);
   return db.prepare(
@@ -302,7 +307,6 @@ function estaBloqueado(bloqueadorId, bloqueadoId) {
   return !!r;
 }
 
-// 🔥 A2: sem email
 function listarBloqueados(usuarioId) {
   return db.prepare(
     `SELECT u.id, u.nome, u.avatar FROM bloqueios b
@@ -326,7 +330,7 @@ function estaSilenciado(usuarioId, tipo, alvoId) {
 }
 
 // ============================================================
-// CONVERSAS E MENSAGENS (M1 corrigido)
+// CONVERSAS E MENSAGENS
 // ============================================================
 function abrirConversa(a, b) {
   const [menor, maior] = [Number(a), Number(b)].sort((x, y) => x - y);
@@ -359,7 +363,6 @@ function listarConversas(usuarioId) {
     const naoLidas = db.prepare(
       'SELECT COUNT(*) as n FROM mensagens WHERE conversa_id = ? AND de_id != ? AND lida = 0'
     ).get(c.id, id).n;
-    // 🔥 A2: amigo sem email
     return {
       conversa_id: c.id,
       amigo: amigo ? { id: amigo.id, nome: amigo.nome, avatar: amigo.avatar || '', banner: amigo.banner || '', bio: amigo.bio || '' } : null,
@@ -385,7 +388,6 @@ function buscarMensagemPorId(id) {
   return m;
 }
 
-// 🔥 M1 CORRIGIDO: Busca as 200 mais recentes (DESC) e inverte (reverse)
 function listarMensagens(conversaId) {
   const msgs = db.prepare(
     `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar FROM mensagens m
@@ -415,7 +417,7 @@ function marcarComoLidas(conversaId, usuarioId) {
 }
 
 // ============================================================
-// SERVIDORES (M7 corrigido - crypto.randomInt)
+// SERVIDORES E CANAIS
 // ============================================================
 function gerarCodigoConvite() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -437,7 +439,10 @@ function criarServidor({ nome, descricao, donoId }) {
   const info = db.prepare('INSERT INTO servidores (nome, descricao, dono_id, codigo_convite) VALUES (?, ?, ?, ?)').run(nome, descricao || '', Number(donoId), codigo);
   const servidorId = info.lastInsertRowid;
   db.prepare('INSERT INTO membros_servidor (servidor_id, usuario_id) VALUES (?, ?)').run(servidorId, Number(donoId));
-  db.prepare('INSERT INTO canais (servidor_id, nome) VALUES (?, ?)').run(servidorId, 'geral');
+  
+  // 🔥 Cria o canal "geral" já com o tipo texto explícito
+  db.prepare('INSERT INTO canais (servidor_id, nome, tipo) VALUES (?, ?, ?)').run(servidorId, 'geral', 'texto');
+  
   return buscarServidorPorId(servidorId);
 }
 
@@ -484,7 +489,6 @@ function removerMembro(servidorId, usuarioId) {
   db.prepare('DELETE FROM membros_servidor WHERE servidor_id = ? AND usuario_id = ?').run(Number(servidorId), Number(usuarioId));
 }
 
-// 🔥 A2: sem email
 function listarMembros(servidorId) {
   return db.prepare(
     `SELECT u.id, u.nome, u.avatar FROM membros_servidor m
@@ -493,14 +497,15 @@ function listarMembros(servidorId) {
 }
 
 // ============================================================
-// CANAIS E MENSAGENS DE CANAL
+// 🔥 AQUI ESTÁ A CORREÇÃO DA CRIAÇÃO DO CANAL
 // ============================================================
-function criarCanal(servidorId, nome) {
+function criarCanal(servidorId, nome, tipo = 'texto') {
   const nomeLimpo = nome.toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
   if (!nomeLimpo) return null;
   try {
-    const info = db.prepare('INSERT INTO canais (servidor_id, nome) VALUES (?, ?)').run(Number(servidorId), nomeLimpo);
-    return { id: info.lastInsertRowid, servidor_id: Number(servidorId), nome: nomeLimpo };
+    const info = db.prepare('INSERT INTO canais (servidor_id, nome, tipo) VALUES (?, ?, ?)')
+      .run(Number(servidorId), nomeLimpo, tipo);
+    return { id: info.lastInsertRowid, servidor_id: Number(servidorId), nome: nomeLimpo, tipo };
   } catch (e) { return null; }
 }
 
@@ -538,7 +543,6 @@ function buscarMensagemCanalPorId(id) {
   return m;
 }
 
-// 🔥 M1 CORRIGIDO: Busca as 200 mais recentes (DESC) e inverte (reverse)
 function listarMensagensCanal(canalId) {
   const msgs = db.prepare(
     `SELECT m.*, u.nome as de_nome, u.avatar as de_avatar FROM mensagens_canal m
@@ -600,4 +604,4 @@ module.exports = {
   buscarCanalPorId, listarCanais, deletarCanal, salvarMensagemCanal, buscarMensagemCanalPorId,
   listarMensagensCanal, editarMensagemCanal, deletarMensagemCanal, adicionarReacao, removerReacao,
   listarReacoesDeMensagens,
-}; 
+};
