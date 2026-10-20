@@ -2207,6 +2207,9 @@ function renderizarCanais() {
   el.innerHTML = '';
   if (!servidorAtivo) return;
 
+  // ==========================================
+  // RENDERIZAR CANAIS DE TEXTO
+  // ==========================================
   servidorAtivo.canais.forEach((c) => {
     const d = document.createElement('div');
     d.className = 'canal-item';
@@ -2228,6 +2231,60 @@ function renderizarCanais() {
     d.onclick = () => abrirCanal(c);
     el.appendChild(d);
   });
+
+  // ==========================================
+  // RENDERIZAR CANAIS DE VOZ
+  // ==========================================
+  const elVoz = document.getElementById('lista-canais-voz');
+  if (elVoz) {
+    elVoz.innerHTML = '';
+    
+    // Pega a lista de canais de voz que veio do servidor
+    const canaisVoz = servidorAtivo.canais_voz || [];
+
+    canaisVoz.forEach((c) => {
+      const d = document.createElement('div');
+      d.className = 'canal-voz-item';
+      
+      // Se este for o canal de voz ativo no momento, destaca
+      if (typeof canalVozAtivo !== 'undefined' && canalVozAtivo === c.id) {
+        d.classList.add('ativo');
+      }
+
+      const span = document.createElement('span');
+      span.className = 'nome-voz';
+      span.textContent = '🔊 ' + c.nome;
+      d.appendChild(span);
+
+      // Botão de deletar para o dono do servidor
+      if (servidorAtivo.ehDono) {
+        const del = document.createElement('span');
+        del.className = 'del';
+        del.textContent = '🗑️';
+        del.title = 'Deletar canal de voz';
+        del.onclick = (e) => { 
+          e.stopPropagation(); 
+          deletarCanalVoz(c.id, c.nome); 
+        };
+        d.appendChild(del);
+      }
+
+      // Ao clicar, entra ou sai do canal de voz
+      d.onclick = () => {
+        if (typeof entrarNoCanalDeVoz === 'function') {
+          if (typeof canalVozAtivo !== 'undefined' && canalVozAtivo === c.id) {
+            sairDoCanalDeVoz();
+          } else {
+            entrarNoCanalDeVoz(c.id, c.nome);
+          }
+        } else {
+          alert('Sistema de canais de voz não inicializado.');
+        }
+      };
+      
+      elVoz.appendChild(d);
+    });
+  }
 }
 
 function renderizarMembros() {
@@ -2337,15 +2394,19 @@ async function abrirCanal(canal) {
   setTimeout(() => salvarUltimaTela(), 100);
 }
 
-async function criarCanalPrompt() {
-  const nome = prompt('Nome do canal (ex: memes):');
+async function criarCanalVozPrompt() {
+  const nome = prompt('Nome do canal de voz (ex: Sala de Jogos):');
   if (!nome || !nome.trim()) return;
+  
   const r = await fetch(`/api/servidores/${servidorAtivo.servidor.id}/canais`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nome: nome.trim() }),
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nome: nome.trim(), tipo: 'voz' }),
   });
+  
   const data = await r.json();
   if (!r.ok) { alert(data.erro || 'Erro'); return; }
+  // A lista será atualizada automaticamente pelo socket 'canal-criado'
 }
 
 async function deletarCanal(id, nome) {

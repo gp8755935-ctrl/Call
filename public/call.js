@@ -259,3 +259,136 @@ function desligarChamada() {
   const btnMute = document.getElementById('btn-mutar-chamada');
   if (btnMute) { btnMute.classList.remove('ativo'); btnMute.querySelector('.icone').textContent = '🎤'; }
 }
+
+// ============================================================
+// 🔥 CANAIS DE VOZ (MÚLTIPLAS PESSOAS - MESH)
+// ============================================================
+
+let conexoesVoz = {}; // Objeto para guardar as chamadas ativas: { socketId: call }
+let canalVozAtivo = null;
+
+async function entrarNoCanalDeVoz(canalId, nomeCanal) {
+  if (canalVozAtivo) sairDoCanalDeVoz();
+
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (e) {
+    return alert('Erro ao acessar microfone.');
+  }
+
+  canalVozAtivo = canalId;
+  document.getElementById('app').classList.add('canal-ativo');
+  
+  // Interface
+  document.getElementById('chamada-nome-exibicao').textContent = '#' + nomeCanal;
+  document.getElementById('chamada-status').textContent = 'Conectado ao canal de voz';
+  document.getElementById('chamada-overlay').classList.add('ativa');
+  document.getElementById('chamada-avatares').innerHTML = ''; 
+
+  // Avisa o servidor
+  socket.emit('entrar-canal-voz', { canalId });
+}
+
+function sairDoCanalDeVoz() {
+  if (canalVozAtivo && socket) {
+    socket.emit('sair-canal-voz', { canalId: canalVozAtivo });
+  }
+  
+  // Encerra todas as conexões P2P
+  Object.values(conexoesVoz).forEach(call => {
+    if (call) call.close();
+  });
+  conexoesVoz = {};
+  canalVozAtivo = null;
+
+  if (streamLocal) {
+    streamLocal.getTracks().forEach(t => t.stop());
+    streamLocal = null;
+  }
+
+  document.getElementById('chamada-overlay').classList.remove('ativa');
+  document.getElementById('chamada-avatares').innerHTML = '';
+}
+
+// Recebe a lista de quem JÁ estava no canal
+socket.on('lista-voz-atual', ({ usuarios }) => {
+  usuarios.forEach(u => {
+    conectarComUsuarioVoz(u);
+  });
+});
+
+// Quando alguém ENTRA no canal (nós já estamos lá)
+socket.on('usuario-entrou-voz', (u) => {
+  adicionarAvatarNaChamada(u.nome, u.avatar);
+  // Espera um pouco para o outro lado processar e então liga para ele
+  setTimeout(() => {
+    conectarComUsuarioVoz(u);
+  }, 500);
+});
+
+// Quando alguém SAI do canal
+socket.on('usuario-saiu-voz', ({ socketId }) => {
+  if (conexoesVoz[socketId]) {
+    conexoesVoz[socketId].close();
+    delete conexoesVoz[socketId];
+  }
+  // Remove o avatar da tela
+  const avatarEl = document.getElementById('voz-avatar-' + socketId);
+  if (avatarEl) avatarEl.remove();
+});
+
+// Cria a chamada P2P com UM usuário específico
+function conectarComUsuarioVoz(u) {
+  if (conexoesVoz[u.socketId]) return; // Já estamos conectados
+
+  adicionarAvatarNaChamada(u.nome, u.avatar, u.socketId);
+
+  // O ID do PeerJS precisa ser o mesmo formato que o usuário logou
+  const peerIdDestino = 'void_user_' + u.usuarioId; 
+  
+  console.log('📞 Ligando para', peerIdDestino);
+  const call = peer.call(peerIdDestino, localStream, {
+    metadata: { type: 'audio', id: window.usuarioAtual.id, nome: window.usuarioAtual.nome, avatar: window.usuarioAtual.avatar }
+  });
+
+  if (call) {
+    conexoesVoz[u.socketId] = call;
+    
+    call.on('stream', (remoteStream) => {
+      // Cria um elemento de áudio para este usuário
+      const audioEl = document.createElement('audio');
+      audioEl.srcObject = remoteStream;
+      audioEl.autoplay = true;
+      audioEl.volume = 1.0;
+      audioEl.id = 'audio-' + u.socketId;
+      document.body.appendChild(audioEl);
+      audioEl.play().catch(()=>{});
+    });
+
+    call.on('close', () => {
+      if (conexoesVoz[u.socketId]) delete conexoesVoz[u.socketId];
+      const audioEl = document.getElementById('audio-' + u.socketId);
+      if (audioEl) audioEl.remove();
+    });
+  }
+}
+
+// Adiciona o avatar visual na tela da chamada
+function adicionarAvatarNaChamada(nome, avatar, socketId) {
+  const container = document.getElementById('chamada-avatares');
+  if (!container) return;
+  
+  // Evita duplicatas
+  if (socketId && document.getElementById('voz-avatar-' + socketId)) return;
+
+  const div = document.createElement('div');
+  div.className = 'avatar-chamada';
+  if (socketId) div.id = 'voz-avatar-' + socketId;
+  
+  if (avatar) {
+    div.innerHTML = `<img src="${avatar}">`;
+  } else {
+    div.textContent = (nome || '?')[0].toUpperCase();
+  }
+  container.appendChild(div);
+}
