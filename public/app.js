@@ -1144,6 +1144,29 @@ function conectarSocket() {
     carregarAmizades();
   });
 
+  // 🔥 EVENTOS DE CANAIS DE VOZ (Colocados aqui para garantir que o socket exista)
+  socket.on('lista-voz-atual', ({ usuarios }) => {
+    if (typeof conectarComUsuarioVoz === 'function') {
+      usuarios.forEach(u => conectarComUsuarioVoz(u));
+    }
+  });
+
+  socket.on('usuario-entrou-voz', (u) => {
+    if (typeof adicionarAvatarNaChamada === 'function') adicionarAvatarNaChamada(u.nome, u.avatar, u.socketId);
+    setTimeout(() => {
+      if (typeof conectarComUsuarioVoz === 'function') conectarComUsuarioVoz(u);
+    }, 500);
+  });
+
+  socket.on('usuario-saiu-voz', ({ socketId }) => {
+    if (typeof conexoesVoz !== 'undefined' && conexoesVoz[socketId]) {
+      conexoesVoz[socketId].close();
+      delete conexoesVoz[socketId];
+    }
+    const avatarEl = document.getElementById('voz-avatar-' + socketId);
+    if (avatarEl) avatarEl.remove();
+  });
+
   socket.on('amizade-nova', (payload) => {
     const paraId = payload?.paraId;
     const pedido = payload?.pedido;
@@ -2415,20 +2438,6 @@ async function abrirCanal(canal) {
   setTimeout(() => salvarUltimaTela(), 100);
 }
 
-async function criarCanalPrompt() {
-  const nome = prompt('Nome do canal de texto:');
-  if (!nome || !nome.trim()) return;
-  
-  const r = await fetch(`/api/servidores/${servidorAtivo.servidor.id}/canais`, {
-    method: 'POST', 
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nome: nome.trim(), tipo: 'texto' }), // Manda como texto
-  });
-  
-  const data = await r.json();
-  if (!r.ok) { alert(data.erro || 'Erro'); return; }
-}
-
 async function deletarCanal(id, nome) {
   if (!confirm(`Deletar canal #${nome}?`)) return;
   const r = await fetch('/api/canais/' + id, { method: 'DELETE' });
@@ -2716,7 +2725,7 @@ async function criarServidor() {
   await carregarServidores();
   telaAtual = 'canal';
   abrirServidor(data.servidor.id);
-} 
+}
 
 async function entrarServidor() {
   const codigo = document.getElementById('modal-codigo-servidor').value.trim().toUpperCase();
@@ -4635,3 +4644,38 @@ window.addEventListener('load', async () => {
     if (e.key === 'void-logout') location.reload();
   });
 });
+
+// 🔥 Funções de criação de canais (Adicionadas corretamente aqui no final para garantir escopo global)
+async function criarCanalPrompt() {
+  const nome = prompt('Nome do canal de texto:');
+  if (!nome || !nome.trim()) return;
+  
+  const r = await fetch(`/api/servidores/${servidorAtivo.servidor.id}/canais`, {
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nome: nome.trim(), tipo: 'texto' }),
+  });
+  
+  const data = await r.json();
+  if (!r.ok) { alert(data.erro || 'Erro'); return; }
+}
+
+async function criarCanalVozPrompt() {
+  const nome = prompt('Nome do canal de voz (ex: Sala de Jogos):');
+  if (!nome || !nome.trim()) return;
+  
+  const r = await fetch(`/api/servidores/${servidorAtivo.servidor.id}/canais`, {
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nome: nome.trim(), tipo: 'voz' }),
+  });
+  
+  const data = await r.json();
+  if (!r.ok) { alert(data.erro || 'Erro'); return; }
+}
+
+async function deletarCanalVoz(id, nome) {
+  if (!confirm(`Deletar canal de voz ${nome}?`)) return;
+  const r = await fetch('/api/canais/' + id, { method: 'DELETE' });
+  if (!r.ok) { alert('Erro'); return; }
+}

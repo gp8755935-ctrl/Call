@@ -48,12 +48,30 @@ function inicializarPeerJS() {
       return;
     }
 
-    // Recebendo Chamada de Voz
+    // Recebendo Chamada de Voz (P2P Direta)
     if (metadata.type === 'audio') {
       chamadaRecebidaPendente = call;
       document.getElementById('chamada-recebida-nome').textContent = metadata.nome || 'Amigo';
       document.getElementById('chamada-recebida-popup').classList.add('ativo');
       tocarSomChamada();
+      return;
+    }
+
+    // Recebendo Chamada de Voz em Canal (Mesh) - Atende automaticamente
+    if (metadata.type === 'audio' && metadata.canal) {
+      call.answer(streamLocal);
+      if (typeof conexoesVoz !== 'undefined') {
+        conexoesVoz[call.peer] = call;
+      }
+      call.on('stream', (remoteStream) => {
+        const audioEl = document.createElement('audio');
+        audioEl.srcObject = remoteStream;
+        audioEl.autoplay = true;
+        audioEl.volume = 1.0;
+        audioEl.id = 'audio-' + call.peer;
+        document.body.appendChild(audioEl);
+        audioEl.play().catch(()=>{});
+      });
     }
   });
 }
@@ -75,7 +93,7 @@ function tocarSomChamada() {
 }
 
 // ============================================================
-// LIGAR E ATENDER
+// LIGAR E ATENDER (1 a 1)
 // ============================================================
 
 async function ligarParaAmigo(amigoId, nomeAmigo, avatarAmigo) {
@@ -175,20 +193,12 @@ async function toggleTransmissao() {
 
   try {
     console.log('🖥️ Solicitando captura de tela...');
-    
-    // Requisição simplificada (sem áudio e sem restrições complexas)
-    streamTela = await navigator.mediaDevices.getDisplayMedia({
-      video: true
-    });
-    
+    streamTela = await navigator.mediaDevices.getDisplayMedia({ video: true });
     console.log('✅ Tela capturada. Tracks:', streamTela.getTracks().length);
 
     const videoTrack = streamTela.getVideoTracks()[0];
-    if (!videoTrack) {
-      throw new Error('Nenhuma track de vídeo encontrada.');
-    }
+    if (!videoTrack) throw new Error('Nenhuma track de vídeo encontrada.');
 
-    // Mostra o vídeo local
     const videoEl = document.getElementById('video-transmitido');
     videoEl.srcObject = streamTela;
     videoEl.muted = true;
@@ -208,16 +218,10 @@ async function toggleTransmissao() {
 
     const idDestino = chamadaAtual.peer;
     console.log('📤 Enviando transmissão para:', idDestino);
+    const videoCall = peer.call(idDestino, streamTela, { metadata: { type: 'video' } });
     
-    const videoCall = peer.call(idDestino, streamTela, { 
-      metadata: { type: 'video' } 
-    });
-    
-    if (videoCall) {
-      console.log('✅ Chamada de vídeo criada com sucesso.');
-    } else {
-      console.error('❌ peer.call retornou null para a transmissão.');
-    }
+    if (videoCall) console.log('✅ Chamada de vídeo criada com sucesso.');
+    else console.error('❌ peer.call retornou null para a transmissão.');
 
     videoTrack.onended = () => {
       console.log('🛑 Usuário parou a transmissão.');
@@ -243,7 +247,6 @@ function fecharTransmissao() {
 
 function minimizarChamada() {
   document.getElementById('chamada-overlay').classList.remove('ativa');
-  // Poderia mostrar um ícone flutuante aqui
 }
 
 function desligarChamada() {
@@ -264,14 +267,14 @@ function desligarChamada() {
 // 🔥 CANAIS DE VOZ (MÚLTIPLAS PESSOAS - MESH)
 // ============================================================
 
-let conexoesVoz = {}; // Objeto para guardar as chamadas ativas: { socketId: call }
+let conexoesVoz = {}; 
 let canalVozAtivo = null;
 
 async function entrarNoCanalDeVoz(canalId, nomeCanal) {
   if (canalVozAtivo) sairDoCanalDeVoz();
 
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    streamLocal = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   } catch (e) {
     return alert('Erro ao acessar microfone.');
   }
@@ -279,13 +282,11 @@ async function entrarNoCanalDeVoz(canalId, nomeCanal) {
   canalVozAtivo = canalId;
   document.getElementById('app').classList.add('canal-ativo');
   
-  // Interface
   document.getElementById('chamada-nome-exibicao').textContent = '#' + nomeCanal;
   document.getElementById('chamada-status').textContent = 'Conectado ao canal de voz';
   document.getElementById('chamada-overlay').classList.add('ativa');
   document.getElementById('chamada-avatares').innerHTML = ''; 
 
-  // Avisa o servidor
   socket.emit('entrar-canal-voz', { canalId });
 }
 
@@ -294,7 +295,6 @@ function sairDoCanalDeVoz() {
     socket.emit('sair-canal-voz', { canalId: canalVozAtivo });
   }
   
-  // Encerra todas as conexões P2P
   Object.values(conexoesVoz).forEach(call => {
     if (call) call.close();
   });
@@ -310,52 +310,35 @@ function sairDoCanalDeVoz() {
   document.getElementById('chamada-avatares').innerHTML = '';
 }
 
-// Recebe a lista de quem JÁ estava no canal
-socket.on('lista-voz-atual', ({ usuarios }) => {
-  usuarios.forEach(u => {
-    conectarComUsuarioVoz(u);
-  });
-});
-
-// Quando alguém ENTRA no canal (nós já estamos lá)
-socket.on('usuario-entrou-voz', (u) => {
-  adicionarAvatarNaChamada(u.nome, u.avatar);
-  // Espera um pouco para o outro lado processar e então liga para ele
-  setTimeout(() => {
-    conectarComUsuarioVoz(u);
-  }, 500);
-});
-
-// Quando alguém SAI do canal
-socket.on('usuario-saiu-voz', ({ socketId }) => {
-  if (conexoesVoz[socketId]) {
-    conexoesVoz[socketId].close();
-    delete conexoesVoz[socketId];
-  }
-  // Remove o avatar da tela
-  const avatarEl = document.getElementById('voz-avatar-' + socketId);
-  if (avatarEl) avatarEl.remove();
-});
-
-// Cria a chamada P2P com UM usuário específico
+// Cria a chamada P2P com UM usuário específico do canal
 function conectarComUsuarioVoz(u) {
-  if (conexoesVoz[u.socketId]) return; // Já estamos conectados
+  if (conexoesVoz[u.socketId]) return;
 
   adicionarAvatarNaChamada(u.nome, u.avatar, u.socketId);
 
-  // O ID do PeerJS precisa ser o mesmo formato que o usuário logou
   const peerIdDestino = 'void_user_' + u.usuarioId; 
-  
   console.log('📞 Ligando para', peerIdDestino);
-  const call = peer.call(peerIdDestino, localStream, {
-    metadata: { type: 'audio', id: window.usuarioAtual.id, nome: window.usuarioAtual.nome, avatar: window.usuarioAtual.avatar }
+  
+  // Prevenção de erro se o microfone não estiver pronto
+  if (!streamLocal) {
+    console.warn('Sem stream local para conectar.');
+    return;
+  }
+
+  const call = peer.call(peerIdDestino, streamLocal, {
+    metadata: { 
+      type: 'audio', 
+      id: window.usuarioAtual.id, 
+      nome: window.usuarioAtual.nome, 
+      avatar: window.usuarioAtual.avatar,
+      canal: true // 🔥 Identificador para atender automaticamente
+    }
   });
 
   if (call) {
     conexoesVoz[u.socketId] = call;
     
     call.on('stream', (remoteStream) => {
-      // Cria um elemento de áudio para este usuário
       const audioEl = document.createElement('audio');
       audioEl.srcObject = remoteStream;
       audioEl.autoplay = true;
@@ -373,28 +356,22 @@ function conectarComUsuarioVoz(u) {
   }
 }
 
-// Adiciona o avatar visual na tela da chamada
 function adicionarAvatarNaChamada(nome, avatar, socketId) {
   const container = document.getElementById('chamada-avatares');
   if (!container) return;
   
-  // Evita duplicatas
   if (socketId && document.getElementById('voz-avatar-' + socketId)) return;
 
   const div = document.createElement('div'); 
   div.className = 'avatar-chamada';
   if (socketId) div.id = 'voz-avatar-' + socketId;
   
-  if (avatar) {
-    div.innerHTML = `<img src="${avatar}">`;
-  } else {
-    div.textContent = (nome || '?')[0].toUpperCase();
-  }
+  if (avatar) div.innerHTML = `<img src="${avatar}">`;
+  else div.textContent = (nome || '?')[0].toUpperCase();
+  
   container.appendChild(div);
 }
 
 window.addEventListener('beforeunload', () => {
-  if (typeof sairDoCanalDeVoz === 'function') {
-    sairDoCanalDeVoz();
-  }
-});
+  if (typeof sairDoCanalDeVoz === 'function') sairDoCanalDeVoz();
+}); 
