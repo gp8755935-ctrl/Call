@@ -105,6 +105,8 @@ app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+app.get('/health', (req, res) => res.json({ ok: true, service: 'void', time: Date.now() }));
+
 app.get('/uploads/:filename', (req, res) => {
   const filename = path.basename(req.params.filename);
   const filepath = path.join(UPLOADS_DIR, filename);
@@ -136,7 +138,12 @@ function setarCookieToken(req, res, token) {
   const host = req.headers.host || '';
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
   res.cookie('token', token, {
-    httpOnly: true, sameSite: 'lax', secure: !ehLocalhost, maxAge: 30 * 24 * 60 * 60 * 1000, path: '/',
+    httpOnly: true,
+    // O Preview roda dentro de iframe cross-site em HTTPS; Lax impede o cookie.
+    sameSite: ehLocalhost ? 'lax' : 'none',
+    secure: !ehLocalhost,
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    path: '/',
   });
 }
 
@@ -144,9 +151,10 @@ function limparCookies(req, res) {
   const host = req.headers.host || '';
   const hostSemPorta = host.split(':')[0];
   const ehLocalhost = host.includes('localhost') || host.includes('127.0.0.1') || /^192\.168\./.test(host);
-  const opcoes = { path: '/', secure: !ehLocalhost, sameSite: 'lax', ...(ehLocalhost ? {} : { domain: hostSemPorta }) };
+  const sameSite = ehLocalhost ? 'lax' : 'none';
+  const opcoes = { path: '/', secure: !ehLocalhost, sameSite, ...(ehLocalhost ? {} : { domain: hostSemPorta }) };
   res.clearCookie('token', opcoes);
-  res.clearCookie('token', { path: '/', secure: !ehLocalhost, sameSite: 'lax' });
+  res.clearCookie('token', { path: '/', secure: !ehLocalhost, sameSite });
   res.clearCookie('token', { path: '/' });
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
 }
@@ -710,6 +718,10 @@ io.on('connection', (socket) => {
   // 🔥 CANAIS DE VOZ (MÚLTIPLOS USUÁRIOS - MESH)
   // ============================================================
   socket.on('entrar-canal-voz', ({ canalId }) => {
+    const canal = db.buscarCanalPorId(Number(canalId));
+    if (!canal || !db.ehMembro(canal.servidor_id, socket.usuario.id) || canal.tipo !== 'voz') return;
+    // Um socket só pode ocupar uma sala de voz por vez.
+    [...socket.rooms].forEach((room) => { if (room.startsWith('voz-')) socket.leave(room); });
     socket.join('voz-' + canalId);
     
     // Pega quem JÁ está no canal para avisar o usuário que acabou de entrar
@@ -745,6 +757,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('sair-canal-voz', ({ canalId }) => {
+    if (!Number.isInteger(Number(canalId))) return;
     socket.leave('voz-' + canalId);
     socket.to('voz-' + canalId).emit('usuario-saiu-voz', {
       socketId: socket.id
@@ -774,7 +787,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('entrar-canal', ({ canalId }) => {
-    const c = db.buscarCanalPorId(canalId);
+    const c = db.buscarCanalPorId(Number(canalId));
     if (!c || !db.ehMembro(c.servidor_id, socket.usuario.id)) return;
     [...socket.rooms].forEach(r => { if (r.startsWith('canal-')) socket.leave(r); });
     socket.join('canal-' + canalId);

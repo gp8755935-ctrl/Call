@@ -116,6 +116,14 @@ function atualizarBotaoVoltar() {
   if (!btn) return;
   const esconder = (telaAtual === 'home');
   btn.classList.toggle('escondido', esconder);
+  atualizarVisibilidadeBarraUsuario();
+}
+
+function atualizarVisibilidadeBarraUsuario() {
+  const app = document.getElementById('app');
+  if (!app) return;
+  const emConversa = telaAtual === 'canal' || telaAtual === 'conversa' || Boolean(window.canalVozAtivo) || Boolean(servidorAtivo);
+  app.classList.toggle('tem-chat-aberto', emConversa);
 }
 
 function atualizarTituloMain(texto) {
@@ -1126,6 +1134,11 @@ function conectarSocket() {
     console.log('Conectado como', meuUsuario.nome, '— socket', socket.id);
     if (servidorAtivo) socket.emit('entrar-servidores');
     if (canalAtivo) socket.emit('entrar-canal', { canalId: canalAtivo.id });
+    // Socket.IO perde as salas quando reconecta. Reentra na sala de voz e
+    // recebe a lista atual para refazer o mesh sem intervenção do usuário.
+    if (typeof canalVozAtivo !== 'undefined' && canalVozAtivo) {
+      socket.emit('entrar-canal-voz', { canalId: canalVozAtivo });
+    }
   });
 
   socket.on('disconnect', (motivo) => console.log('Desconectado:', motivo));
@@ -1153,16 +1166,18 @@ function conectarSocket() {
 
   socket.on('usuario-entrou-voz', (u) => {
     if (typeof adicionarAvatarNaChamada === 'function') adicionarAvatarNaChamada(u.nome, u.avatar, u.socketId);
-    setTimeout(() => {
-      if (typeof conectarComUsuarioVoz === 'function') conectarComUsuarioVoz(u);
-    }, 500);
+    // O usuário que acabou de entrar recebe a lista dos presentes e inicia
+    // as conexões. Quem já estava na sala só aguarda a chamada recebida.
   });
 
   socket.on('usuario-saiu-voz', ({ socketId }) => {
-    if (typeof conexoesVoz !== 'undefined' && conexoesVoz[socketId]) {
-      conexoesVoz[socketId].close();
-      delete conexoesVoz[socketId];
+    const peerId = typeof participantesVoz !== 'undefined' ? participantesVoz.get(socketId) : null;
+    if (typeof conexoesVoz !== 'undefined' && peerId && conexoesVoz[peerId]) {
+      conexoesVoz[peerId].close();
+      delete conexoesVoz[peerId];
     }
+    if (typeof participantesVoz !== 'undefined') participantesVoz.delete(socketId);
+    if (typeof removerAudioRemoto === 'function' && peerId) removerAudioRemoto(peerId);
     const avatarEl = document.getElementById('voz-avatar-' + socketId);
     if (avatarEl) avatarEl.remove();
   });
@@ -2218,6 +2233,7 @@ async function abrirServidor(id) {
     }
 
     servidorAtivo = data;
+    atualizarVisibilidadeBarraUsuario();
     
     document.getElementById('sidebar-canais').style.display = 'flex';
     const nomeServEl = document.getElementById('nome-servidor');
@@ -3353,6 +3369,8 @@ async function salvarBio() {
 function atualizarAvataresNaUI() {
   const el = document.getElementById('avatar-usuario');
   if (!el) return;
+  const nomeBarra = document.getElementById('nome-usuario-barra');
+  if (nomeBarra) nomeBarra.textContent = meuUsuario?.nome || 'Você';
   el.className = 'avatar';
   el.removeAttribute('style');
   const escuro = document.body.classList.contains('tema-escuro');

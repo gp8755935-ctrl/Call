@@ -43,4 +43,4 @@ function verificarToken(token) {
   }
 } 
 
-module.exports = { hashearSenha, verificarSenha, gerarToken, verificarToken, TOKEN_VERSION };
+module.exports = { hashearSenha, verificarSenha, gerarToken, verificarToken, TOKEN_VERSION }; 
