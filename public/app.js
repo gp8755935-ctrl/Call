@@ -2716,7 +2716,7 @@ async function criarServidor() {
   await carregarServidores();
   telaAtual = 'canal';
   abrirServidor(data.servidor.id);
-}
+} 
 
 async function entrarServidor() {
   const codigo = document.getElementById('modal-codigo-servidor').value.trim().toUpperCase();

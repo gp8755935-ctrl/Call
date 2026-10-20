@@ -392,3 +392,9 @@ function adicionarAvatarNaChamada(nome, avatar, socketId) {
   }
   container.appendChild(div);
 }
+
+window.addEventListener('beforeunload', () => {
+  if (typeof sairDoCanalDeVoz === 'function') {
+    sairDoCanalDeVoz();
+  }
+});

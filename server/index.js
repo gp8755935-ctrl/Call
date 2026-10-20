@@ -62,7 +62,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
   
-    res.setHeader('Content-Security-Policy',
+  res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
     "img-src 'self' data: blob:; " +
     "media-src 'self' blob:; " +
@@ -510,15 +510,13 @@ app.get('/api/servidores/:id', exigirAuth, (req, res) => {
   if (!db.ehMembro(id, req.usuario.id)) return res.status(403).json({ erro: 'Você não é membro' });
   
   const todosCanais = db.listarCanais(id);
-  
-  // 🔥 AQUI: Separa os canais antes de enviar pro Front-end
   const canaisTexto = todosCanais.filter(c => c.tipo !== 'voz');
   const canaisVoz = todosCanais.filter(c => c.tipo === 'voz');
 
   res.json({ 
     servidor: s, 
-    canais: canaisTexto,       // Envia só os de texto na array principal
-    canais_voz: canaisVoz,     // Envia os de voz na array separada
+    canais: canaisTexto, 
+    canais_voz: canaisVoz, 
     membros: db.listarMembros(id), 
     ehDono: Number(s.dono_id) === Number(req.usuario.id), 
     silenciado: db.estaSilenciado(req.usuario.id, 'servidor', id) 
@@ -595,17 +593,14 @@ app.post('/api/servidores/:id/canais', exigirAuth, (req, res) => {
   if (!s || Number(s.dono_id) !== Number(req.usuario.id)) return res.status(403).json({ erro: 'Só o dono pode criar canais' });
   if (!req.body.nome || !req.body.nome.trim()) return res.status(400).json({ erro: 'Informe o nome' });
   
-  // 🔥 AQUI: Pega o tipo enviado pelo app.js (padrão é 'texto' se não vier nada)
   const tipo = req.body.tipo === 'voz' ? 'voz' : 'texto'; 
-
-  // Passa o tipo para o banco de dados
   const c = db.criarCanal(servidorId, req.body.nome.trim(), tipo); 
   
   if (!c) return res.status(400).json({ erro: 'Nome inválido ou já existe' });
   
   io.to('servidor-' + servidorId).emit('canal-criado', { canal: c });
   res.json({ ok: true, canal: c });
-}); 
+});
 
 app.delete('/api/canais/:id', exigirAuth, (req, res) => {
   const id = Number(req.params.id);
@@ -712,9 +707,53 @@ io.on('connection', (socket) => {
   notificarListaOnline();
 
   // ============================================================
-  // 🔥 EVENTOS ADICIONADOS PARA CHAMADAS DE VOZ E VÍDEO
+  // 🔥 CANAIS DE VOZ (MÚLTIPLOS USUÁRIOS - MESH)
   // ============================================================
-  
+  socket.on('entrar-canal-voz', ({ canalId }) => {
+    socket.join('voz-' + canalId);
+    
+    // Pega quem JÁ está no canal para avisar o usuário que acabou de entrar
+    const salaVoz = io.sockets.adapter.rooms.get('voz-' + canalId);
+    const usuariosNaSala = [];
+    
+    if (salaVoz) {
+      salaVoz.forEach((socketId) => {
+        if (socketId !== socket.id) {
+          const u = online.get(socketId);
+          if (u) {
+            usuariosNaSala.push({ 
+              usuarioId: u.id, 
+              nome: u.nome, 
+              avatar: u.avatar, 
+              socketId: u.socketId 
+            });
+          }
+        }
+      });
+    }
+    
+    // Envia a lista de quem já estava para o novato
+    socket.emit('lista-voz-atual', { usuarios: usuariosNaSala });
+
+    // Avisa todos os outros da sala que chegou alguém novo
+    socket.to('voz-' + canalId).emit('usuario-entrou-voz', {
+      usuarioId: socket.usuario.id,
+      nome: socket.usuario.nome,
+      avatar: dadosCompletos.avatar || '',
+      socketId: socket.id
+    });
+  });
+
+  socket.on('sair-canal-voz', ({ canalId }) => {
+    socket.leave('voz-' + canalId);
+    socket.to('voz-' + canalId).emit('usuario-saiu-voz', {
+      socketId: socket.id
+    });
+  });
+
+  // ============================================================
+  // CHAMADAS DIRETAS (1 a 1)
+  // ============================================================
   socket.on('iniciar-chamada', ({ paraId }) => {
     const socketDestino = [...online.values()].find(u => u.id === Number(paraId));
     if (socketDestino) {
@@ -726,16 +765,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('entrar-canal-voz', ({ canalId }) => {
-    socket.join('voz-' + canalId);
-    socket.to('voz-' + canalId).emit('usuario-entrou-voz', {
-      usuarioId: socket.usuario.id,
-      nome: socket.usuario.nome
-    });
-  });
-
   // ============================================================
-
+  // EVENTOS GERAIS (SERVIDORES, CANAIS, DIGITANDO)
+  // ============================================================
   socket.on('entrar-servidores', () => {
     const servidores = db.listarServidoresDoUsuario(socket.usuario.id);
     servidores.forEach((s) => socket.join('servidor-' + s.id));
@@ -788,6 +820,12 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     online.delete(socket.id);
     notificarListaOnline();
+    
+    // Remove o usuário de todos os canais de voz que ele estava
+    const salasVoz = [...socket.rooms].filter(r => r.startsWith('voz-'));
+    salasVoz.forEach(sala => {
+      socket.to(sala).emit('usuario-saiu-voz', { socketId: socket.id });
+    });
   });
 });
 
