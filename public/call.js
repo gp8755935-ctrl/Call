@@ -176,19 +176,13 @@ async function toggleTransmissao() {
   try {
     console.log('🖥️ Solicitando captura de tela...');
     
-    // Força o navegador a pedir a tela novamente sem cache
-    const constraints = {
-      video: {
-        cursor: "always",
-        frameRate: { ideal: 30, max: 60 }
-      },
-      audio: true
-    };
-
-    streamTela = await navigator.mediaDevices.getDisplayMedia(constraints);
+    // Requisição simplificada (sem áudio e sem restrições complexas)
+    streamTela = await navigator.mediaDevices.getDisplayMedia({
+      video: true
+    });
+    
     console.log('✅ Tela capturada. Tracks:', streamTela.getTracks().length);
 
-    // Verifica se o stream tem vídeo
     const videoTrack = streamTela.getVideoTracks()[0];
     if (!videoTrack) {
       throw new Error('Nenhuma track de vídeo encontrada.');
@@ -202,7 +196,6 @@ async function toggleTransmissao() {
     document.getElementById('video-container').classList.add('ativa');
     document.getElementById('btn-compartilhar-tela').classList.add('ativo');
 
-    // Verifica se existe uma chamada ativa
     if (!chamadaAtual) {
       console.error('❌ Não há chamada ativa para transmitir.');
       alert('Você precisa estar em uma chamada para transmitir a tela.');
@@ -213,7 +206,6 @@ async function toggleTransmissao() {
       return;
     }
 
-    // Envia a transmissão para o amigo
     const idDestino = chamadaAtual.peer;
     console.log('📤 Enviando transmissão para:', idDestino);
     
@@ -227,7 +219,6 @@ async function toggleTransmissao() {
       console.error('❌ peer.call retornou null para a transmissão.');
     }
 
-    // Quando o usuário parar a transmissão pelo navegador
     videoTrack.onended = () => {
       console.log('🛑 Usuário parou a transmissão.');
       streamTela = null;
@@ -237,12 +228,7 @@ async function toggleTransmissao() {
 
   } catch (err) {
     console.error('❌ Erro detalhado na transmissão:', err.name, err.message);
-    // Se for AbortError, significa que o usuário cancelou ou o navegador bloqueou
-    if (err.name === 'AbortError') {
-      alert('A captura de tela foi cancelada ou bloqueada pelo navegador. Certifique-se de permitir a captura de tela nas configurações do site.');
-    } else {
-      alert('Erro ao transmitir: ' + err.message);
-    }
+    alert('Erro ao transmitir: ' + err.message);
     streamTela = null;
   }
 }
