@@ -318,4 +318,4 @@ function desligarChamada() {
 
 function minimizarChamada() {
   document.getElementById('janela-chamada').classList.remove('ativa');
-}
+} 
