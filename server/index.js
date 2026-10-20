@@ -62,14 +62,14 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
   
-  res.setHeader('Content-Security-Policy',
+    res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
     "img-src 'self' data: blob:; " +
     "media-src 'self' blob:; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' data: https://fonts.gstatic.com; " +
     "script-src 'self' 'unsafe-inline' https://unpkg.com; " +
-    "connect-src 'self' ws: wss: https://0.peerjs.com wss://0.peerjs.com; " +
+    "connect-src 'self' ws: wss: https://0.peerjs.com wss://0.peerjs.com https://unpkg.com; " +
     "object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
   );
   next();
