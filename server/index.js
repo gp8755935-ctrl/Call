@@ -73,7 +73,7 @@ app.use((req, res, next) => {
     "object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
   );
   next();
-});
+}); 
 
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');

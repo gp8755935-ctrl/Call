@@ -600,4 +600,4 @@ module.exports = {
   buscarCanalPorId, listarCanais, deletarCanal, salvarMensagemCanal, buscarMensagemCanalPorId,
   listarMensagensCanal, editarMensagemCanal, deletarMensagemCanal, adicionarReacao, removerReacao,
   listarReacoesDeMensagens,
-};
+}; 

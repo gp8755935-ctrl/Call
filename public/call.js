@@ -381,7 +381,7 @@ function adicionarAvatarNaChamada(nome, avatar, socketId) {
   // Evita duplicatas
   if (socketId && document.getElementById('voz-avatar-' + socketId)) return;
 
-  const div = document.createElement('div');
+  const div = document.createElement('div'); 
   div.className = 'avatar-chamada';
   if (socketId) div.id = 'voz-avatar-' + socketId;
   

@@ -41,6 +41,6 @@ function verificarToken(token) {
   } catch (e) {
     return null;
   }
-}
+} 
 
 module.exports = { hashearSenha, verificarSenha, gerarToken, verificarToken, TOKEN_VERSION };

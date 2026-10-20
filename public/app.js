@@ -1353,23 +1353,34 @@ function conectarSocket() {
     atualizarReacoesNaTela(chatId, alvoId, reacoes);
   });
 
-  socket.on('canal-criado', ({ canal }) => {
+    socket.on('canal-criado', ({ canal }) => {
     if (servidorAtivo && servidorAtivo.servidor.id === canal.servidor_id) {
-      servidorAtivo.canais.push(canal);
+      // Verifica se é canal de voz
+      if (canal.tipo === 'voz') {
+        if (!servidorAtivo.canais_voz) servidorAtivo.canais_voz = [];
+        servidorAtivo.canais_voz.push(canal);
+      } else {
+        servidorAtivo.canais.push(canal);
+      }
       renderizarCanais();
     }
   });
-
-  socket.on('canal-deletado', ({ canal_id }) => {
+    socket.on('canal-deletado', ({ canal_id }) => {
     if (servidorAtivo) {
+      // Remove da lista de texto
       servidorAtivo.canais = servidorAtivo.canais.filter((c) => c.id !== canal_id);
+      // Remove da lista de voz
+      if (servidorAtivo.canais_voz) {
+        servidorAtivo.canais_voz = servidorAtivo.canais_voz.filter((c) => c.id !== canal_id);
+      }
+
       if (canalAtivo && canalAtivo.id === canal_id) {
         canalAtivo = servidorAtivo.canais[0] || null;
         if (canalAtivo && telaAtual === 'canal') abrirCanal(canalAtivo);
       }
       renderizarCanais();
     }
-  });
+  }); 
 
   socket.on('servidor-atualizado', ({ servidor }) => {
     if (servidorAtivo && servidorAtivo.servidor.id === servidor.id) {
@@ -2174,7 +2185,17 @@ async function abrirServidor(id) {
     if (!r.ok) { alert('Erro ao abrir servidor'); return; }
     const data = await r.json();
 
+    // 🔥 AQUI: Separa os canais por tipo
+    if (data.canais) {
+      data.canais_voz = data.canais.filter(c => c.tipo === 'voz');
+      data.canais = data.canais.filter(c => c.tipo !== 'voz');
+    } else {
+      data.canais = [];
+      data.canais_voz = [];
+    }
+
     servidorAtivo = data;
+    
     document.getElementById('sidebar-canais').style.display = 'flex';
     const nomeServEl = document.getElementById('nome-servidor');
     if (nomeServEl) nomeServEl.textContent = data.servidor.nome;
@@ -2401,12 +2422,13 @@ async function criarCanalVozPrompt() {
   const r = await fetch(`/api/servidores/${servidorAtivo.servidor.id}/canais`, {
     method: 'POST', 
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nome: nome.trim(), tipo: 'voz' }),
+    body: JSON.stringify({ nome: nome.trim(), tipo: 'voz' }), // Manda o tipo correto
   });
   
   const data = await r.json();
   if (!r.ok) { alert(data.erro || 'Erro'); return; }
-  // A lista será atualizada automaticamente pelo socket 'canal-criado'
+  
+  // O Socket vai receber a resposta e atualizar a tela automaticamente
 }
 
 async function deletarCanal(id, nome) {
