@@ -172,28 +172,53 @@ async function toggleTransmissao() {
     document.getElementById('btn-compartilhar-tela').classList.remove('ativo');
     return;
   }
+  
   try {
+    console.log('🖥️ Solicitando captura de tela...');
     streamTela = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    console.log('✅ Tela capturada. Tracks:', streamTela.getTracks().length);
+    
+    // Mostra o vídeo local
     const videoEl = document.getElementById('video-transmitido');
     videoEl.srcObject = streamTela;
     videoEl.muted = true;
-    videoEl.play().catch(()=>{});
+    videoEl.play().catch(e => console.warn('Autoplay do vídeo local:', e));
     document.getElementById('video-container').classList.add('ativa');
     document.getElementById('btn-compartilhar-tela').classList.add('ativo');
 
-    // Envia para o outro dispositivo
-    const amigoId = Object.keys(participantesNaChamada)[0]; // ou chamadaAtual.peer
-    if (chamadaAtual) {
-      peer.call(chamadaAtual.peer, streamTela, { metadata: { type: 'video' } });
+    // Verifica se existe uma chamada ativa
+    if (!chamadaAtual) {
+      console.error('❌ Não há chamada ativa para transmitir.');
+      alert('Você precisa estar em uma chamada para transmitir a tela.');
+      return;
+    }
+
+    // O ID do destino é o peerId do amigo (que já contém o prefixo void_user_)
+    const idDestino = chamadaAtual.peer;
+    console.log('📤 Enviando transmissão para:', idDestino);
+    
+    const videoCall = peer.call(idDestino, streamTela, { 
+      metadata: { type: 'video' } 
+    });
+    
+    if (videoCall) {
+      console.log('✅ Chamada de vídeo criada com sucesso.');
+    } else {
+      console.error('❌ peer.call retornou null para a transmissão.');
     }
 
     streamTela.getVideoTracks()[0].onended = () => {
+      console.log('🛑 Usuário parou a transmissão.');
       streamTela = null;
       document.getElementById('video-container').classList.remove('ativa');
       document.getElementById('btn-compartilhar-tela').classList.remove('ativo');
     };
-  } catch (err) { console.log('Transmissão cancelada'); }
-}
+  } catch (err) {
+    console.error('❌ Erro detalhado na transmissão:', err.name, err.message);
+    alert('Erro ao transmitir: ' + err.message);
+    streamTela = null;
+  }
+} 
 
 function fecharTransmissao() {
   document.getElementById('video-container').classList.remove('ativa');
