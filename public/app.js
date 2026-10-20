@@ -66,7 +66,11 @@ let menuContextoAberto = null;
 let painelMembrosAberto = false;
 let perfilVisitadoAtual = null;
 
-const CONFIG_PADRAO = { somMsg: true, somReacao: true, notifVisual: true, notifSistema: true, digitando: true, darkMode: false };
+// 🔥 INTEGRAÇÃO DE CHAMADAS: pipChamada adicionado
+const CONFIG_PADRAO = { 
+  somMsg: true, somReacao: true, notifVisual: true, notifSistema: true, 
+  digitando: true, darkMode: false, pipChamada: true 
+};
 let config = { ...CONFIG_PADRAO };
 
 const usuariosCache = new Map();
@@ -176,7 +180,11 @@ function salvarConfig() {
 }
 
 function aplicarConfigNaUI() {
-  const ids = { somMsg: 'cfg-som-msg', somReacao: 'cfg-som-reacao', notifVisual: 'cfg-notif-visual', notifSistema: 'cfg-notif-sistema', digitando: 'cfg-digitando', darkMode: 'cfg-dark-mode' };
+  const ids = { 
+    somMsg: 'cfg-som-msg', somReacao: 'cfg-som-reacao', notifVisual: 'cfg-notif-visual', 
+    notifSistema: 'cfg-notif-sistema', digitando: 'cfg-digitando', darkMode: 'cfg-dark-mode',
+    pipChamada: 'cfg-pip-chamada' // 🔥 ADICIONADO
+  };
   for (const [chave, id] of Object.entries(ids)) {
     const el = document.getElementById(id);
     if (el) el.checked = !!config[chave];
@@ -194,7 +202,11 @@ function fecharConfig() {
 }
 
 function bindConfig() {
-  const ids = { somMsg: 'cfg-som-msg', somReacao: 'cfg-som-reacao', notifVisual: 'cfg-notif-visual', notifSistema: 'cfg-notif-sistema', digitando: 'cfg-digitando', darkMode: 'cfg-dark-mode' };
+  const ids = { 
+    somMsg: 'cfg-som-msg', somReacao: 'cfg-som-reacao', notifVisual: 'cfg-notif-visual', 
+    notifSistema: 'cfg-notif-sistema', digitando: 'cfg-digitando', darkMode: 'cfg-dark-mode',
+    pipChamada: 'cfg-pip-chamada' // 🔥 ADICIONADO
+  };
   for (const [chave, id] of Object.entries(ids)) {
     const el = document.getElementById(id);
     if (!el) continue;
@@ -2806,7 +2818,7 @@ function renderizarAmigos(amigos) {
       
     const acoes = document.createElement('div');
     
-    // 🔥 INTEGRAÇÃO: Botão de Ligar adicionado ao lado do botão de conversar
+    // 🔥 INTEGRAÇÃO: Botão de Ligar
     const btnLigar = document.createElement('button');
     btnLigar.className = 'btn-ligar-perfil mini';
     btnLigar.textContent = '📞 Ligar';
@@ -4475,6 +4487,11 @@ document.addEventListener('visibilitychange', () => {
     if (socket && socket.connected) {
       if (servidorAtivo) socket.emit('entrar-servidores');
       if (canalAtivo) socket.emit('entrar-canal', { canalId: canalAtivo.id });
+    }
+  } else {
+    // 🔥 INTEGRAÇÃO PIP: Abre o balão flutuante ao minimizar
+    if (window.chamadaAtual && config.pipChamada) {
+      if (typeof ativarPipChamada === 'function') ativarPipChamada();
     }
   }
 });
